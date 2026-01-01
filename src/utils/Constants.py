@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 
 # Auto-detect project root (works on Windows, WSL, Linux, Mac)
-# This file is in utils/, so parent.parent gets us to the project root
-CH_DIR = str(Path(__file__).parent.parent.absolute())
+# This file is in src/utils/, so parent.parent.parent gets us to the project root
+CH_DIR = str(Path(__file__).parent.parent.parent.absolute())
 
 FMT = "%d/%m/%Y %H:%M:%S"
 TRAIN = 'TrainingSet.txt'

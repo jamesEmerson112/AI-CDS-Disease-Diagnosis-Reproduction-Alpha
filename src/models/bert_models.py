@@ -14,11 +14,12 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-import entity.SymptomsDiagnosis
-from utils.Constants import *
+import src.entity.SymptomsDiagnosis as entity_module
+from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from src.utils.Constants import *
 
-import util_cy
-from util_cy import cosine_similarity  # Direct import to avoid module caching issues
+from src.utils import cython_utils as util_cy
+from src.utils.cython_utils import cosine_similarity  # Direct import to avoid module caching issues
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False

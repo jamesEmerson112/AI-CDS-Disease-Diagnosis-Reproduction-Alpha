@@ -20,11 +20,12 @@ import torch
 from scipy.spatial.distance import cosine
 
 # Import entity classes
-import entity.SymptomsDiagnosis
-from utils.Constants import *
+import src.entity.SymptomsDiagnosis as entity_module
+from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from src.utils.Constants import *
 
 # Import util_cy for preprocessing functions only
-import util_cy
+from src.utils import cython_utils as util_cy
 
 # Ensure NLTK data is available
 import nltk
@@ -211,9 +212,9 @@ class BioClinicalBERTEvaluator:
             Dictionary mapping HADM_ID to list of diagnoses (lowercased to match embeddings)
         """
         if dataset_type == 'TEST':
-            filename = f'Dataset/Fold{fold_num}/TestSet.txt'
+            filename = f'data/folds/Fold{fold_num}/TestSet.txt'
         else:
-            filename = f'Dataset/Fold{fold_num}/TrainingSet.txt'
+            filename = f'data/folds/Fold{fold_num}/TrainingSet.txt'
         
         file_path = os.path.join(CH_DIR, filename)
         

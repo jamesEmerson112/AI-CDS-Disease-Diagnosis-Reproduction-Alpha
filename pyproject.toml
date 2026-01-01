@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-cds-diagnosis"
+version = "1.0.0"
+description = "AI-Driven Clinical Decision Support for Disease Diagnosis"
+readme = "docs/README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+bert = [
+    "transformers",
+    "torch",
+    "sentence-transformers"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

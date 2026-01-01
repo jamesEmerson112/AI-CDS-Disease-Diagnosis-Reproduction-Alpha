@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 
 from datetime import datetime
-from utils.Constants import *
+from src.utils.Constants import *
 
 import sent2vec
 import nltk
@@ -174,7 +174,7 @@ def elapsed_time(start_time, end_time):
 
 
 def load_dataset(nFold, name):
-    dataset_dir = os.getcwd() + '/Dataset/Fold' + str(nFold) + "/"
+    dataset_dir = os.path.join(CH_DIR, 'data', 'folds', 'Fold' + str(nFold)) + "/"
     dataset_name = dataset_dir + name
     dataset_file = open(dataset_name, "r")
     dataset = list()

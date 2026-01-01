@@ -25,10 +25,14 @@ MANIFEST
 
 # Cython
 *.c
-!util_cy.c
+!archive/cython_source/util_cy.c
 *.cpp
 *.html
 .cython_cache/
+
+# Compiled binaries (keep in build/)
+build/*.pyd
+build/*.so
 
 # Virtual Environment
 venv/
@@ -38,7 +42,7 @@ env.bak/
 venv.bak/
 
 # Machine Learning Models (typically large files)
-*.bin
+data/models/*.bin
 *.model
 *.vec
 *.h5
@@ -98,6 +102,7 @@ htmlcov/
 *.swp
 *~
 
-# Personal setup documentation
-James_wsl_code_setup.md
-SETUP_GUIDE.md
+# Old empty directories (can be removed)
+entity/
+utils/
+Dataset/

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python scripts/verify_setup.py:*)",
+      "Bash(conda tos accept:*)",
+      "Bash(conda env create:*)"
+    ]
+  }
+}
