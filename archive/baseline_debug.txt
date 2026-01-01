@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/home/hice1/avo61/Documents/AI_health_final/AI-CDS-Disease-Diagnosis-Reproduction_GT_version/CS2V.py", line 261, in <module>
+    model = util_cy.load_model()
+  File "util_cy.pyx", line 268, in util_cy.load_model
+AttributeError: module 'sent2vec' has no attribute 'Sent2vecModel'
+[INFO] Dataset loaded: 129 admissions
+[INFO] Dataset file: /home/hice1/avo61/Documents/AI_health_final/AI-CDS-Disease-Diagnosis-Reproduction_GT_version/Symptoms-Diagnosis.txt
+[TIMING] Dataset loading: 0.01 seconds
+[INFO] Loading BioSentVec model (21GB - this may take 5-10 minutes)...
+[INFO] Model path: /home/hice1/avo61/Documents/AI_health_final/AI-CDS-Disease-Diagnosis-Reproduction_GT_version/BioSentVec_PubMed_MIMICIII-bigram_d700.bin
+('LOAD MODEL Start time: ', '24/11/2025 13:44:05')
+[ERROR] Loading model failed: AttributeError: module 'sent2vec' has no attribute 'Sent2vecModel'

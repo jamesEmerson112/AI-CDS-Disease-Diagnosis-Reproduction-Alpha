@@ -1,0 +1,737 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\title{Conversation with LLM: AI-CDS Disease Diagnosis Project}
+\author{Project Documentation}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Paper Overview and Section Breakdown}
+
+\subsection{Initial Request}
+The conversation began with a request to divide and conquer a document titled ``AI-Driven Clinical Decision Support: Enhancing Disease Diagnosis Exploiting Patients Similarity.pdf'' into manageable sections.
+
+\subsection{Section 1: Introduction (Pages 1-2)}
+
+\textbf{Objective:} Defines the importance of early disease detection.
+
+\textbf{Scope:} Introduction to Clinical Decision Support (CDS) systems.
+
+\textbf{Unique Contribution:} Proposes integration of heterogeneous health data (e.g., EHR, laboratory results, social media).
+
+\textbf{Key Methodology:} Exploits supervised/unsupervised AI, machine learning, deep learning, and Natural Language Processing (NLP).
+
+\textbf{Target:} Prediction of patients' diagnoses based on symptoms similarity and semantic relations.
+
+\subsection{Section 2: Related Work (Pages 2-3)}
+
+\textbf{Scope:} Review of existing literature and related approaches.
+
+\textbf{Key topics:}
+\begin{itemize}
+    \item Disease progression models
+    \item Diagnosis prediction methods (Med2Vec, graph-based attention models)
+    \item Machine learning applications for medical text classification (Word2Vec, Sent2Vec, CNNs, RNNs)
+    \item Real-time processing with sensor-based health systems
+\end{itemize}
+
+\subsection{Section 3: AI-Driven Clinical Decision Support System (Pages 3-4)}
+
+\textbf{Objective:} Describe the general and innovative CDS architecture.
+
+\textbf{Components:}
+\begin{itemize}
+    \item Clinical Data Repository (CDR)
+    \item Patient profile management and Digital Patient concept
+\end{itemize}
+
+\textbf{Architecture:} Three-layer structure:
+\begin{itemize}
+    \item Data Preparation Layer
+    \item Artificial Intelligence Layer (including NLP, predictive analytics)
+    \item High-Performance Computing Layer (CPU/GPU)
+\end{itemize}
+
+\textbf{Special Concepts:} Digital twin and cosine similarity metrics for document sorting.
+
+\subsection{Section 4: Diagnosis Prediction Case Study (Pages 4-6)}
+
+\textbf{Objective:} Defines the problem formulation of patient-similarity-based diagnosis prediction.
+
+\textbf{Key Definitions:}
+\begin{itemize}
+    \item Patient entry: tuple including symptoms and preliminary diagnoses
+    \item Semantic symptom vector (ssv): vector space embedding (Sent2Vec)
+\end{itemize}
+
+\textbf{Methodology:}
+\begin{itemize}
+    \item Construction of patient feature vectors
+    \item Neural network and semantic corpus generation
+    \item Similarity computation between patients (Cosine Similarity)
+\end{itemize}
+
+\subsection{Section 5: Dataset and Semantic Knowledge Corpus (Page 7)}
+
+\textbf{Dataset:} Description and statistics of MIMIC-III dataset (critical care records from MIT Lab).
+\begin{itemize}
+    \item Includes demographics, vital signs, laboratory tests, and medication data
+\end{itemize}
+
+\textbf{Semantic Model:} BioSentVec (sentence embedding model trained on scholarly and clinical data).
+
+\subsection{Section 6: Experimental Evaluation (Pages 7-10)}
+
+\textbf{Goals:} Evaluation of effectiveness, accuracy, and scalability of proposed methods.
+
+\textbf{Evaluation Metrics:}
+\begin{itemize}
+    \item Precision, Recall, and F-measure: Defined clearly
+    \item Experimental setup detailed (5-fold cross-validation)
+\end{itemize}
+
+\textbf{Results:}
+\begin{itemize}
+    \item Performance analysis of symptom similarity thresholds
+    \item Evaluation of semantic similarity thresholds in diagnosis prediction
+    \item Performance of distributed discovery service
+\end{itemize}
+
+\subsection{Section 7: Conclusion (Page 10)}
+
+\textbf{Summary:} Summarizes contributions and effectiveness of the proposed AI-driven CDS.
+
+\textbf{Future Work:} Mentions potential expansions and improvements based on obtained results.
+
+\section{Deep Dive: Sections 1 and 2}
+
+\subsection{Section 1: Introduction and Motivation}
+
+At the heart of modern healthcare lies the imperative pursuit of early disease detection. The document emphasizes that timely recognition of health conditions can profoundly influence their effective management and treatment outcomes. The foundational argument is that detecting ailments at nascent stages dramatically increases the accuracy and success rate of interventions.
+
+The authors introduce the \textbf{Clinical Decision Support System (CDS)}, a specialized computational framework designed to enhance physicians' decision-making capabilities in disease identification and therapeutic pathway selection.
+
+\textbf{Traditional CDS Limitations:}
+\begin{itemize}
+    \item Singular focus on individual patients and single conditions
+    \item Neglect of comorbidities (multiple overlapping medical conditions)
+    \item Limited analytical capability for complex scenarios
+\end{itemize}
+
+\textbf{Proposed Innovation - Integrative CDS Framework:}
+
+The authors propose synthesizing heterogeneous data streams:
+\begin{itemize}
+    \item \textbf{Electronic Health Records (EHR):} Comprehensive digital patient health records
+    \item \textbf{Laboratory Test Results:} Biochemical and physiological indicators
+    \item \textbf{Imaging Data:} Multi-dimensional radiological data (X-rays, CT, MRI)
+    \item \textbf{Social Media and Sensor Data:} Real-time biometric feedback from wearables
+\end{itemize}
+
+\textbf{Key Innovation - Word Embedding:} A powerful NLP technique mapping complex medical vocabularies into structured mathematical spaces, enabling semantic interpretation of hospital admissions, symptoms, and diagnoses.
+
+\subsection{Section 2: Related Work and Contextual Landscape}
+
+\subsubsection{EHR Mining and Disease Progression Modeling}
+
+Existing research covers predictive modeling utilizing EHR, examining disease progression and prognosis prediction using statistical methods, probabilistic approaches, and deep neural networks.
+
+\subsubsection{Diagnostic Prediction Models}
+
+\textbf{Highlighted methods:}
+\begin{itemize}
+    \item \textbf{Med2Vec:} Algorithm for predicting future diagnoses, capturing long-term dependencies
+    \item \textbf{Attention Models:} Graph-based attention networks modeling complex clinical event interactions
+\end{itemize}
+
+\subsubsection{Medical Text Classification}
+
+\textbf{Seminal approaches:}
+\begin{itemize}
+    \item \textbf{LDA (Latent Dirichlet Allocation):} Probabilistic model for latent thematic structures
+    \item \textbf{SVM (Support Vector Machines):} Efficient text categorization
+    \item \textbf{Word2Vec and Sent2Vec:} Modern NLP techniques embedding text into continuous vector spaces
+\end{itemize}
+
+\subsubsection{Innovation Differentiation}
+
+The literature review underscores an existing gap - current approaches concentrate on isolated scenarios or limited data types. The authors propose a comprehensive solution that:
+\begin{itemize}
+    \item Integrates diverse data modalities
+    \item Leverages semantic embedding methods
+    \item Accounts for patient complexity through semantic-based similarity measures
+    \item Offers rigorous empirical validation
+\end{itemize}
+
+\section{LSTM Explanation}
+
+\subsection{What is LSTM?}
+
+\textbf{Long Short-Term Memory (LSTM)} is a type of Recurrent Neural Network (RNN) architecture introduced by Hochreiter and Schmidhuber in 1997 to solve the ``vanishing gradient'' problem.
+
+\subsection{Practical Intuition}
+
+Think of LSTM as an advanced note-taking assistant at a long lecture:
+\begin{itemize}
+    \item \textbf{Traditional RNN:} Writes notes rapidly but forgets earlier information
+    \item \textbf{LSTM:} Has specialized notebooks, bookmarking key information, retaining crucial knowledge from beginning to end
+\end{itemize}
+
+\textbf{Example:} Predicting the next word in ``I grew up in France... I speak fluent \_\_\_\_\_\_''
+\begin{itemize}
+    \item Traditional nets struggle to remember context (France)
+    \item LSTM effectively remembers long-past context to predict ``French''
+\end{itemize}
+
+\subsection{Technical Components}
+
+LSTM cells have unique internal structure with gates:
+\begin{itemize}
+    \item \textbf{Forget Gate:} Decides which past information to discard
+    \item \textbf{Input Gate:} Determines what new information to store
+    \item \textbf{Output Gate:} Controls information passed to next step
+\end{itemize}
+
+\subsection{Real-world Applications}
+\begin{itemize}
+    \item Speech recognition and synthesis (Google Assistant, Siri)
+    \item Text prediction (Autocomplete, Smart Compose)
+    \item Time-series forecasting (Stock market, weather)
+    \item Sentiment analysis
+    \item Music generation
+    \item Health informatics (Predictive models for patient health)
+\end{itemize}
+
+\section{Section 3: AI-Driven CDS System (Detailed)}
+
+\subsection{Overview}
+
+The proposed CDS uniquely integrates heterogeneous clinical data sources, leveraging AI methodologies to assist physicians in complex scenarios, enhancing disease diagnosis, treatment selection, and patient outcome monitoring.
+
+\subsection{Three-Layer Architecture}
+
+\subsubsection{Layer 1: Data Preparation Layer}
+
+\textbf{Function:} Gathers and prepares data
+
+\textbf{Data Types Collected:}
+\begin{itemize}
+    \item \textbf{EHR:} Past medical visits, treatments, diagnoses, prescriptions
+    \item \textbf{Laboratory Tests and Medical Images:} Blood tests, X-rays, MRIs
+    \item \textbf{Sensor Data:} Real-time wearable device information
+    \item \textbf{Social Media Data:} Health-related trends and patient sentiments
+\end{itemize}
+
+\textbf{Practical Example:}
+Patient John visits hospital with chest pains:
+\begin{enumerate}
+    \item System gathers past medical records
+    \item Takes recent lab results and ECG data
+    \item Monitors social media (with permission)
+    \item Integrates, cleans, standardizes data for analysis
+\end{enumerate}
+
+\subsubsection{Layer 2: AI and NLP Layer}
+
+\textbf{Function:} Analyzes and understands data
+
+\textbf{Main Tasks:}
+\begin{itemize}
+    \item \textbf{NLP:} Translates doctor's notes and symptoms into structured digital information
+    \item \textbf{Semantic Embedding:} Transforms medical information into mathematical format
+    \item \textbf{Predictive Analytics:} Predicts disease likelihood based on historical patterns
+\end{itemize}
+
+\textbf{Practical Example (continued):}
+\begin{itemize}
+    \item NLP identifies key phrases: ``chest pain,'' ``high cholesterol,'' ``family history of heart disease''
+    \item AI system predicts likely diagnoses: ``possible heart disease,'' ``risk of heart attack,'' ``angina''
+\end{itemize}
+
+\subsubsection{Layer 3: High-Performance Computing Layer}
+
+\textbf{Function:} Finds similarities quickly
+
+\textbf{Core Process:}
+\begin{enumerate}
+    \item Patient's health profile transformed into unique ``digital fingerprint'' (vector representation)
+    \item System compares profile with millions of historical records
+    \item High-speed computers (GPU-powered) handle comparisons in seconds
+\end{enumerate}
+
+\textbf{Practical Example (continued):}
+\begin{itemize}
+    \item CDS finds 5 historical patients with similar symptoms and histories
+    \item These patients received successful diagnosis and treatment
+    \item System suggests similar treatment to John's doctor
+\end{itemize}
+
+\subsection{Core Components}
+
+\subsubsection{Clinical Data Repository (CDR)}
+
+Geographically distributed healthcare providers (hospitals, research institutions) maintain clinical data including EHR, databases, knowledge bases, medical images, sensor streams, and social media analytics.
+
+\subsubsection{Digital Patient and Digital Twin Concepts}
+
+\textbf{Digital Twin:} Digital replica of real-world entity, historically from University of Michigan (2001), originally for industrial settings.
+
+\textbf{Digital Patient:} Precise, evolving digital representation of individual's health status, dynamically integrating all health information (clinical, imaging, genetic, behavioral) to enable personalized medical interventions.
+
+\subsubsection{Distributed Similarity-Based Organization}
+
+Clinical documents converted into numerical vector representations. Similarities computed through cosine similarity:
+
+\begin{equation}
+\text{cosine similarity}(v_1, v_2) = \frac{v_1 \cdot v_2}{\|v_1\| \|v_2\|}
+\end{equation}
+
+\section{Project Proposal Overview}
+
+\subsection{Paper Information}
+
+\textbf{Title:} AI-Driven Clinical Decision Support: Enhancing Disease Diagnosis Exploiting Patients Similarity
+
+\textbf{Authors:} Carmela Comito, Deborah Falcone, and Agostino Forestiero
+
+\textbf{Publication:} IEEE Access, Volume 10, 2022
+
+\textbf{DOI:} 10.1109/ACCESS.2022.3142100
+
+\textbf{Code URL:} http://staff.icar.cnr.it/diseaseDiagnosis.zip
+
+\subsection{General Task}
+
+Reproduce experiments described in the paper. Predict discharge diagnoses of hospitalized patients by exploiting patient similarity derived from symptoms and preliminary diagnoses using electronic health records (EHR).
+
+\subsection{Key Innovations to Reproduce}
+
+\begin{enumerate}
+    \item \textbf{Semantic Similarity:} Implement NLP embeddings (Sent2Vec) instead of traditional ICD-based methods
+    \item \textbf{Digital Twin Patient Model:} Integrate heterogeneous patient data into unified representation
+    \item \textbf{Hybrid AI Approach:} Combine unsupervised embeddings with supervised predictive models
+    \item \textbf{Distributed Query Architecture:} Scalable similarity-search across healthcare databases
+\end{enumerate}
+
+\subsection{Hypotheses}
+
+\textbf{Primary Hypothesis:}
+Semantic similarity provides improved accuracy compared to ICD-based methods.
+
+\textbf{Secondary Hypothesis:}
+Lightweight embedding methods (Sent2Vec/BioSentVec) offer computational efficiency and scalability.
+
+\subsection{Advantages and Disadvantages}
+
+\textbf{Advantages:}
+\begin{itemize}
+    \item Higher accuracy (precision and recall)
+    \item Clinically meaningful similarity metrics
+    \item Computationally efficient embedding approach
+\end{itemize}
+
+\textbf{Disadvantages:}
+\begin{itemize}
+    \item Dependence on quality of free-text notes
+    \item Generalization across healthcare settings uncertain
+\end{itemize}
+
+\subsection{Potential Improvements}
+\begin{itemize}
+    \item Test modern transformer-based embeddings (BioClinicalBERT)
+    \item Incorporate structured clinical data (labs, vitals)
+\end{itemize}
+
+\subsection{Dataset and Computational Feasibility}
+
+\textbf{Dataset:} MIMIC-III (version 1.4), accessible after PhysioNet credentialing
+
+\textbf{Code:} Provided by authors in Python, PostgreSQL, and Cython
+
+\textbf{Computational Feasibility:} Lightweight model suitable for standard resources; GPU acceleration optional but beneficial
+
+\subsection{Deliverables}
+
+\begin{enumerate}
+    \item Reproduce original model results (precision, recall, F1-score, top-k accuracy)
+    \item Evaluate embedding methods comparison (Sent2Vec vs. transformer-based)
+    \item Provide comprehensive reproducibility report
+\end{enumerate}
+
+\section{Performance Analysis Results}
+
+\subsection{Overall Performance Summary}
+
+\textbf{Total Folds Analyzed:} 10
+
+\textbf{Methods Compared:} 6 methods (MAX, TOP-10, TOP-20, TOP-30, TOP-40, TOP-50)
+
+\textbf{Thresholds Tested:} 5 thresholds (0.6, 0.7, 0.8, 0.9, 1.0)
+
+\subsection{Best Configuration}
+
+\textbf{Method:} TOP-30
+
+\textbf{Threshold:} 0.6
+
+\textbf{F-Score:} 0.5246
+
+\textbf{Recall:} 0.4724
+
+\textbf{Precision:} 0.5947
+
+\subsection{Interpretation}
+
+\subsubsection{TOP-K Methods Explained}
+
+\textbf{Scenario:} Diagnosing a patient based on symptoms by looking at similar historical patients.
+
+\begin{itemize}
+    \item \textbf{TOP-10:} Consider 10 most similar patients
+    \item \textbf{TOP-30:} Consider 30 most similar patients
+    \item \textbf{TOP-50:} Consider 50 most similar patients
+\end{itemize}
+
+\textbf{Why multiple patients?}
+\begin{itemize}
+    \item Single most similar patient (MAX) too narrow and unreliable
+    \item More similar patients provide better pattern understanding
+    \item TOP-30 strikes optimal balance before diminishing returns
+\end{itemize}
+
+\subsubsection{Threshold Meaning}
+
+\textbf{Threshold = 0.6:} Similarity level required for considering patients in prediction
+
+\begin{itemize}
+    \item \textbf{Low threshold (0.6):} Accept moderately similar patients; more examples but slightly less relevant
+    \item \textbf{High threshold (0.9-1.0):} Only highly similar patients; very relevant but fewer examples
+\end{itemize}
+
+\textbf{Optimal choice:} 0.6 provides enough patients for accurate diagnosis without sacrificing quality
+
+\subsubsection{Evaluation Metrics}
+
+\textbf{Precision:} Out of all predictions made, how many were correct?
+\begin{itemize}
+    \item Example: Predict 10 patients have disease, 9 actually have it $\Rightarrow$ Precision = 90\%
+\end{itemize}
+
+\textbf{Recall:} Out of all actual cases, how many were correctly identified?
+\begin{itemize}
+    \item Example: 10 patients have disease, identify 8 correctly $\Rightarrow$ Recall = 80\%
+\end{itemize}
+
+\textbf{F-Score:} Balances precision and recall into single measure. Higher F-score indicates better overall performance (F-score of 1.0 is perfect; close to 0 is poor).
+
+\subsection{Clinical Test Cases Analysis}
+
+\subsubsection{Test Case: Acute Myocardial Infarction}
+
+\textbf{Ground Truth:} Acute myocardial infarction (heart attack), patient expired
+
+\textbf{Predicted:} Percutaneous cardiovascular procedure with stent \textit{without} acute myocardial infarction
+
+\textbf{Similarities:}
+\begin{itemize}
+    \item Symptom Similarity: 0.9910 (very high)
+    \item Diagnosis BERT Similarity: 0.9477 (very high)
+\end{itemize}
+
+\textbf{Medical Assessment:} Despite high numerical similarity, clinically incorrect. Critical difference: ``with infarction'' vs. ``without infarction'' - drastically different treatments and outcomes.
+
+\subsubsection{Test Case: Multiple Trauma}
+
+\textbf{Ground Truth:} Multiple significant trauma \textit{without} operating room procedure
+
+\textbf{Predicted:} Craniotomy for trauma (surgical intervention)
+
+\textbf{Similarities:}
+\begin{itemize}
+    \item Symptom Similarity: 0.9603
+    \item Diagnosis BERT Similarity: 0.8880
+\end{itemize}
+
+\textbf{Medical Assessment:} Close but not accurate. Both involve trauma, but key difference: surgical vs. non-surgical treatment - clinically significant for resource allocation and patient management.
+
+\subsubsection{Test Case: Neurological vs. Infectious}
+
+\textbf{Ground Truth:} Seizure and headache (neurological condition)
+
+\textbf{Predicted:} Septicemia (severe blood infection)
+
+\textbf{Similarities:}
+\begin{itemize}
+    \item Symptom Similarity: 0.9754
+    \item Diagnosis BERT Similarity: 0.8634
+\end{itemize}
+
+\textbf{Medical Assessment:} Clinically incorrect. Completely different conditions (neurological vs. infectious) requiring drastically different treatments. High similarity due to general medical terminology overlap, missing deeper clinical context.
+
+\subsection{Key Insights}
+
+\textbf{BERT Similarity Limitation:} Captures general textual/semantic similarity but fails to distinguish clinically critical differences:
+\begin{itemize}
+    \item Neurological vs. Infectious conditions
+    \item Surgical vs. non-surgical cases
+    \item With/without critical clinical features
+\end{itemize}
+
+\textbf{Recommendations for Improvement:}
+\begin{itemize}
+    \item Fine-tune transformer embeddings on clinical data (ClinicalBERT, BioClinicalBERT)
+    \item Introduce clinical validation checks
+    \item Emphasize critical clinical distinctions in training
+\end{itemize}
+
+\section{Evaluation Metrics Summary}
+
+\subsection{Standard Metrics}
+
+\textbf{TP (True Positive):} Cases correctly identified as positive
+
+\textbf{FP (False Positive):} Cases incorrectly identified as positive
+
+\textbf{P (Precision):}
+\begin{equation}
+\text{Precision} = \frac{TP}{TP + FP}
+\end{equation}
+
+\textbf{R (Recall):}
+\begin{equation}
+\text{Recall} = \frac{TP}{TP + FN}
+\end{equation}
+where FN = False Negative
+
+\textbf{FS (F-Score):}
+\begin{equation}
+F1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+\end{equation}
+
+\textbf{PR (Precision-Recall):} Precision-Recall curve or combined metrics
+
+\section{Project Video Requirements}
+
+\subsection{Video Specifications}
+
+\textbf{Length:} 5-8 minutes
+
+\textbf{Format:} Uploaded to accessible platform (YouTube, Google Drive, OneDrive)
+
+\textbf{Visibility:} Public and viewable by graders
+
+\textbf{Team Submission:} One joint video per team
+
+\subsection{Video Content Structure}
+
+\subsubsection{1. Introduction (1 minute)}
+\begin{itemize}
+    \item State paper title, authors, publication details
+    \item Summarize core research problem (patient similarity for diagnosis prediction)
+\end{itemize}
+
+\subsubsection{2. Methodology Overview (1-2 minutes)}
+\begin{itemize}
+    \item Explain key methods (semantic similarity, Sent2Vec, NLP, CDS model)
+    \item Describe independent implementation
+\end{itemize}
+
+\subsubsection{3. Reproduction Results (1-2 minutes)}
+\begin{itemize}
+    \item Present reproduction results
+    \item Explain whether metrics matched original paper
+    \item Discuss reasons for matches/mismatches
+\end{itemize}
+
+\subsubsection{4. Extensions or Improvements (2-3 minutes)}
+\begin{itemize}
+    \item Explain meaningful extension/ablation
+    \item Present comparative results (tables, graphs, visuals)
+    \item Discuss rationale, outcomes, implications
+\end{itemize}
+
+\subsubsection{5. Challenges and Lessons (1 minute)}
+\begin{itemize}
+    \item Discuss easy vs. challenging aspects
+    \item Explain lessons learned (technical and medical insights)
+\end{itemize}
+
+\subsection{Visual and Technical Recommendations}
+\begin{itemize}
+    \item Use clear slides (PowerPoint, Google Slides)
+    \item Include visuals (charts, tables, screenshots)
+    \item Maintain clear audio quality
+    \item Link video in final report
+    \item Zip slides with report for submission
+\end{itemize}
+
+\section{Transformer-Based Embeddings}
+
+\subsection{Available BERT Models for Biomedical/Clinical Text}
+
+\subsubsection{BioBERT}
+\textbf{Description:} Pretrained on PubMed and PMC biomedical literature
+
+\textbf{Use case:} General biomedical text analysis
+
+\subsubsection{ClinicalBERT}
+\textbf{Description:} Pretrained on MIMIC-III clinical notes
+
+\textbf{Use case:} Clinical text, patient notes, healthcare records
+
+\subsubsection{PubMedBERT}
+\textbf{Description:} Pretrained entirely on PubMed abstracts and full-text
+
+\textbf{Use case:} Biomedical research and literature analysis
+
+\subsubsection{SapBERT}
+\textbf{Description:} Optimized for biomedical entity linking and semantic similarity
+
+\textbf{Use case:} Biomedical and clinical concept similarity
+
+\subsubsection{BioClinicalBERT}
+\textbf{Description:} Combines biomedical and clinical training (PubMed + MIMIC-III)
+
+\textbf{Use case:} Comprehensive biomedical and clinical text tasks
+
+\subsubsection{BlueBERT}
+\textbf{Description:} Pretrained on PubMed abstracts and MIMIC-III clinical notes
+
+\textbf{Use case:} Clinical and biomedical NLP tasks
+
+\subsubsection{BiomedBERT}
+\textbf{Description:} Microsoft model trained on PubMed abstracts
+
+\textbf{Use case:} Biomedical natural language tasks
+
+\subsection{Implementation Approach}
+
+\begin{enumerate}
+    \item Pick appropriate transformer model (ClinicalBERT recommended for clinical data)
+    \item Download pretrained model from Hugging Face
+    \item Load model via transformers library
+    \item Generate embeddings from clinical text (patient notes, symptoms)
+    \item Feed embeddings into predictive model
+    \item Compare results with baseline (Sent2Vec)
+\end{enumerate}
+
+\subsection{Expected Benefits}
+\begin{itemize}
+    \item Richer context understanding
+    \item Potential accuracy improvements
+    \item More clinically relevant embeddings
+    \item Better representation of clinical language nuances
+\end{itemize}
+
+\section{GPU Hardware Ranking}
+
+\subsection{Strongest to Weakest (for AI/ML workloads)}
+
+\begin{enumerate}
+    \item NVIDIA GPU H200 HGX (most powerful, latest generation)
+    \item NVIDIA GPU H100 HGX (extremely powerful, latest architecture)
+    \item NVIDIA GPU Hopper GPU (first available)
+    \item NVIDIA GPU A100 80GB (large VRAM, widely used for ML)
+    \item NVIDIA GPU A100 40GB (powerful, less VRAM)
+    \item NVIDIA GPU RTX6000 (strong professional GPU)
+    \item NVIDIA GPU A40 (solid performance, professional)
+    \item NVIDIA GPU V100 32GB (older generation, robust)
+    \item NVIDIA GPU V100 16GB (half VRAM of 32GB version)
+    \item NVIDIA GPU L40S (good GPU, general workloads)
+    \item AMD GPU M1210 (decent, lower ML performance vs. NVIDIA)
+\end{enumerate}
+
+\textbf{Recommendation:} For transformer-based embeddings, aim for top-tier GPUs (H100/H200 series). Lower-tier GPUs (V100, L40S) sufficient for smaller-scale tasks.
+
+\section{Project Reproduction Timeline}
+
+\subsection{Completed Tasks}
+\begin{itemize}
+    \item[$\checkmark$] Initial Setup
+    \item[$\checkmark$] Project Proposal
+    \item[$\checkmark$] Initial Paper Code Run
+    \item[$\checkmark$] Results Verification
+\end{itemize}
+
+\subsection{Current Phase: Code Development}
+\begin{itemize}
+    \item[$\Box$] Set up Docker Desktop and WSL2
+    \item[$\Box$] Develop own data preprocessing scripts
+    \item[$\Box$] Implement own embedding method (Sent2Vec)
+    \item[$\Box$] Reproduce original results independently
+    \item[$\Box$] Document computational resources
+\end{itemize}
+
+\subsection{Next Phase: Evaluation and Extensions}
+\begin{itemize}
+    \item[$\Box$] Compare embeddings with transformer embeddings
+    \item[$\Box$] Conduct meaningful extension/ablation
+    \item[$\Box$] Document LLM use for brainstorming
+    \item[$\Box$] Evaluate LLM suggestions critically
+\end{itemize}
+
+\subsection{Final Phase: Reporting}
+\begin{itemize}
+    \item[$\Box$] Write final report (AAAI Format)
+    \item[$\Box$] Document LLM usage (appendix)
+    \item[$\Box$] Document reproducibility results
+    \item[$\Box$] Cite all sources
+    \item[$\Box$] Organize code on GitHub
+    \item[$\Box$] Prepare presentation slides
+    \item[$\Box$] Record presentation video (5-8 minutes)
+    \item[$\Box$] Submit all deliverables
+\end{itemize}
+
+\section{Repository Information}
+
+\subsection{Recommended Repository Name}
+
+\textbf{AI-CDS-Disease-Diagnosis}
+
+\textbf{Reasoning:}
+\begin{itemize}
+    \item Clear and direct (mentions AI, CDS, Disease Diagnosis)
+    \item Easily searchable
+    \item Aligned with paper title
+\end{itemize}
+
+\subsection{Recommended License}
+
+\textbf{MIT License}
+
+\textbf{Reasoning:}
+\begin{itemize}
+    \item Highly permissive (free reuse, modification, redistribution)
+    \item Common in academia for research reproducibility
+    \item Simple and clear without complex legal restrictions
+\end{itemize}
+
+\subsection{Paper Citation}
+
+Comito, C., Falcone, D., \& Forestiero, A. (2022). AI-Driven Clinical Decision Support: Enhancing Disease Diagnosis Exploiting Patients Similarity. \textit{IEEE Access}, 10, 6878-6888. DOI: 10.1109/ACCESS.2022.3142100
+
+\textbf{Original codebase:} http://staff.icar.cnr.it/diseaseDiagnosis.zip
+
+\textbf{Dataset:} MIMIC-III v1.4 (PhysioNet)
+
+\section{Key Takeaways}
+
+\subsection{Project Summary}
+
+System tests patient diagnosis prediction by comparing symptoms with similar historical cases. After thorough evaluation:
+
+\textbf{Best Method:} TOP-30 most similar historical patients at threshold 0.6
+
+\textbf{Performance:} F-score approximately 0.

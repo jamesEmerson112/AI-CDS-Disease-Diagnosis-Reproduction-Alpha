@@ -1,0 +1,103 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Cython
+*.c
+!util_cy.c
+*.cpp
+*.html
+.cython_cache/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Machine Learning Models (typically large files)
+*.bin
+*.model
+*.vec
+*.h5
+*.pkl
+*.pickle
+*.joblib
+
+# Output Directories
+# Note: Prediction Output* folders are now tracked to transfer results between computers
+# Uncomment lines below if you want to exclude them:
+# Prediction Output*/
+# Prediction Symptom Details*/
+output/
+results/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+.history/
+
+# IDE - PyCharm
+.idea/
+*.iml
+*.iws
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Downloaded original source (duplicates our files)
+diseaseDiagnosis/
+# diseaseDiagnosis.zip
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Personal setup documentation
+James_wsl_code_setup.md
+SETUP_GUIDE.md
