@@ -16,13 +16,12 @@ def main():
     print("Project Reorganization Verification")
     print("=" * 50)
 
-    checks = []
     failed = False
 
     # Check 1: Directory structure
     print("\n[1] Checking directory structure...")
     required_dirs = [
-        "src", "src/models", "src/entity", "src/utils", "src/evaluation",
+        "src", "src/biosentvec", "src/bert", "src/shared", "src/shared/entity",
         "scripts", "tests", "data", "data/folds", "data/raw",
         "output", "docs", "config", "archive"
     ]
@@ -36,29 +35,67 @@ def main():
 
     # Check 2: Import tests
     print("\n[2] Checking imports...")
+
+    # Check shared.entity
     try:
-        from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-        print("    OK: src.entity.SymptomsDiagnosis")
+        from src.shared.entity.SymptomsDiagnosis import SymptomsDiagnosis
+        print("    OK: src.shared.entity.SymptomsDiagnosis")
     except ImportError as e:
-        print(f"    FAIL: src.entity.SymptomsDiagnosis - {e}")
+        print(f"    FAIL: src.shared.entity.SymptomsDiagnosis - {e}")
         failed = True
 
+    # Check shared.constants
     try:
-        from src.utils.Constants import CH_DIR, K_FOLD
-        print(f"    OK: src.utils.Constants (CH_DIR={CH_DIR})")
+        from src.shared.constants import CH_DIR, K_FOLD
+        print(f"    OK: src.shared.constants (CH_DIR={CH_DIR})")
     except ImportError as e:
-        print(f"    FAIL: src.utils.Constants - {e}")
+        print(f"    FAIL: src.shared.constants - {e}")
         failed = True
 
+    # Check shared.preprocessing (requires nltk)
     try:
-        from src.utils import cython_utils
-        print("    OK: src.utils.cython_utils")
+        from src.shared.preprocessing import preprocess_sentence
+        print("    OK: src.shared.preprocessing")
     except ImportError as e:
-        if "nltk" in str(e) or "gensim" in str(e) or "sent2vec" in str(e):
-            print(f"    SKIP: src.utils.cython_utils - missing dependency: {e}")
+        if "nltk" in str(e):
+            print(f"    SKIP: src.shared.preprocessing - missing nltk")
+        else:
+            print(f"    FAIL: src.shared.preprocessing - {e}")
+            failed = True
+
+    # Check shared.similarity
+    try:
+        from src.shared.similarity import cosine_similarity
+        print("    OK: src.shared.similarity")
+    except ImportError as e:
+        if "nltk" in str(e):
+            print(f"    SKIP: src.shared.similarity - missing nltk")
+        else:
+            print(f"    FAIL: src.shared.similarity - {e}")
+            failed = True
+
+    # Check biosentvec module (requires sent2vec)
+    try:
+        from src.biosentvec import embeddings
+        print("    OK: src.biosentvec.embeddings")
+    except ImportError as e:
+        if "sent2vec" in str(e) or "nltk" in str(e):
+            print(f"    SKIP: src.biosentvec.embeddings - missing dependency: {e}")
             print("          (Install with: pip install -r config/requirements.txt)")
         else:
-            print(f"    FAIL: src.utils.cython_utils - {e}")
+            print(f"    FAIL: src.biosentvec.embeddings - {e}")
+            failed = True
+
+    # Check bert module
+    try:
+        from src.bert import models
+        print("    OK: src.bert.models (imports only)")
+    except ImportError as e:
+        if "sentence_transformers" in str(e) or "torch" in str(e):
+            print(f"    SKIP: src.bert.models - missing dependency: {e}")
+            print("          (Install with: pip install -r config/requirements_bert.txt)")
+        else:
+            print(f"    FAIL: src.bert.models - {e}")
             failed = True
 
     # Check 3: Data files
@@ -95,7 +132,7 @@ def main():
     # Check 5: CH_DIR resolution
     print("\n[5] Checking Constants.CH_DIR resolution...")
     try:
-        from src.utils.Constants import CH_DIR
+        from src.shared.constants import CH_DIR
         if os.path.isdir(CH_DIR):
             print(f"    OK: CH_DIR exists")
             if os.path.isfile(os.path.join(CH_DIR, "pyproject.toml")):

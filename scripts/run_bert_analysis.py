@@ -20,4 +20,4 @@ if __name__ == "__main__":
     print("")
 
     # Import the main module - this will execute the analysis
-    from src.models import bert_models
+    from src.bert import models

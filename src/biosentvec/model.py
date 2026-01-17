@@ -13,11 +13,40 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-import src.entity.SymptomsDiagnosis as entity_module
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import *
+import src.shared.entity.SymptomsDiagnosis as entity_module
+from src.shared.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from src.shared.constants import *
+from src.shared.preprocessing import preprocess_sentence, preprocess_diagnosis
+from src.shared.similarity import cosine_similarity
+from src.shared.data_loader import load_dataset, current_time, elapsed_time
+from src.shared.metrics import (
+    init_confusion_matrix, init_performance_matrix,
+    compute_performance_index, compute_aggregated_performance_index,
+    print_performance_index, containGreaterOrEqualsValue
+)
+from src.biosentvec.embeddings import (
+    load_model, embending_symptoms, embending_diagnosis, predictS2V
+)
 
-from src.utils import cython_utils as util_cy
+# Alias for backward compatibility
+class util_cy:
+    """Compatibility shim for old util_cy references."""
+    preprocess_sentence = staticmethod(preprocess_sentence)
+    preprocess_diagnosis = staticmethod(preprocess_diagnosis)
+    cosine_similarity = staticmethod(cosine_similarity)
+    load_dataset = staticmethod(load_dataset)
+    current_time = staticmethod(current_time)
+    elapsed_time = staticmethod(elapsed_time)
+    init_confusion_matrix = staticmethod(init_confusion_matrix)
+    init_performance_matrix = staticmethod(init_performance_matrix)
+    compute_performance_index = staticmethod(compute_performance_index)
+    compute_aggregated_performance_index = staticmethod(compute_aggregated_performance_index)
+    print_performance_index = staticmethod(print_performance_index)
+    containGreaterOrEqualsValue = staticmethod(containGreaterOrEqualsValue)
+    load_model = staticmethod(load_model)
+    embending_symptoms = staticmethod(embending_symptoms)
+    embending_diagnosis = staticmethod(embending_diagnosis)
+    predictS2V = staticmethod(predictS2V)
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False

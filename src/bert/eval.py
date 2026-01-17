@@ -20,12 +20,19 @@ import torch
 from scipy.spatial.distance import cosine
 
 # Import entity classes
-import src.entity.SymptomsDiagnosis as entity_module
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import *
+import src.shared.entity.SymptomsDiagnosis as entity_module
+from src.shared.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from src.shared.constants import *
+from src.shared.preprocessing import preprocess_sentence, preprocess_diagnosis
+from src.shared.similarity import cosine_similarity
+from src.shared.data_loader import load_dataset, current_time, elapsed_time
 
-# Import util_cy for preprocessing functions only
-from src.utils import cython_utils as util_cy
+# Alias for backward compatibility
+class util_cy:
+    """Compatibility shim for old util_cy references."""
+    preprocess_sentence = staticmethod(preprocess_sentence)
+    preprocess_diagnosis = staticmethod(preprocess_diagnosis)
+    load_dataset = staticmethod(load_dataset)
 
 # Ensure NLTK data is available
 import nltk

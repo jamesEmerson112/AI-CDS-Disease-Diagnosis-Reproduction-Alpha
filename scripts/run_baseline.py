@@ -20,4 +20,4 @@ if __name__ == "__main__":
     print("")
 
     # Import the main module - this will execute the analysis
-    from src.models import baseline_sent2vec
+    from src.biosentvec import model
