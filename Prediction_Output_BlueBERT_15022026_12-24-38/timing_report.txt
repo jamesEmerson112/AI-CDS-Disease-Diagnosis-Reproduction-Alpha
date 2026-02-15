@@ -1,0 +1,30 @@
+================================================================================
+TIMING REPORT - Disease Diagnosis System (BlueBERT)
+================================================================================
+Dataset Loading:           0.00 seconds
+Model Loading:             11.12 seconds
+Symptom Embeddings:        1.49 seconds
+Diagnosis Embeddings:      0.63 seconds
+Embeddings Total:          2.12 seconds
+--------------------------------------------------------------------------------
+Fold 0:                    133.36 seconds (2.22 minutes)
+Fold 1:                    105.24 seconds (1.75 minutes)
+Fold 2:                    109.19 seconds (1.82 minutes)
+Fold 3:                    124.66 seconds (2.08 minutes)
+Fold 4:                    147.99 seconds (2.47 minutes)
+Fold 5:                    134.40 seconds (2.24 minutes)
+Fold 6:                    118.25 seconds (1.97 minutes)
+Fold 7:                    146.41 seconds (2.44 minutes)
+Fold 8:                    113.63 seconds (1.89 minutes)
+Fold 9:                    94.98 seconds (1.58 minutes)
+--------------------------------------------------------------------------------
+Total Folds Processing:    1228.11 seconds (20.47 minutes)
+--------------------------------------------------------------------------------
+TOTAL EXECUTION TIME:      1241.36 seconds (20.69 minutes)
+================================================================================
+MODEL: BlueBERT (BERT-768D)
+MODEL PATH: bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12
+TRAINING DATA: PubMed + MIMIC-III (hybrid corpus)
+IMPLEMENTATION: Pure Python with continuous similarity scoring
+BASELINE COMPARISON: vs BioSentVec (700D)
+================================================================================

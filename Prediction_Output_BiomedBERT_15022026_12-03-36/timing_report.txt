@@ -1,0 +1,30 @@
+================================================================================
+TIMING REPORT - Disease Diagnosis System (BiomedBERT)
+================================================================================
+Dataset Loading:           0.00 seconds
+Model Loading:             15.31 seconds
+Symptom Embeddings:        2.84 seconds
+Diagnosis Embeddings:      0.62 seconds
+Embeddings Total:          3.46 seconds
+--------------------------------------------------------------------------------
+Fold 0:                    152.21 seconds (2.54 minutes)
+Fold 1:                    107.62 seconds (1.79 minutes)
+Fold 2:                    107.43 seconds (1.79 minutes)
+Fold 3:                    122.50 seconds (2.04 minutes)
+Fold 4:                    147.74 seconds (2.46 minutes)
+Fold 5:                    135.45 seconds (2.26 minutes)
+Fold 6:                    123.12 seconds (2.05 minutes)
+Fold 7:                    143.30 seconds (2.39 minutes)
+Fold 8:                    115.05 seconds (1.92 minutes)
+Fold 9:                    94.14 seconds (1.57 minutes)
+--------------------------------------------------------------------------------
+Total Folds Processing:    1248.55 seconds (20.81 minutes)
+--------------------------------------------------------------------------------
+TOTAL EXECUTION TIME:      1267.33 seconds (21.12 minutes)
+================================================================================
+MODEL: BiomedBERT (BERT-768D)
+MODEL PATH: microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract
+TRAINING DATA: PubMed abstracts (biomedical literature)
+IMPLEMENTATION: Pure Python with continuous similarity scoring
+BASELINE COMPARISON: vs BioSentVec (700D)
+================================================================================

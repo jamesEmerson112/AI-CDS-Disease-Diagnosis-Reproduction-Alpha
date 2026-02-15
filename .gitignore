@@ -107,3 +107,6 @@ entity/
 utils/
 Dataset/
 BioSentVec_PubMed_MIMICIII-bigram_d700.bin
+
+# System design visualization (local-only, detailed architecture diagrams)
+.system-design-visualization

@@ -1,0 +1,30 @@
+================================================================================
+TIMING REPORT - Disease Diagnosis System (Bio_ClinicalBERT)
+================================================================================
+Dataset Loading:           0.00 seconds
+Model Loading:             81.32 seconds (1.36 minutes)
+Symptom Embeddings:        5.04 seconds
+Diagnosis Embeddings:      0.94 seconds
+Embeddings Total:          5.98 seconds
+--------------------------------------------------------------------------------
+Fold 0:                    141.53 seconds (2.36 minutes)
+Fold 1:                    104.03 seconds (1.73 minutes)
+Fold 2:                    106.89 seconds (1.78 minutes)
+Fold 3:                    121.54 seconds (2.03 minutes)
+Fold 4:                    149.33 seconds (2.49 minutes)
+Fold 5:                    134.65 seconds (2.24 minutes)
+Fold 6:                    126.41 seconds (2.11 minutes)
+Fold 7:                    141.39 seconds (2.36 minutes)
+Fold 8:                    112.63 seconds (1.88 minutes)
+Fold 9:                    93.13 seconds (1.55 minutes)
+--------------------------------------------------------------------------------
+Total Folds Processing:    1231.52 seconds (20.53 minutes)
+--------------------------------------------------------------------------------
+TOTAL EXECUTION TIME:      1318.82 seconds (21.98 minutes)
+================================================================================
+MODEL: Bio_ClinicalBERT (BERT-768D)
+MODEL PATH: emilyalsentzer/Bio_ClinicalBERT
+TRAINING DATA: MIMIC-III clinical notes
+IMPLEMENTATION: Pure Python with continuous similarity scoring
+BASELINE COMPARISON: vs BioSentVec (700D)
+================================================================================

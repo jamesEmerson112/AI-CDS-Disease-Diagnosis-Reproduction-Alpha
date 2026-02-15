@@ -14,7 +14,6 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-import src.entity.SymptomsDiagnosis as entity_module
 from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from src.utils.Constants import *
 
@@ -373,7 +372,7 @@ def run_analysis(model_id=None):
     ################################################################################################################
     # Use proper path joining instead of changing directory
     dataset_start = time.perf_counter()
-    file_name = os.path.join(CH_DIR, "Symptoms-Diagnosis.txt")
+    file_name = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
     f = open(file_name, "r").readlines()
     orig_stdout = sys.stdout
 
@@ -381,10 +380,10 @@ def run_analysis(model_id=None):
     for line in f:
         line.replace("\n", "")
         attributes = line.split(';')
-        a = entity.SymptomsDiagnosis.SymptomsDiagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_ADMITTIME],
-                                                       attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DISCHTIME], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SYMPTOMS],
-                                                       util_cy.preprocess_diagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DIAGNOSIS]))
-        admissions.update({attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID]:a})
+        a = SymptomsDiagnosis(attributes[SymptomsDiagnosis.CONST_HADM_ID], attributes[SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[SymptomsDiagnosis.CONST_ADMITTIME],
+                              attributes[SymptomsDiagnosis.CONST_DISCHTIME], attributes[SymptomsDiagnosis.CONST_SYMPTOMS],
+                              util_cy.preprocess_diagnosis(attributes[SymptomsDiagnosis.CONST_DIAGNOSIS]))
+        admissions.update({attributes[SymptomsDiagnosis.CONST_HADM_ID]:a})
 
     dataset_time = time.perf_counter() - dataset_start
     timing_data['dataset_loading'] = dataset_time
