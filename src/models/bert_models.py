@@ -85,47 +85,72 @@ def select_model():
             print(f"[ERROR] Invalid choice '{choice}'. Please enter 1, 2, 3, or Q")
 
 # Pure Python prediction functions to replace util_cy.predictS2V (Hugging Face compatible)
-def compute_patient_similarity_pure(test_symptom_emb, train_symptom_emb):
+def compute_patient_similarity_pairwise(test_symptoms, train_symptoms, embeddings_symptoms):
     """
-    Core similarity computation using util_cy.cosine_similarity for exact baseline match
-    
+    Pairwise symptom-level similarity matching baseline cython_utils.py lines 59-88.
+
+    For each test symptom, find the max cosine similarity across all train symptoms.
+    Average the sum of max similarities by max(len_test, len_train).
+
     Args:
-        test_symptom_emb: BERT embedding wrapped in array [embedding]
-        train_symptom_emb: BERT embedding wrapped in array [embedding]
-    
+        test_symptoms: list of preprocessed symptom strings for test patient
+        train_symptoms: list of preprocessed symptom strings for train patient
+        embeddings_symptoms: dict keyed by symptom text -> [embedding]
+
     Returns:
-        float: Cosine similarity
+        float: Average pairwise max similarity
     """
-    # Use util_cy's cosine_similarity for 100% baseline compatibility
-    # Unwrap the embeddings (they're stored as [embedding])
-    return cosine_similarity(test_symptom_emb[0], train_symptom_emb[0])
+    max_symptoms_similarity = {}
+
+    for x in test_symptoms:
+        test_emb = embeddings_symptoms.get(x)
+        if test_emb is None:
+            continue
+        max_similarity = MIN_SIMILARITY
+        max_symptom = None
+
+        for y in train_symptoms:
+            train_emb = embeddings_symptoms.get(y)
+            if train_emb is None:
+                continue
+            similarity = cosine_similarity(test_emb[0], train_emb[0])
+            if similarity > max_similarity:
+                max_similarity = similarity
+                max_symptom = y
+
+        if max_symptom is not None:
+            max_symptoms_similarity[max_symptom + " for " + x] = max_similarity
+        else:
+            max_symptoms_similarity["No Similar symptom for " + x] = max_similarity
+
+    # Denominator = max(len_test, len_train) — matching baseline lines 78-82
+    max_den = max(len(test_symptoms), len(train_symptoms))
+    if max_den == 0:
+        return 0.0
+
+    mean = sum(max_symptoms_similarity.values()) / max_den
+    return mean
 
 def predict_topk_diagnoses_pure(test_admission, test_symptoms, x_train,
                                embeddings_symptoms, embeddings_diagnosis,
                                admissions, k=None):
     """
-    Pure Python TOP-K prediction replacing util_cy.predictS2V
-    Returns all training cases sorted by similarity (no threshold filtering upfront)
-    If k is None, return ALL matches; otherwise return top k
+    Pure Python TOP-K prediction replacing util_cy.predictS2V.
+
+    Computes pairwise symptom-level similarity for each training case,
+    applies PRUNING_SIMILARITY >= 0.5 threshold, then returns:
+    - k=None (MAX): single best match above threshold
+    - k=N (TOP-K): top N matches above threshold, sorted descending
     """
-    test_id = test_admission.hadm_id
-
-    if test_id not in embeddings_symptoms:
-        return [], [], []
-
-    test_symptom_emb = embeddings_symptoms[test_id]
-
-    # Compute similarities with all training patients (NO threshold filtering yet)
+    # Compute similarities with all training patients using pairwise method
     similarities = []
     for train_dict in x_train:
         train_id = list(train_dict.keys())[0]
+        train_symptoms = list(train_dict.values())[0]
 
-        if train_id not in embeddings_symptoms:
-            continue
-
-        train_symptom_emb = embeddings_symptoms[train_id]
-        # Both embeddings are now wrapped in arrays, pass directly
-        similarity = compute_patient_similarity_pure(test_symptom_emb, train_symptom_emb)
+        similarity = compute_patient_similarity_pairwise(
+            test_symptoms, train_symptoms, embeddings_symptoms
+        )
 
         train_admission = admissions.get(train_id)
         if train_admission:
@@ -137,14 +162,17 @@ def predict_topk_diagnoses_pure(test_admission, test_symptoms, x_train,
 
     # Sort by similarity descending
     similarities.sort(key=lambda x: x['similarity'], reverse=True)
-    
-    # Return top K or all
-    if k is not None:
-        top_matches = similarities[:k]
+
+    # Apply PRUNING_SIMILARITY threshold (matching baseline line 97, 128)
+    filtered = [s for s in similarities if s['similarity'] >= PRUNING_SIMILARITY]
+
+    if k is None:
+        # MAX: single best match above threshold
+        top_matches = filtered[:1] if filtered else []
     else:
-        top_matches = similarities[:1] if similarities else []  # MAX case
-    
-    # Extract diagnosis predictions, scores, AND patient IDs
+        # TOP-K: top k matches above threshold
+        top_matches = filtered[:k]
+
     predicted_diagnoses = [item['diagnosis'] for item in top_matches]
     similarity_scores = [item['similarity'] for item in top_matches]
     patient_ids = [item['patient_id'] for item in top_matches]
@@ -227,39 +255,46 @@ def format_time(seconds):
         return f"{seconds:.2f} seconds ({hours:.2f} hours, {minutes:.2f} minutes)"
 
 def compute_bert_symptom_embeddings(model, admissions):
-    """Compute BERT embeddings for symptoms using same preprocessing as baseline"""
+    """
+    Compute BERT embeddings for individual symptoms, keyed by preprocessed symptom text.
+
+    Matches baseline util_cy.embending_symptoms() which:
+    1. Splits admission.symptoms by comma
+    2. Preprocesses each symptom individually
+    3. Keys the dict by preprocessed symptom text (not HADM_ID)
+    """
     embeddings = {}
-    symptoms_texts = []
-    symptoms_keys = []
 
-    print("[INFO] Preparing symptom texts for BERT encoding...")
+    print("[INFO] Preparing individual symptom texts for BERT encoding...")
+
+    # Collect all unique preprocessed symptoms across all admissions
+    unique_symptoms = set()
     for admission_key, admission in admissions.items():
-        # Use SAME preprocessing as baseline for fair comparison
-        processed_symptoms = util_cy.preprocess_sentence(admission.symptoms)
-        symptoms_texts.append(processed_symptoms)
-        symptoms_keys.append(admission_key)
+        symptoms_list = admission.symptoms.split(',')
+        for s in symptoms_list:
+            preprocessed = util_cy.preprocess_sentence(s)
+            unique_symptoms.add(preprocessed)
 
-    print(f"[INFO] Computing BERT embeddings for {len(symptoms_texts)} symptoms...")
-    print(f"[INFO] Batch size: 32 (reduced from 128 for stability), Model device: {model.device}")
+    unique_symptoms_list = list(unique_symptoms)
+    print(f"[INFO] Found {len(unique_symptoms_list)} unique symptoms across {len(admissions)} admissions")
+    print(f"[INFO] Batch size: 32, Model device: {model.device}")
 
-    # Batch encode for efficiency - same format as util_cy.embending_symptoms
-    # Reduced batch_size back to 32 for stability testing and local debugging
-    # TESTING: normalize_embeddings=False to see if scores spread out more naturally
+    # Batch encode all unique symptoms
     bert_embeddings = model.encode(
-        symptoms_texts,
-        batch_size=32,  # Reduced from 128 for stability local testing
+        unique_symptoms_list,
+        batch_size=32,
         show_progress_bar=True,
         convert_to_numpy=True,
-        normalize_embeddings=False  # Testing without L2 norm to spread similarity scores
+        normalize_embeddings=False
     )
 
-    # CRITICAL: Wrap in array format to match util_cy expectations (embedding[0] indexing)
-    for key, embedding in zip(symptoms_keys, bert_embeddings):
-        embeddings[key] = [embedding]  # Wrap in list for util_cy compatibility
+    # Key by preprocessed symptom text, wrap in list for cosine_similarity(emb[0], ...) usage
+    for symptom_text, embedding in zip(unique_symptoms_list, bert_embeddings):
+        embeddings[symptom_text] = [embedding]
 
-    print(f"[SUCCESS] BERT symptom embeddings computed: {len(embeddings)} items")
+    print(f"[SUCCESS] BERT symptom embeddings computed: {len(embeddings)} unique symptoms")
     print(f"[INFO] Embedding dimension: {bert_embeddings.shape[1]}")
-    print(f"[INFO] Format: Wrapped in arrays for util_cy compatibility")
+    print(f"[INFO] Format: Keyed by symptom text, wrapped in arrays for util_cy compatibility")
 
     return embeddings
 
@@ -467,138 +502,108 @@ for nFold in range(0, K_FOLD):
         test_symptoms = list(x_test[i].values())[0]
         test_admission = admissions.get(index)
 
-        if not test_admission or index not in embendings_symptoms:
+        if not test_admission:
             print(f"[WARNING] Skipping test case {index} - missing data")
             continue
 
         gt_diagnosis = test_admission.diagnosis
-        
+
+        ##########################################################################################################
+        # COMPUTE FULL SIMILARITY ROW ONCE (optimization: reuse for MAX and all TOP-K)
+        ##########################################################################################################
+        # Get the largest TOP-K worth of results in one call
+        max_k = TOP_K_UPPER_BOUND - TOP_K_INCR  # 50
+        all_diags, all_sims, all_pids = predict_topk_diagnoses_pure(
+            test_admission, test_symptoms, x_train,
+            embendings_symptoms, embendings_diagnosis,
+            admissions, k=max_k
+        )
+
+        # Pre-compute diagnosis similarities for all returned predictions
+        all_diag_sims = []
+        for pred_diagnosis in all_diags:
+            diag_sim = util_cy.get_diagnosis_similarity_by_description_max(
+                embendings_diagnosis, gt_diagnosis, pred_diagnosis, 'cosine'
+            )
+            all_diag_sims.append(diag_sim)
+
         ##########################################################################################################
         # STRATEGY 1: MAX SIMILARITY (single most similar patient)
         ##########################################################################################################
-        predicted_diags_max, similarities_max, patient_ids_max = predict_topk_diagnoses_pure(
-            test_admission, test_symptoms, x_train,
-            embendings_symptoms, embendings_diagnosis,
-            admissions, k=None  # None = MAX (single best match)
-        )
-        
-        # Write per-patient header to main PerformanceIndex.txt (baseline format)
         performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of MAX SIMILARITY by MAX\n")
         performance_out_file.write("         TP      FP       P      R       FS      PR\n")
-        
-        # Evaluate at each threshold
-        if predicted_diags_max and similarities_max and patient_ids_max:
-            pred_hadm_id = patient_ids_max[0]
-            predicted_diagnosis = predicted_diags_max[0]  # Diagnosis list
-            # Use util_cy's function directly for 100% baseline compatibility
-            diagnosis_similarity_max = util_cy.get_diagnosis_similarity_by_description_max(
-                embendings_diagnosis, gt_diagnosis, predicted_diagnosis, 'cosine'
-            )
-            
-            # DEBUG: Show diagnosis similarity details (ALWAYS log to file if debug enabled)
+
+        if len(all_diags) > 0:
+            diagnosis_similarity_max = all_diag_sims[0]
+
+            # DEBUG logging
             if DEBUG_MODE and i < DEBUG_CASE_LIMIT:
                 debug_msg = f"\n{'='*80}\n"
                 debug_msg += f"[DEBUG BERT] === Test Case {i} (Patient {index}) - FOLD {nFold} - MAX Strategy ===\n"
                 debug_msg += f"{'='*80}\n"
                 debug_msg += f"[DEBUG BERT] GT HADM_ID: {index}\n"
-                debug_msg += f"[DEBUG BERT] Predicted HADM_ID: {pred_hadm_id}\n"
+                debug_msg += f"[DEBUG BERT] Predicted HADM_ID: {all_pids[0]}\n"
                 debug_msg += f"[DEBUG BERT] GT Diagnosis: {gt_diagnosis}\n"
-                debug_msg += f"[DEBUG BERT] Predicted Diagnosis: {predicted_diags_max[0]}\n"
-                debug_msg += f"[DEBUG BERT] Symptom Similarity: {similarities_max[0]:.4f}\n"
+                debug_msg += f"[DEBUG BERT] Predicted Diagnosis: {all_diags[0]}\n"
+                debug_msg += f"[DEBUG BERT] Symptom Similarity: {all_sims[0]:.4f}\n"
                 debug_msg += f"[DEBUG BERT] **DIAGNOSIS BERT Similarity: {diagnosis_similarity_max:.4f}**\n"
-                debug_msg += f"[DEBUG BERT] Embeddings normalized: YES (should be in [0,1] range)\n"
                 debug_msg += f"[DEBUG BERT] Threshold pass status:\n"
                 for thresh in [0.6, 0.7, 0.8, 0.9, 1.0]:
                     status = "PASS (TP)" if diagnosis_similarity_max >= thresh else "FAIL (FP)"
                     debug_msg += f"[DEBUG BERT]   {thresh:.1f}: {status}\n"
                 debug_msg += f"{'='*80}\n"
-                
-                # Write to both console and debug log file
                 print(debug_msg)
                 if debug_log_file:
                     debug_log_file.write(debug_msg + "\n")
                     debug_log_file.flush()
-    
-            # Check against each threshold - BINARY SCORING (matches baseline)
+
             for b in THRESHOLDS:
                 values = confusion_matrix_max.get(b)
                 if diagnosis_similarity_max >= b:
-                    values[TP] += 1  # Add 1 (binary - matches baseline)
-                    tp = 1
-                    fp = 0
+                    values[TP] += 1
+                    tp, fp = 1, 0
                 else:
-                    values[FP] += 1  # Add 1 (binary - matches baseline)
-                    tp = 0
-                    fp = 1
-                
-                # Calculate per-patient performance
+                    values[FP] += 1
+                    tp, fp = 0, 1
+
                 precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                recall = tp / (tp + fp) if (tp + fp) > 0 else 0  # Recall = TP / (TP + FP) for continuous
-                fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-                pr = 1.0 / nrow  # Proportion of test set (unchanged)
-                
-                # Write to main PerformanceIndex.txt (baseline format)
-                performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
-        else:
-            # No prediction available - add 0 score to FP for all thresholds
-            for b in THRESHOLDS:
-                values = confusion_matrix_max.get(b)
-                values[FP] += 0  # No score to add
-                performance_out_file.write(f"{b}     0       0       0.0     0.0     0       {1.0/nrow}\n")
-        
-        ##########################################################################################################
-        # STRATEGY 2-6: TOP-K SIMILARITY (10, 20, 30, 40, 50)
-        ##########################################################################################################
-        for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-            # Get TOP-K predictions
-            predicted_diags_topk, similarities_topk, patient_ids_topk = predict_topk_diagnoses_pure(
-                test_admission, test_symptoms, x_train,
-                embendings_symptoms, embendings_diagnosis,
-                admissions, k=topk
-            )
-            
-            # Write to main PerformanceIndex.txt (baseline format)
-            performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of TOP-{topk} SIMILARITY by MAX\n")
-            performance_out_file.write("         TP      FP       P      R       FS      PR\n")
-            
-            # Compute diagnosis similarities for all TOP-K using BERT embeddings
-            top_similarities_max = []
-            for pred_diagnosis in predicted_diags_topk:
-                # Use util_cy's function directly for 100% baseline compatibility
-                diag_sim = util_cy.get_diagnosis_similarity_by_description_max(
-                    embendings_diagnosis, gt_diagnosis, pred_diagnosis, 'cosine'
-                )
-                top_similarities_max.append(diag_sim)
-            
-            # Evaluate at each threshold
-            confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
-            
-            for b in THRESHOLDS:
-                values = confusion_matrix_Top_K_max.get(b)
-                
-                # BINARY SCORING: Use the highest similarity from top-k (matches baseline)
-                if len(top_similarities_max) > 0:
-                    max_sim = max(top_similarities_max[:topk])
-                    
-                    # Check if highest similarity meets threshold
-                    if max_sim >= b:
-                        values[TP] += 1  # Add 1 (binary - matches baseline)
-                        tp = 1
-                        fp = 0
-                    else:
-                        values[FP] += 1  # Add 1 (binary - matches baseline)
-                        tp = 0
-                        fp = 1
-                else:
-                    # No predictions available
-                    tp, fp = 0, 0
-                
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                recall = tp / (tp + fp) if (tp + fp) > 0 else 0  # Recall = TP / (TP + FP) for continuous
+                recall = tp / (tp + fp) if (tp + fp) > 0 else 0
                 fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
                 pr = 1.0 / nrow
-                
-                # Write to main PerformanceIndex.txt (baseline format)
+                performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
+        else:
+            for b in THRESHOLDS:
+                performance_out_file.write(f"{b}     0       0       0.0     0.0     0       {1.0/nrow}\n")
+
+        ##########################################################################################################
+        # STRATEGY 2-6: TOP-K SIMILARITY (10, 20, 30, 40, 50) — reuse precomputed data
+        ##########################################################################################################
+        for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
+            performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of TOP-{topk} SIMILARITY by MAX\n")
+            performance_out_file.write("         TP      FP       P      R       FS      PR\n")
+
+            # Slice precomputed diagnosis similarities for this TOP-K
+            top_similarities_max = all_diag_sims[:topk]
+
+            confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
+
+            for b in THRESHOLDS:
+                values = confusion_matrix_Top_K_max.get(b)
+
+                if len(top_similarities_max) > 0:
+                    if containGreaterOrEqualsValue(topk, top_similarities_max, b):
+                        values[TP] += 1
+                        tp, fp = 1, 0
+                    else:
+                        values[FP] += 1
+                        tp, fp = 0, 1
+                else:
+                    tp, fp = 0, 0
+
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                recall = tp / (tp + fp) if (tp + fp) > 0 else 0
+                fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                pr = 1.0 / nrow
                 performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
         
         if (i + 1) % 10 == 0:
