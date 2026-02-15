@@ -66,13 +66,20 @@ def print_model_menu():
     print("[Q] Quit")
     print("=" * 80)
 
-def select_model():
-    """Interactive model selection with validation"""
+def select_model(model_id=None):
+    """Model selection - programmatic if model_id provided, interactive otherwise"""
+    if model_id and model_id in MODELS:
+        selected = MODELS[model_id]
+        print(f"\n[INFO] Selected: {selected['name']}")
+        print(f"[INFO] Model path: {selected['path']}")
+        return selected
+
+    # Interactive mode
     print_model_menu()
-    
+
     while True:
         choice = input("\nSelect model [1-3, Q]: ").strip()
-        
+
         if choice.upper() == 'Q':
             print("[INFO] Exiting...")
             sys.exit(0)
@@ -345,385 +352,403 @@ def compute_bert_diagnosis_embeddings(model, admissions):
     print(f"[INFO] Format: Wrapped in arrays for util_cy compatibility")
     return embeddings
 
-# Timing storage
-timing_data = {}
-script_start_time = time.perf_counter()
+def run_analysis(model_id=None):
+    """
+    Run the full BERT disease diagnosis analysis pipeline.
 
-################################################################################################################
-#READ DATASET
-################################################################################################################
-# Use proper path joining instead of changing directory
-dataset_start = time.perf_counter()
-file_name = os.path.join(CH_DIR, "Symptoms-Diagnosis.txt")
-f = open(file_name, "r").readlines()
-orig_stdout = sys.stdout
+    Args:
+        model_id: '1' (Bio_ClinicalBERT), '2' (BiomedBERT), '3' (BlueBERT),
+                  or None for interactive selection.
 
-admissions = dict()
-for line in f:
-    line.replace("\n", "")
-    attributes = line.split(';')
-    a = entity.SymptomsDiagnosis.SymptomsDiagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_ADMITTIME],
-                                                   attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DISCHTIME], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SYMPTOMS],
-                                                   util_cy.preprocess_diagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DIAGNOSIS]))
-    admissions.update({attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID]:a})
+    Returns:
+        str: Path to the output directory containing results.
+    """
+    global debug_log_file
 
-dataset_time = time.perf_counter() - dataset_start
-timing_data['dataset_loading'] = dataset_time
-print(f"[INFO] Dataset loaded: {len(admissions)} admissions")
-print(f"[INFO] Dataset file: {file_name}")
-print(f"[TIMING] Dataset loading: {format_time(dataset_time)}")
+    timing_data = {}
+    script_start_time = time.perf_counter()
 
-################################################################################################################
-#SELECT AND LOAD BERT MODEL
-################################################################################################################
-# Interactive model selection
-model_config = select_model()
-model_name = model_config['name']
-model_path = model_config['path']
+    ################################################################################################################
+    #READ DATASET
+    ################################################################################################################
+    # Use proper path joining instead of changing directory
+    dataset_start = time.perf_counter()
+    file_name = os.path.join(CH_DIR, "Symptoms-Diagnosis.txt")
+    f = open(file_name, "r").readlines()
+    orig_stdout = sys.stdout
 
-model_start = time.perf_counter()
-print(f"\n[INFO] Loading {model_name} model...")
-print(f"[INFO] Model: {model_path}")
-print(f"[INFO] Training: {model_config['description']}")
-print("[INFO] This replaces the 21GB BioSentVec model with contextualized BERT embeddings")
-print("[INFO] USING PURE PYTHON PREDICTION - No util_cy.predictS2V dependencies")
-try:
-    model = SentenceTransformer(model_path)
-    print(f"[INFO] Model device: {model.device}")
-    print(f"[INFO] Model max sequence length: {model.max_seq_length}")
-    model_time = time.perf_counter() - model_start
-    timing_data['model_loading'] = model_time
-    print(f"[SUCCESS] {model_name} loaded successfully!")
-    print(f"[TIMING] Model loading: {format_time(model_time)}")
-except Exception as e:
-    print(f"[ERROR] Loading {model_name} failed: {type(e).__name__}: {str(e)}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+    admissions = dict()
+    for line in f:
+        line.replace("\n", "")
+        attributes = line.split(';')
+        a = entity.SymptomsDiagnosis.SymptomsDiagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_ADMITTIME],
+                                                       attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DISCHTIME], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SYMPTOMS],
+                                                       util_cy.preprocess_diagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DIAGNOSIS]))
+        admissions.update({attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID]:a})
 
-################################################################################################################
-#COMPUTE BERT EMBEDDINGS
-################################################################################################################
-embeddings_start = time.perf_counter()
-print("[INFO] Computing BERT symptom embeddings...")
-symptom_emb_start = time.perf_counter()
-embendings_symptoms = compute_bert_symptom_embeddings(model, admissions)
-symptom_emb_time = time.perf_counter() - symptom_emb_start
-timing_data['symptom_embeddings'] = symptom_emb_time
-print(f"[TIMING] Symptom embeddings: {format_time(symptom_emb_time)}")
+    dataset_time = time.perf_counter() - dataset_start
+    timing_data['dataset_loading'] = dataset_time
+    print(f"[INFO] Dataset loaded: {len(admissions)} admissions")
+    print(f"[INFO] Dataset file: {file_name}")
+    print(f"[TIMING] Dataset loading: {format_time(dataset_time)}")
 
-print("[INFO] Computing BERT diagnosis embeddings...")
-diagnosis_emb_start = time.perf_counter()
-embendings_diagnosis = compute_bert_diagnosis_embeddings(model, admissions)
-diagnosis_emb_time = time.perf_counter() - diagnosis_emb_start
-timing_data['diagnosis_embeddings'] = diagnosis_emb_time
-print(f"[TIMING] Diagnosis embeddings: {format_time(diagnosis_emb_time)}")
+    ################################################################################################################
+    #SELECT AND LOAD BERT MODEL
+    ################################################################################################################
+    model_config = select_model(model_id)
+    model_name = model_config['name']
+    model_path = model_config['path']
 
-embeddings_total_time = time.perf_counter() - embeddings_start
-timing_data['embeddings_total'] = embeddings_total_time
+    model_start = time.perf_counter()
+    print(f"\n[INFO] Loading {model_name} model...")
+    print(f"[INFO] Model: {model_path}")
+    print(f"[INFO] Training: {model_config['description']}")
+    print("[INFO] This replaces the 21GB BioSentVec model with contextualized BERT embeddings")
+    print("[INFO] USING PURE PYTHON PREDICTION - No util_cy.predictS2V dependencies")
+    try:
+        model = SentenceTransformer(model_path)
+        print(f"[INFO] Model device: {model.device}")
+        print(f"[INFO] Model max sequence length: {model.max_seq_length}")
+        model_time = time.perf_counter() - model_start
+        timing_data['model_loading'] = model_time
+        print(f"[SUCCESS] {model_name} loaded successfully!")
+        print(f"[TIMING] Model loading: {format_time(model_time)}")
+    except Exception as e:
+        print(f"[ERROR] Loading {model_name} failed: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
-################################################################################################################
-#OUTPUT DIRECTORIES
-################################################################################################################
-# Create timestamped output directories with model name
-timestamp = time.strftime("%d%m%Y_%H-%M-%S")
-directory_prediction_root = os.getcwd() + f'/Prediction_Output_{model_name}_' + timestamp + '/'
-directory_prediction_details_root = os.getcwd() + f'/Prediction_Symptom_Details_{model_name}_' + timestamp + '/'
-shutil.rmtree(directory_prediction_root, ignore_errors=True)
-shutil.rmtree(directory_prediction_details_root, ignore_errors=True)
-Path(directory_prediction_root).mkdir(parents=True, exist_ok=True)
-Path(directory_prediction_details_root).mkdir(parents=True, exist_ok=True)
-performance_out_file = open(directory_prediction_root + '/PerformanceIndex.txt', 'w')
+    ################################################################################################################
+    #COMPUTE BERT EMBEDDINGS
+    ################################################################################################################
+    embeddings_start = time.perf_counter()
+    print("[INFO] Computing BERT symptom embeddings...")
+    symptom_emb_start = time.perf_counter()
+    embendings_symptoms = compute_bert_symptom_embeddings(model, admissions)
+    symptom_emb_time = time.perf_counter() - symptom_emb_start
+    timing_data['symptom_embeddings'] = symptom_emb_time
+    print(f"[TIMING] Symptom embeddings: {format_time(symptom_emb_time)}")
 
-# Open debug log file if DEBUG_MODE is enabled
-if DEBUG_MODE:
-    debug_log_file = open(directory_prediction_root + '/debug_log.txt', 'w')
-    debug_log_file.write("=" * 80 + "\n")
-    debug_log_file.write("DEBUG LOG - Bio_ClinicalBERT Disease Diagnosis\n")
-    debug_log_file.write("=" * 80 + "\n\n")
+    print("[INFO] Computing BERT diagnosis embeddings...")
+    diagnosis_emb_start = time.perf_counter()
+    embendings_diagnosis = compute_bert_diagnosis_embeddings(model, admissions)
+    diagnosis_emb_time = time.perf_counter() - diagnosis_emb_start
+    timing_data['diagnosis_embeddings'] = diagnosis_emb_time
+    print(f"[TIMING] Diagnosis embeddings: {format_time(diagnosis_emb_time)}")
 
-################################################################################################################
-# Initialize performance matrices - matching baseline structure
-################################################################################################################
-# Thresholds to evaluate (same as util_cy)
-THRESHOLDS = [0.9, 1.0, 0.6, 0.8, 0.7]  # Same order as baseline
+    embeddings_total_time = time.perf_counter() - embeddings_start
+    timing_data['embeddings_total'] = embeddings_total_time
 
-# Performance matrix structure: {threshold: [TP, FP, P, R, FS, PR]}
-performance_matrix_max = util_cy.init_performance_matrix()
-performance_matrix_topK_max_dict = dict()
-for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-    performance_matrix_topK_max_dict.update({topk: util_cy.init_performance_matrix()})
+    ################################################################################################################
+    #OUTPUT DIRECTORIES
+    ################################################################################################################
+    # Create timestamped output directories with model name
+    timestamp = time.strftime("%d%m%Y_%H-%M-%S")
+    directory_prediction_root = os.getcwd() + f'/Prediction_Output_{model_name}_' + timestamp + '/'
+    directory_prediction_details_root = os.getcwd() + f'/Prediction_Symptom_Details_{model_name}_' + timestamp + '/'
+    shutil.rmtree(directory_prediction_root, ignore_errors=True)
+    shutil.rmtree(directory_prediction_details_root, ignore_errors=True)
+    Path(directory_prediction_root).mkdir(parents=True, exist_ok=True)
+    Path(directory_prediction_details_root).mkdir(parents=True, exist_ok=True)
+    performance_out_file = open(directory_prediction_root + '/PerformanceIndex.txt', 'w')
 
-################################################################################################################
-# WORK ON SINGLE FOLD - MATCHING BASELINE EVALUATION PROTOCOL
-################################################################################################################
-folds_start = time.perf_counter()
-fold_times = []
+    # Open debug log file if DEBUG_MODE is enabled
+    if DEBUG_MODE:
+        debug_log_file = open(directory_prediction_root + '/debug_log.txt', 'w')
+        debug_log_file.write("=" * 80 + "\n")
+        debug_log_file.write("DEBUG LOG - Bio_ClinicalBERT Disease Diagnosis\n")
+        debug_log_file.write("=" * 80 + "\n\n")
 
-for nFold in range(0, K_FOLD):
-    fold_start = time.perf_counter()
-    print(f'\n[INFO] === FOLD {nFold} ===')
+    ################################################################################################################
+    # Initialize performance matrices - matching baseline structure
+    ################################################################################################################
+    # Thresholds to evaluate (same as util_cy)
+    THRESHOLDS = [0.9, 1.0, 0.6, 0.8, 0.7]  # Same order as baseline
 
-    directory_prediction = directory_prediction_root + 'Fold' + str(nFold) + "/"
-    directory_prediction_details = directory_prediction_details_root + 'Fold' + str(nFold) + "/"
-    shutil.rmtree(directory_prediction, ignore_errors=True)
-    shutil.rmtree(directory_prediction_details, ignore_errors=True)
-    Path(directory_prediction).mkdir(parents=True, exist_ok=True)
-    Path(directory_prediction_details).mkdir(parents=True, exist_ok=True)
-
-    ##########################################################################################################
-    # LOAD TRAIN AND TEST SET
-    ##########################################################################################################
-    x_test = util_cy.load_dataset(nFold, TEST)
-    x_train = util_cy.load_dataset(nFold, TRAIN)
-
-    performance_out_file.write(f'\n FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)} \n')
-    print(f'FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)}')
-
-    ##########################################################################################################
-    # Initialize confusion matrices for this fold (one per threshold per strategy)
-    ##########################################################################################################
-    nrow = len(x_test)
-    
-    # MAX similarity confusion matrix: {threshold: [TP, FP, TN, FN]}
-    confusion_matrix_max = util_cy.init_confusion_matrix()
-    
-    # TOP-K confusion matrices: {topk: {threshold: [TP, FP, TN, FN]}}
-    confusion_matrix_Top_K_max_dict = dict()
+    # Performance matrix structure: {threshold: [TP, FP, P, R, FS, PR]}
+    performance_matrix_max = util_cy.init_performance_matrix()
+    performance_matrix_topK_max_dict = dict()
     for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-        confusion_matrix_Top_K_max_dict.update({topk: util_cy.init_confusion_matrix()})
+        performance_matrix_topK_max_dict.update({topk: util_cy.init_performance_matrix()})
 
-    ##########################################################################################################
-    # PROCESS EACH TEST CASE - MATCHING BASELINE PREDICTSZV LOGIC
-    ##########################################################################################################
-    for i in range(len(x_test)):
-        # Get test case info
-        index = list(x_test[i].keys())[0]
-        test_symptoms = list(x_test[i].values())[0]
-        test_admission = admissions.get(index)
+    ################################################################################################################
+    # WORK ON SINGLE FOLD - MATCHING BASELINE EVALUATION PROTOCOL
+    ################################################################################################################
+    folds_start = time.perf_counter()
+    fold_times = []
 
-        if not test_admission:
-            print(f"[WARNING] Skipping test case {index} - missing data")
-            continue
+    for nFold in range(0, K_FOLD):
+        fold_start = time.perf_counter()
+        print(f'\n[INFO] === FOLD {nFold} ===')
 
-        gt_diagnosis = test_admission.diagnosis
+        directory_prediction = directory_prediction_root + 'Fold' + str(nFold) + "/"
+        directory_prediction_details = directory_prediction_details_root + 'Fold' + str(nFold) + "/"
+        shutil.rmtree(directory_prediction, ignore_errors=True)
+        shutil.rmtree(directory_prediction_details, ignore_errors=True)
+        Path(directory_prediction).mkdir(parents=True, exist_ok=True)
+        Path(directory_prediction_details).mkdir(parents=True, exist_ok=True)
 
-        ##########################################################################################################
-        # COMPUTE FULL SIMILARITY ROW ONCE (optimization: reuse for MAX and all TOP-K)
-        ##########################################################################################################
-        # Get the largest TOP-K worth of results in one call
-        max_k = TOP_K_UPPER_BOUND - TOP_K_INCR  # 50
-        all_diags, all_sims, all_pids = predict_topk_diagnoses_pure(
-            test_admission, test_symptoms, x_train,
-            embendings_symptoms, embendings_diagnosis,
-            admissions, k=max_k
-        )
+        ######################################################################################################
+        # LOAD TRAIN AND TEST SET
+        ######################################################################################################
+        x_test = util_cy.load_dataset(nFold, TEST)
+        x_train = util_cy.load_dataset(nFold, TRAIN)
 
-        # Pre-compute diagnosis similarities for all returned predictions
-        all_diag_sims = []
-        for pred_diagnosis in all_diags:
-            diag_sim = util_cy.get_diagnosis_similarity_by_description_max(
-                embendings_diagnosis, gt_diagnosis, pred_diagnosis, 'cosine'
-            )
-            all_diag_sims.append(diag_sim)
+        performance_out_file.write(f'\n FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)} \n')
+        print(f'FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)}')
 
-        ##########################################################################################################
-        # STRATEGY 1: MAX SIMILARITY (single most similar patient)
-        ##########################################################################################################
-        performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of MAX SIMILARITY by MAX\n")
-        performance_out_file.write("         TP      FP       P      R       FS      PR\n")
+        ######################################################################################################
+        # Initialize confusion matrices for this fold (one per threshold per strategy)
+        ######################################################################################################
+        nrow = len(x_test)
 
-        if len(all_diags) > 0:
-            diagnosis_similarity_max = all_diag_sims[0]
+        # MAX similarity confusion matrix: {threshold: [TP, FP, TN, FN]}
+        confusion_matrix_max = util_cy.init_confusion_matrix()
 
-            # DEBUG logging
-            if DEBUG_MODE and i < DEBUG_CASE_LIMIT:
-                debug_msg = f"\n{'='*80}\n"
-                debug_msg += f"[DEBUG BERT] === Test Case {i} (Patient {index}) - FOLD {nFold} - MAX Strategy ===\n"
-                debug_msg += f"{'='*80}\n"
-                debug_msg += f"[DEBUG BERT] GT HADM_ID: {index}\n"
-                debug_msg += f"[DEBUG BERT] Predicted HADM_ID: {all_pids[0]}\n"
-                debug_msg += f"[DEBUG BERT] GT Diagnosis: {gt_diagnosis}\n"
-                debug_msg += f"[DEBUG BERT] Predicted Diagnosis: {all_diags[0]}\n"
-                debug_msg += f"[DEBUG BERT] Symptom Similarity: {all_sims[0]:.4f}\n"
-                debug_msg += f"[DEBUG BERT] **DIAGNOSIS BERT Similarity: {diagnosis_similarity_max:.4f}**\n"
-                debug_msg += f"[DEBUG BERT] Threshold pass status:\n"
-                for thresh in [0.6, 0.7, 0.8, 0.9, 1.0]:
-                    status = "PASS (TP)" if diagnosis_similarity_max >= thresh else "FAIL (FP)"
-                    debug_msg += f"[DEBUG BERT]   {thresh:.1f}: {status}\n"
-                debug_msg += f"{'='*80}\n"
-                print(debug_msg)
-                if debug_log_file:
-                    debug_log_file.write(debug_msg + "\n")
-                    debug_log_file.flush()
-
-            for b in THRESHOLDS:
-                values = confusion_matrix_max.get(b)
-                if diagnosis_similarity_max >= b:
-                    values[TP] += 1
-                    tp, fp = 1, 0
-                else:
-                    values[FP] += 1
-                    tp, fp = 0, 1
-
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                recall = tp / (tp + fp) if (tp + fp) > 0 else 0
-                fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-                pr = 1.0 / nrow
-                performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
-        else:
-            for b in THRESHOLDS:
-                performance_out_file.write(f"{b}     0       0       0.0     0.0     0       {1.0/nrow}\n")
-
-        ##########################################################################################################
-        # STRATEGY 2-6: TOP-K SIMILARITY (10, 20, 30, 40, 50) — reuse precomputed data
-        ##########################################################################################################
+        # TOP-K confusion matrices: {topk: {threshold: [TP, FP, TN, FN]}}
+        confusion_matrix_Top_K_max_dict = dict()
         for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-            performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of TOP-{topk} SIMILARITY by MAX\n")
+            confusion_matrix_Top_K_max_dict.update({topk: util_cy.init_confusion_matrix()})
+
+        ######################################################################################################
+        # PROCESS EACH TEST CASE - MATCHING BASELINE PREDICTSZV LOGIC
+        ######################################################################################################
+        for i in range(len(x_test)):
+            # Get test case info
+            index = list(x_test[i].keys())[0]
+            test_symptoms = list(x_test[i].values())[0]
+            test_admission = admissions.get(index)
+
+            if not test_admission:
+                print(f"[WARNING] Skipping test case {index} - missing data")
+                continue
+
+            gt_diagnosis = test_admission.diagnosis
+
+            ##################################################################################################
+            # COMPUTE FULL SIMILARITY ROW ONCE (optimization: reuse for MAX and all TOP-K)
+            ##################################################################################################
+            # Get the largest TOP-K worth of results in one call
+            max_k = TOP_K_UPPER_BOUND - TOP_K_INCR  # 50
+            all_diags, all_sims, all_pids = predict_topk_diagnoses_pure(
+                test_admission, test_symptoms, x_train,
+                embendings_symptoms, embendings_diagnosis,
+                admissions, k=max_k
+            )
+
+            # Pre-compute diagnosis similarities for all returned predictions
+            all_diag_sims = []
+            for pred_diagnosis in all_diags:
+                diag_sim = util_cy.get_diagnosis_similarity_by_description_max(
+                    embendings_diagnosis, gt_diagnosis, pred_diagnosis, 'cosine'
+                )
+                all_diag_sims.append(diag_sim)
+
+            ##################################################################################################
+            # STRATEGY 1: MAX SIMILARITY (single most similar patient)
+            ##################################################################################################
+            performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of MAX SIMILARITY by MAX\n")
             performance_out_file.write("         TP      FP       P      R       FS      PR\n")
 
-            # Slice precomputed diagnosis similarities for this TOP-K
-            top_similarities_max = all_diag_sims[:topk]
+            if len(all_diags) > 0:
+                diagnosis_similarity_max = all_diag_sims[0]
 
-            confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
+                # DEBUG logging
+                if DEBUG_MODE and i < DEBUG_CASE_LIMIT:
+                    debug_msg = f"\n{'='*80}\n"
+                    debug_msg += f"[DEBUG BERT] === Test Case {i} (Patient {index}) - FOLD {nFold} - MAX Strategy ===\n"
+                    debug_msg += f"{'='*80}\n"
+                    debug_msg += f"[DEBUG BERT] GT HADM_ID: {index}\n"
+                    debug_msg += f"[DEBUG BERT] Predicted HADM_ID: {all_pids[0]}\n"
+                    debug_msg += f"[DEBUG BERT] GT Diagnosis: {gt_diagnosis}\n"
+                    debug_msg += f"[DEBUG BERT] Predicted Diagnosis: {all_diags[0]}\n"
+                    debug_msg += f"[DEBUG BERT] Symptom Similarity: {all_sims[0]:.4f}\n"
+                    debug_msg += f"[DEBUG BERT] **DIAGNOSIS BERT Similarity: {diagnosis_similarity_max:.4f}**\n"
+                    debug_msg += f"[DEBUG BERT] Threshold pass status:\n"
+                    for thresh in [0.6, 0.7, 0.8, 0.9, 1.0]:
+                        status = "PASS (TP)" if diagnosis_similarity_max >= thresh else "FAIL (FP)"
+                        debug_msg += f"[DEBUG BERT]   {thresh:.1f}: {status}\n"
+                    debug_msg += f"{'='*80}\n"
+                    print(debug_msg)
+                    if debug_log_file:
+                        debug_log_file.write(debug_msg + "\n")
+                        debug_log_file.flush()
 
-            for b in THRESHOLDS:
-                values = confusion_matrix_Top_K_max.get(b)
-
-                if len(top_similarities_max) > 0:
-                    if containGreaterOrEqualsValue(topk, top_similarities_max, b):
+                for b in THRESHOLDS:
+                    values = confusion_matrix_max.get(b)
+                    if diagnosis_similarity_max >= b:
                         values[TP] += 1
                         tp, fp = 1, 0
                     else:
                         values[FP] += 1
                         tp, fp = 0, 1
-                else:
-                    tp, fp = 0, 0
 
-                precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-                recall = tp / (tp + fp) if (tp + fp) > 0 else 0
-                fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
-                pr = 1.0 / nrow
-                performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
-        
-        if (i + 1) % 10 == 0:
-            print(f"  Processed {i + 1}/{len(x_test)} test cases...")
+                    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    recall = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                    pr = 1.0 / nrow
+                    performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
+            else:
+                for b in THRESHOLDS:
+                    performance_out_file.write(f"{b}     0       0       0.0     0.0     0       {1.0/nrow}\n")
 
-    ##########################################################################################################
-    # COMPUTE AGGREGATED PERFORMANCE FOR THIS FOLD
-    ##########################################################################################################
-    performance_out_file.write("\nPERFORMANCE INDEX of MAX SIMILARITY by MAX" + "\n")
-    util_cy.compute_aggregated_performance_index(confusion_matrix_max, performance_matrix_max, nrow, performance_out_file)
-    
+            ##################################################################################################
+            # STRATEGY 2-6: TOP-K SIMILARITY (10, 20, 30, 40, 50) — reuse precomputed data
+            ##################################################################################################
+            for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
+                performance_out_file.write(f"{i} - HADM_ID={index}: PERFORMANCE INDEX of TOP-{topk} SIMILARITY by MAX\n")
+                performance_out_file.write("         TP      FP       P      R       FS      PR\n")
+
+                # Slice precomputed diagnosis similarities for this TOP-K
+                top_similarities_max = all_diag_sims[:topk]
+
+                confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
+
+                for b in THRESHOLDS:
+                    values = confusion_matrix_Top_K_max.get(b)
+
+                    if len(top_similarities_max) > 0:
+                        if containGreaterOrEqualsValue(topk, top_similarities_max, b):
+                            values[TP] += 1
+                            tp, fp = 1, 0
+                        else:
+                            values[FP] += 1
+                            tp, fp = 0, 1
+                    else:
+                        tp, fp = 0, 0
+
+                    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    recall = tp / (tp + fp) if (tp + fp) > 0 else 0
+                    fs = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+                    pr = 1.0 / nrow
+                    performance_out_file.write(f"{b}     {tp}       {fp}       {precision}     {recall}     {fs}      {pr}\n")
+
+            if (i + 1) % 10 == 0:
+                print(f"  Processed {i + 1}/{len(x_test)} test cases...")
+
+        ######################################################################################################
+        # COMPUTE AGGREGATED PERFORMANCE FOR THIS FOLD
+        ######################################################################################################
+        performance_out_file.write("\nPERFORMANCE INDEX of MAX SIMILARITY by MAX" + "\n")
+        util_cy.compute_aggregated_performance_index(confusion_matrix_max, performance_matrix_max, nrow, performance_out_file)
+
+        for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
+            confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
+            performance_matrix_topK_max = performance_matrix_topK_max_dict.get(topk)
+            performance_out_file.write("\n PERFORMANCE INDEX of TOP-" + str(topk) + " SIMILARITY by MAX" + "\n")
+            util_cy.compute_aggregated_performance_index(confusion_matrix_Top_K_max, performance_matrix_topK_max, nrow, performance_out_file)
+
+        # Record fold time
+        fold_time = time.perf_counter() - fold_start
+        fold_times.append(fold_time)
+        print(f"[TIMING] Fold {nFold} completed: {format_time(fold_time)}")
+
+    #END FOLD LOOP
+
+    folds_total_time = time.perf_counter() - folds_start
+    timing_data['folds_total'] = folds_total_time
+    timing_data['fold_times'] = fold_times
+
+    ################################################################################################################
+    # COMPUTE MEAN PERFORMANCE INDEX ACROSS ALL FOLDS (matching baseline output)
+    ################################################################################################################
+    performance_out_file.write("************************************************************************************************************" + "\n")
+    performance_out_file.write("\n" + str(K_FOLD) + "-FOLD PERFORMANCE INDEX of MAX SIMILARITY by MAX" + "\n")
+    util_cy.print_performance_index(performance_matrix_max, performance_out_file)
+
     for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-        confusion_matrix_Top_K_max = confusion_matrix_Top_K_max_dict.get(topk)
         performance_matrix_topK_max = performance_matrix_topK_max_dict.get(topk)
-        performance_out_file.write("\n PERFORMANCE INDEX of TOP-" + str(topk) + " SIMILARITY by MAX" + "\n")
-        util_cy.compute_aggregated_performance_index(confusion_matrix_Top_K_max, performance_matrix_topK_max, nrow, performance_out_file)
+        performance_out_file.write("\n" + str(K_FOLD) + "-FOLD PERFORMANCE INDEX of TOP-" + str(topk) + " SIMILARITY by MAX" + "\n")
+        util_cy.print_performance_index(performance_matrix_topK_max, performance_out_file)
 
-    # Record fold time
-    fold_time = time.perf_counter() - fold_start
-    fold_times.append(fold_time)
-    print(f"[TIMING] Fold {nFold} completed: {format_time(fold_time)}")
+    performance_out_file.write("************************************************************************************************************" + "\n")
 
-#END FOLD LOOP
+    ################################################################################################################
+    # GENERATE TIMING REPORT
+    ################################################################################################################
+    total_execution_time = time.perf_counter() - script_start_time
+    timing_data['total_execution'] = total_execution_time
 
-folds_total_time = time.perf_counter() - folds_start
-timing_data['folds_total'] = folds_total_time
-timing_data['fold_times'] = fold_times
+    # Create timing report content
+    timing_report = []
+    timing_report.append("=" * 80)
+    timing_report.append(f"TIMING REPORT - Disease Diagnosis System ({model_name})")
+    timing_report.append("=" * 80)
+    timing_report.append(f"Dataset Loading:           {format_time(timing_data['dataset_loading'])}")
+    timing_report.append(f"Model Loading:             {format_time(timing_data['model_loading'])}")
+    timing_report.append(f"Symptom Embeddings:        {format_time(timing_data['symptom_embeddings'])}")
+    timing_report.append(f"Diagnosis Embeddings:      {format_time(timing_data['diagnosis_embeddings'])}")
+    timing_report.append(f"Embeddings Total:          {format_time(timing_data['embeddings_total'])}")
+    timing_report.append("-" * 80)
 
-##########################################################################################################
-# COMPUTE MEAN PERFORMANCE INDEX ACROSS ALL FOLDS (matching baseline output)
-##########################################################################################################
-performance_out_file.write("************************************************************************************************************" + "\n")
-performance_out_file.write("\n" + str(K_FOLD) + "-FOLD PERFORMANCE INDEX of MAX SIMILARITY by MAX" + "\n")
-util_cy.print_performance_index(performance_matrix_max, performance_out_file)
+    # Individual fold times
+    for i, fold_time in enumerate(timing_data['fold_times']):
+        timing_report.append(f"Fold {i}:                    {format_time(fold_time)}")
 
-for topk in range(TOP_K_LOWER_BOUND, TOP_K_UPPER_BOUND, TOP_K_INCR):
-    performance_matrix_topK_max = performance_matrix_topK_max_dict.get(topk)
-    performance_out_file.write("\n" + str(K_FOLD) + "-FOLD PERFORMANCE INDEX of TOP-" + str(topk) + " SIMILARITY by MAX" + "\n")
-    util_cy.print_performance_index(performance_matrix_topK_max, performance_out_file)
+    timing_report.append("-" * 80)
+    timing_report.append(f"Total Folds Processing:    {format_time(timing_data['folds_total'])}")
+    timing_report.append("-" * 80)
+    timing_report.append(f"TOTAL EXECUTION TIME:      {format_time(total_execution_time)}")
+    timing_report.append("=" * 80)
+    timing_report.append(f"MODEL: {model_name} (BERT-768D)")
+    timing_report.append(f"MODEL PATH: {model_path}")
+    timing_report.append(f"TRAINING DATA: {model_config['description']}")
+    timing_report.append("IMPLEMENTATION: Pure Python with continuous similarity scoring")
+    timing_report.append("BASELINE COMPARISON: vs BioSentVec (700D)")
+    timing_report.append("=" * 80)
 
-performance_out_file.write("************************************************************************************************************" + "\n")
-
-##########################################################################################################
-# GENERATE TIMING REPORT WITH BIO_CLINICAL_BERT IDENTIFIER
-##########################################################################################################
-total_execution_time = time.perf_counter() - script_start_time
-timing_data['total_execution'] = total_execution_time
-
-# Create timing report content
-timing_report = []
-timing_report.append("=" * 80)
-timing_report.append(f"TIMING REPORT - Disease Diagnosis System ({model_name})")
-timing_report.append("=" * 80)
-timing_report.append(f"Dataset Loading:           {format_time(timing_data['dataset_loading'])}")
-timing_report.append(f"Bio_ClinicalBERT Loading:  {format_time(timing_data['model_loading'])}")
-timing_report.append(f"Symptom Embeddings:        {format_time(timing_data['symptom_embeddings'])}")
-timing_report.append(f"Diagnosis Embeddings:      {format_time(timing_data['diagnosis_embeddings'])}")
-timing_report.append(f"Embeddings Total:          {format_time(timing_data['embeddings_total'])}")
-timing_report.append("-" * 80)
-
-# Individual fold times
-for i, fold_time in enumerate(timing_data['fold_times']):
-    timing_report.append(f"Fold {i}:                    {format_time(fold_time)}")
-
-timing_report.append("-" * 80)
-timing_report.append(f"Total Folds Processing:    {format_time(timing_data['folds_total'])}")
-timing_report.append("-" * 80)
-timing_report.append(f"TOTAL EXECUTION TIME:      {format_time(total_execution_time)}")
-timing_report.append("=" * 80)
-timing_report.append(f"MODEL: {model_name} (BERT-768D)")
-timing_report.append(f"MODEL PATH: {model_path}")
-timing_report.append(f"TRAINING DATA: {model_config['description']}")
-timing_report.append("IMPLEMENTATION: Pure Python with continuous similarity scoring")
-timing_report.append("BASELINE COMPARISON: vs BioSentVec (700D)")
-timing_report.append("=" * 80)
-
-# Print to console
-print("\n")
-for line in timing_report:
-    print(line)
-
-# Write to separate timing report file
-timing_file_path = directory_prediction_root + 'timing_report.txt'
-with open(timing_file_path, 'w') as timing_file:
+    # Print to console
+    print("\n")
     for line in timing_report:
-        timing_file.write(line + "\n")
+        print(line)
 
-# Append timing summary to PerformanceIndex.txt
-performance_out_file.write("\n\n")
-for line in timing_report:
-    performance_out_file.write(line + "\n")
-performance_out_file.close()
+    # Write to separate timing report file
+    timing_file_path = directory_prediction_root + 'timing_report.txt'
+    with open(timing_file_path, 'w') as timing_file:
+        for line in timing_report:
+            timing_file.write(line + "\n")
 
-# Close debug log file if it was opened
-if debug_log_file:
-    debug_log_file.write("\n" + "=" * 80 + "\n")
-    debug_log_file.write("END DEBUG LOG\n")
-    debug_log_file.write("=" * 80 + "\n")
-    debug_log_file.close()
-print(f"[SUCCESS] Debug log saved to: {directory_prediction_root}debug_log.txt")
+    # Append timing summary to PerformanceIndex.txt
+    performance_out_file.write("\n\n")
+    for line in timing_report:
+        performance_out_file.write(line + "\n")
+    performance_out_file.close()
 
-print(f"\n[SUCCESS] {model_name} analysis complete!")
-print(f"[SUCCESS] Results directory: {directory_prediction_root}")
-print(f"[SUCCESS] Performance metrics written to PerformanceIndex.txt")
-print(f"[SUCCESS] Compare with baseline in: Prediction_Output_22112025_04-41-14_ORIGINAL_OUTPUTS/")
-print(f"[SUCCESS] Timing report saved to: {timing_file_path}")
+    # Close debug log file if it was opened
+    if debug_log_file:
+        debug_log_file.write("\n" + "=" * 80 + "\n")
+        debug_log_file.write("END DEBUG LOG\n")
+        debug_log_file.write("=" * 80 + "\n")
+        debug_log_file.close()
+        debug_log_file = None
+        print(f"[SUCCESS] Debug log saved to: {directory_prediction_root}debug_log.txt")
 
-# Final comparison message
-print("\n" + "=" * 80)
-print(f"{model_name} INTEGRATION COMPLETE")
-print("=" * 80)
-print(f"Model: {model_path}")
-print(f"Training: {model_config['description']}")
-print("=" * 80)
-print("-> Multi-threshold evaluation (0.6, 0.7, 0.8, 0.9, 1.0)")
-print("-> Multi-strategy evaluation (MAX, TOP-10, TOP-20, TOP-30, TOP-40, TOP-50)")
-print("-> Per-patient performance metrics")
-print("-> Aggregated fold-level performance")
-print("-> Mean performance across all folds")
-print("-> Same output format as baseline CS2V.py")
-print("=" * 80)
-print("Results are now directly comparable with baseline!")
-print("=" * 80)
+    print(f"\n[SUCCESS] {model_name} analysis complete!")
+    print(f"[SUCCESS] Results directory: {directory_prediction_root}")
+    print(f"[SUCCESS] Performance metrics written to PerformanceIndex.txt")
+    print(f"[SUCCESS] Timing report saved to: {timing_file_path}")
+
+    # Final comparison message
+    print("\n" + "=" * 80)
+    print(f"{model_name} INTEGRATION COMPLETE")
+    print("=" * 80)
+    print(f"Model: {model_path}")
+    print(f"Training: {model_config['description']}")
+    print("=" * 80)
+    print("-> Multi-threshold evaluation (0.6, 0.7, 0.8, 0.9, 1.0)")
+    print("-> Multi-strategy evaluation (MAX, TOP-10, TOP-20, TOP-30, TOP-40, TOP-50)")
+    print("-> Per-patient performance metrics")
+    print("-> Aggregated fold-level performance")
+    print("-> Mean performance across all folds")
+    print("-> Same output format as baseline CS2V.py")
+    print("=" * 80)
+    print("Results are now directly comparable with baseline!")
+    print("=" * 80)
+
+    return directory_prediction_root
+
+
+# Run interactively when executed as a module directly (backwards compatible)
+if __name__ == "__main__":
+    run_analysis()
