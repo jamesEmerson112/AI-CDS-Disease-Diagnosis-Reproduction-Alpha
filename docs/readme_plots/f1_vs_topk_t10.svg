@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520">
+<rect width="100%" height="100%" fill="white"/>
+<text x="460.0" y="32" text-anchor="middle" font-size="20" font-family="Arial">F1 vs Top-K (Threshold 1.0)</text>
+<line x1="80" y1="450.0" x2="700" y2="450.0" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="454.0" text-anchor="end" font-size="12" font-family="Arial">0</text>
+<line x1="80" y1="375.7" x2="700" y2="375.7" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="379.7" text-anchor="end" font-size="12" font-family="Arial">0.2</text>
+<line x1="80" y1="301.4" x2="700" y2="301.4" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="305.4" text-anchor="end" font-size="12" font-family="Arial">0.4</text>
+<line x1="80" y1="227.1" x2="700" y2="227.1" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="231.1" text-anchor="end" font-size="12" font-family="Arial">0.6</text>
+<line x1="80" y1="152.9" x2="700" y2="152.9" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="156.9" text-anchor="end" font-size="12" font-family="Arial">0.8</text>
+<line x1="80" y1="78.6" x2="700" y2="78.6" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="82.6" text-anchor="end" font-size="12" font-family="Arial">1</text>
+<line x1="80" y1="450" x2="700" y2="450" stroke="#333333" stroke-width="1.5"/>
+<line x1="80" y1="450" x2="80" y2="60" stroke="#333333" stroke-width="1.5"/>
+<line x1="80.0" y1="450" x2="80.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="80.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">MAX</text>
+<line x1="204.0" y1="450" x2="204.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="204.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">TOP-10</text>
+<line x1="328.0" y1="450" x2="328.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="328.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">TOP-20</text>
+<line x1="452.0" y1="450" x2="452.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="452.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">TOP-30</text>
+<line x1="576.0" y1="450" x2="576.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="576.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">TOP-40</text>
+<line x1="700.0" y1="450" x2="700.0" y2="456" stroke="#333333" stroke-width="1"/>
+<text x="700.0" y="474" text-anchor="middle" font-size="12" font-family="Arial">TOP-50</text>
+<text x="22" y="255.0" transform="rotate(-90 22 255.0)" text-anchor="middle" font-size="13" font-family="Arial">F1 Score</text>
+<polyline fill="none" stroke="#1f77b4" stroke-width="2.5" points="80.0,395.7 204.0,344.0 328.0,326.9 452.0,315.2 576.0,303.8 700.0,301.0"/>
+<circle cx="80.0" cy="395.7" r="3.5" fill="#1f77b4"/>
+<circle cx="204.0" cy="344.0" r="3.5" fill="#1f77b4"/>
+<circle cx="328.0" cy="326.9" r="3.5" fill="#1f77b4"/>
+<circle cx="452.0" cy="315.2" r="3.5" fill="#1f77b4"/>
+<circle cx="576.0" cy="303.8" r="3.5" fill="#1f77b4"/>
+<circle cx="700.0" cy="301.0" r="3.5" fill="#1f77b4"/>
+<line x1="718" y1="80" x2="742" y2="80" stroke="#1f77b4" stroke-width="3"/>
+<text x="750" y="84" font-size="12" font-family="Arial">Bio_ClinicalBERT</text>
+<polyline fill="none" stroke="#ff7f0e" stroke-width="2.5" points="80.0,387.1 204.0,355.5 328.0,329.8 452.0,323.8 576.0,312.4 700.0,309.5"/>
+<circle cx="80.0" cy="387.1" r="3.5" fill="#ff7f0e"/>
+<circle cx="204.0" cy="355.5" r="3.5" fill="#ff7f0e"/>
+<circle cx="328.0" cy="329.8" r="3.5" fill="#ff7f0e"/>
+<circle cx="452.0" cy="323.8" r="3.5" fill="#ff7f0e"/>
+<circle cx="576.0" cy="312.4" r="3.5" fill="#ff7f0e"/>
+<circle cx="700.0" cy="309.5" r="3.5" fill="#ff7f0e"/>
+<line x1="718" y1="104" x2="742" y2="104" stroke="#ff7f0e" stroke-width="3"/>
+<text x="750" y="108" font-size="12" font-family="Arial">BiomedBERT</text>
+<polyline fill="none" stroke="#2ca02c" stroke-width="2.5" points="80.0,384.0 204.0,361.2 328.0,324.0 452.0,321.2 576.0,309.5 700.0,295.0"/>
+<circle cx="80.0" cy="384.0" r="3.5" fill="#2ca02c"/>
+<circle cx="204.0" cy="361.2" r="3.5" fill="#2ca02c"/>
+<circle cx="328.0" cy="324.0" r="3.5" fill="#2ca02c"/>
+<circle cx="452.0" cy="321.2" r="3.5" fill="#2ca02c"/>
+<circle cx="576.0" cy="309.5" r="3.5" fill="#2ca02c"/>
+<circle cx="700.0" cy="295.0" r="3.5" fill="#2ca02c"/>
+<line x1="718" y1="128" x2="742" y2="128" stroke="#2ca02c" stroke-width="3"/>
+<text x="750" y="132" font-size="12" font-family="Arial">BlueBERT</text>
+</svg>

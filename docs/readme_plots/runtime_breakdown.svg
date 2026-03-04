@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560">
+<rect width="100%" height="100%" fill="white"/>
+<text x="460.0" y="32" text-anchor="middle" font-size="20" font-family="Arial">Runtime Breakdown (Minutes)</text>
+<line x1="80" y1="490.0" x2="740" y2="490.0" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="494.0" text-anchor="end" font-size="12" font-family="Arial">0</text>
+<line x1="80" y1="404.4" x2="740" y2="404.4" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="408.4" text-anchor="end" font-size="12" font-family="Arial">4.9</text>
+<line x1="80" y1="318.8" x2="740" y2="318.8" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="322.8" text-anchor="end" font-size="12" font-family="Arial">9.8</text>
+<line x1="80" y1="231.5" x2="740" y2="231.5" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="235.5" text-anchor="end" font-size="12" font-family="Arial">14.8</text>
+<line x1="80" y1="145.9" x2="740" y2="145.9" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="149.9" text-anchor="end" font-size="12" font-family="Arial">19.7</text>
+<line x1="80" y1="60.3" x2="740" y2="60.3" stroke="#dddddd" stroke-width="1"/>
+<text x="70" y="64.3" text-anchor="end" font-size="12" font-family="Arial">24.6</text>
+<line x1="80" y1="490" x2="740" y2="490" stroke="#333333" stroke-width="1.5"/>
+<line x1="80" y1="490" x2="80" y2="60" stroke="#333333" stroke-width="1.5"/>
+<text x="22" y="275.0" transform="rotate(-90 22 275.0)" text-anchor="middle" font-size="13" font-family="Arial">Minutes</text>
+<rect x="189.5" y="466.3" width="74" height="23.7" fill="#4e79a7"/>
+<rect x="189.5" y="464.6" width="74" height="1.7" fill="#59a14f"/>
+<rect x="189.5" y="106.1" width="74" height="358.5" fill="#f28e2b"/>
+<text x="226.5" y="98.1" text-anchor="middle" font-size="12" font-family="Arial">22.0m</text>
+<text x="226.5" y="512" text-anchor="middle" font-size="12" font-family="Arial">Bio_ClinicalBERT</text>
+<rect x="373.0" y="485.5" width="74" height="4.5" fill="#4e79a7"/>
+<rect x="373.0" y="484.5" width="74" height="1.0" fill="#59a14f"/>
+<rect x="373.0" y="121.1" width="74" height="363.5" fill="#f28e2b"/>
+<text x="410.0" y="113.1" text-anchor="middle" font-size="12" font-family="Arial">21.1m</text>
+<text x="410.0" y="512" text-anchor="middle" font-size="12" font-family="Arial">BiomedBERT</text>
+<rect x="556.5" y="486.8" width="74" height="3.2" fill="#4e79a7"/>
+<rect x="556.5" y="486.1" width="74" height="0.6" fill="#59a14f"/>
+<rect x="556.5" y="128.6" width="74" height="357.5" fill="#f28e2b"/>
+<text x="593.5" y="120.6" text-anchor="middle" font-size="12" font-family="Arial">20.7m</text>
+<text x="593.5" y="512" text-anchor="middle" font-size="12" font-family="Arial">BlueBERT</text>
+<rect x="758" y="73" width="14" height="14" fill="#4e79a7"/>
+<text x="780" y="84" font-size="12" font-family="Arial">Model Loading</text>
+<rect x="758" y="97" width="14" height="14" fill="#59a14f"/>
+<text x="780" y="108" font-size="12" font-family="Arial">Embeddings</text>
+<rect x="758" y="121" width="14" height="14" fill="#f28e2b"/>
+<text x="780" y="132" font-size="12" font-family="Arial">10-Fold Eval</text>
+</svg>
