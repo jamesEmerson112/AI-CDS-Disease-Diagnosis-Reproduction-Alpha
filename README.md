@@ -48,6 +48,37 @@ python scripts/run_all_bert_models.py
 
 See [docs/bert_model_comparison.md](docs/bert_model_comparison.md) for full results at all thresholds.
 
+## Visual Summary (README Charts)
+
+These plots are generated directly from the three experiment outputs in:
+- `Prediction_Output_Bio_ClinicalBERT_15022026_11-33-48/PerformanceIndex.txt`
+- `Prediction_Output_BiomedBERT_15022026_12-03-36/PerformanceIndex.txt`
+- `Prediction_Output_BlueBERT_15022026_12-24-38/PerformanceIndex.txt`
+
+![F1 vs threshold (TOP-10)](docs/readme_plots/f1_vs_threshold_top10.svg)
+*At TOP-10, BiomedBERT stays saturated through 0.9 while BlueBERT drops earlier.*
+
+![F1 vs threshold (TOP-50)](docs/readme_plots/f1_vs_threshold_top50.svg)
+*At TOP-50, all models improve at strict thresholds, but separation remains at 0.9/1.0.*
+
+![F1 vs TOP-K at threshold 0.9](docs/readme_plots/f1_vs_topk_t09.svg)
+*Top-K expansion strongly helps Bio_ClinicalBERT and BlueBERT at threshold 0.9.*
+
+![F1 vs TOP-K at threshold 1.0](docs/readme_plots/f1_vs_topk_t10.svg)
+*At exact-match threshold 1.0, model differences are modest and increase gradually with K.*
+
+![Runtime breakdown](docs/readme_plots/runtime_breakdown.svg)
+*10-fold evaluation dominates runtime; startup overhead differs mostly by model loading time.*
+
+![Saturation by threshold](docs/readme_plots/saturation_by_threshold.svg)
+*Per-patient MAX similarity saturation explains the perfect F1 at threshold 0.6.*
+
+Regenerate these charts:
+
+```bash
+python3 scripts/build_readme_plots.py
+```
+
 ## Score Distribution Analysis (Key Finding)
 
 The perfect F1 scores are an artifact of **embedding space compactness** combined with the **MAX-over-Cartesian-product** evaluation strategy, not genuine diagnostic accuracy.
@@ -73,6 +104,14 @@ The perfect F1 scores are an artifact of **embedding space compactness** combine
 3. **Conclusion** — The evaluation metric is saturated at threshold 0.6 for BERT models. The F1 scores cannot discriminate between models or meaningfully compare against the baseline. Alternative evaluation strategies (MEAN instead of MAX, DRG code matching, higher thresholds) are needed.
 
 Visualizations and full statistics are in [`docs/score_distribution_analysis/`](docs/score_distribution_analysis/).
+
+### Visualizations
+
+![Diagnosis score distributions](docs/score_distribution_analysis/score_distributions.png)
+*Diagnosis score distributions across baseline and BERT models.*
+
+![Per-patient maximum similarity distributions](docs/score_distribution_analysis/per_patient_max_distributions.png)
+*Per-patient MAX similarity distributions showing saturation behavior.*
 
 ```bash
 python scripts/analyze_score_distributions.py
