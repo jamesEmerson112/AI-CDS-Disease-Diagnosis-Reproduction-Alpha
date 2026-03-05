@@ -3,7 +3,29 @@
     "allow": [
       "Bash(python scripts/verify_setup.py:*)",
       "Bash(conda tos accept:*)",
-      "Bash(conda env create:*)"
+      "Bash(conda env create:*)",
+      "Bash(conda activate:*)",
+      "Bash(ls:*)",
+      "Bash(/Users/mrbam/miniconda3/envs/cs7643-a1/bin/pip install:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(git -C /Users/mrbam/Github/GitHub/AI-CDS-Disease-Diagnosis-Reproduction-Alpha log --oneline -5)",
+      "Bash(conda info:*)",
+      "Bash(/Users/mrbam/miniconda3/envs/disease-diagnosis/bin/pip list:*)",
+      "Bash(python -c:*)",
+      "Bash(/Users/mrbam/miniconda3/bin/conda run:*)",
+      "Bash(find:*)",
+      "Bash(python scripts/analyze_score_distributions.py:*)",
+      "Bash(/Users/mrbam/miniconda3/envs/disease-diagnosis/bin/python:*)",
+      "WebSearch",
+      "Bash(/opt/homebrew/bin/node --version)",
+      "Bash(/opt/homebrew/bin/npm --version)",
+      "Bash(export PATH=\"/opt/homebrew/bin:$PATH\")",
+      "Bash(npm create vite@latest dashboard -- --template react-ts)",
+      "Bash(export PATH=\"/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH\")",
+      "Bash(npm install)",
+      "Bash(npm install d3 @types/d3)",
+      "Bash(npm install -D tailwindcss @tailwindcss/vite)",
+      "Bash(npm run build)"
     ]
   }
 }
