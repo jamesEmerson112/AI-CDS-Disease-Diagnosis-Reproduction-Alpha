@@ -6,6 +6,14 @@ Clinical Decision Support System for disease diagnosis prediction using patient 
 
 This project reproduces and extends the clinical decision support system from *"AI-Driven Clinical Decision Support: Enhancing Disease Diagnosis Exploiting Patients Similarity"* (Comito et al., 2022). We first reproduce the original BioSentVec baseline, then replace it with three biomedical BERT models as an original extension. Our score distribution analysis reveals that the BERT evaluation metric saturates at the paper's threshold, making the F1 scores unsuitable for model comparison — this is the key finding and an open problem for future work.
 
+> **Two caveats on every score below.** First, the metric **saturates**: at threshold 0.6 nearly
+> every diagnosis pair counts as a match, so F1 = 1.000 measures the metric, not the model
+> ([details](docs/findings/03-metric-saturation.md)). Second, and independently, the metric is
+> **degenerate**: across all 12,600 rows of committed results, precision, recall, and F-score are
+> the *same number*, because `tp + fp == nrow` by construction. Every "F1" reported here — the
+> baseline's 0.489/0.512/0.521 included — is arithmetically identical to accuracy
+> ([details](docs/findings/04-metric-degeneracy.md)). Start at [docs/](docs/README.md).
+
 ## Baseline Reproduction
 
 The original paper uses **BioSentVec** (700-dimensional sent2vec embeddings trained on PubMed + MIMIC-III) to compute symptom-level pairwise cosine similarities between patients. Diagnosis similarity is determined by taking the MAX similarity across the Cartesian product of ground-truth and predicted diagnosis descriptions, then applying a threshold to classify true/false positives.
@@ -149,7 +157,7 @@ conda activate disease-diagnosis
 
 **Key dependencies:** sentence-transformers, torch, matplotlib, numpy
 
-**For baseline only:** Also requires sent2vec and the BioSentVec pre-trained model (~21 GB). See [docs/SETUP_GUIDE.md](docs/SETUP_GUIDE.md) for details.
+**For baseline only:** Also requires sent2vec and the BioSentVec pre-trained model (~21 GB). See [docs/guides/setup.md](docs/guides/setup.md) for details. Note the baseline arm does not currently run — see [docs/findings/01-baseline-reproduction.md](docs/findings/01-baseline-reproduction.md).
 
 ## Citation
 

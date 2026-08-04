@@ -64,16 +64,17 @@ class TestDirectoryStructure:
             assert os.path.isdir(path), f"{d}/ missing"
 
     def test_other_directories(self):
-        dirs = ["scripts", "tests", "data", "output", "docs", "config", "archive"]
+        dirs = ["scripts", "tests", "data", "docs", "config", "archive"]
         for d in dirs:
             path = os.path.join(project_root, d)
             assert os.path.isdir(path), f"{d}/ missing"
 
-    def test_output_subdirectories(self):
-        dirs = ["output/baseline", "output/bio_clinical_bert", "output/biomedbert", "output/bluebert"]
-        for d in dirs:
-            path = os.path.join(project_root, d)
-            assert os.path.isdir(path), f"{d}/ missing"
+    def test_results_are_discoverable(self):
+        """Runs are timestamped Prediction_Output_* dirs, identified by their
+        PerformanceIndex.txt. There is no fixed output/ tree."""
+        import glob
+        pattern = os.path.join(project_root, "**", "Prediction_Output_*", "PerformanceIndex.txt")
+        assert glob.glob(pattern, recursive=True), "no committed run results found"
 
 
 class TestConfigFiles:
@@ -110,11 +111,23 @@ class TestEntityClasses:
 
     def test_symptoms_diagnosis_instantiation(self):
         from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-        sd = SymptomsDiagnosis()
-        assert hasattr(sd, 'symptoms')
-        assert hasattr(sd, 'diagnosis')
+        sd = SymptomsDiagnosis(
+            hadm_id="142345",
+            subject_id="10006",
+            admittime="2164-10-23 21:09:00",
+            dischtime="2164-11-01 17:15:00",
+            symptoms="Sepsis,Atrial fibrillation",
+            diagnosis=["ms:sepsis"],
+        )
+        assert sd.symptoms == "Sepsis,Atrial fibrillation"
+        assert sd.diagnosis == ["ms:sepsis"]
 
-    def test_admission_instantiation(self):
-        from src.entity.Admission import Admission
-        adm = Admission()
-        assert hasattr(adm, 'hadm_id')
+    def test_symptoms_diagnosis_column_indices(self):
+        """The class doubles as the schema for the ;-delimited raw file."""
+        from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
+        line = "142345;10006;2164-10-23 21:09:00;2164-11-01 17:15:00;Sepsis;ms:sepsis"
+        fields = line.split(";")
+        assert fields[SymptomsDiagnosis.CONST_HADM_ID] == "142345"
+        assert fields[SymptomsDiagnosis.CONST_SUBJECT_ID] == "10006"
+        assert fields[SymptomsDiagnosis.CONST_SYMPTOMS] == "Sepsis"
+        assert fields[SymptomsDiagnosis.CONST_DIAGNOSIS] == "ms:sepsis"

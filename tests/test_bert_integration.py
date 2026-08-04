@@ -8,6 +8,12 @@ Run this before executing the full CS2V_bio_clinicalBERT.py analysis
 import sys
 import time
 
+import pytest
+
+# Downloads Bio_ClinicalBERT from HuggingFace. Opt in with: pytest -m network
+pytestmark = pytest.mark.network
+
+
 def test_bert_integration():
     """Test that Bio_ClinicalBERT can be loaded and used"""
     print("=" * 60)
@@ -24,7 +30,7 @@ def test_bert_integration():
     except ImportError as e:
         print(f"✗ Import failed: {e}")
         print("Run: pip install -r requirements_bert.txt")
-        return False
+        pytest.fail(f'Bio_ClinicalBERT integration failed')
     
     # Test 2: Load Bio_ClinicalBERT model
     print("\n[TEST 2] Loading Bio_ClinicalBERT model...")
@@ -38,7 +44,7 @@ def test_bert_integration():
     except Exception as e:
         print(f"✗ Model loading failed: {e}")
         print("Check internet connection and Hugging Face access")
-        return False
+        pytest.fail(f'Bio_ClinicalBERT integration failed')
     
     # Test 3: Generate sample embeddings
     print("\n[TEST 3] Testing embedding generation...")
@@ -65,7 +71,7 @@ def test_bert_integration():
         
     except Exception as e:
         print(f"✗ Embedding generation failed: {e}")
-        return False
+        pytest.fail(f'Bio_ClinicalBERT integration failed')
     
     # Test 4: Test similarity computation (core functionality)
     print("\n[TEST 4] Testing similarity computation...")
@@ -89,7 +95,7 @@ def test_bert_integration():
             
     except Exception as e:
         print(f"✗ Similarity computation failed: {e}")
-        return False
+        pytest.fail(f'Bio_ClinicalBERT integration failed')
     
     # Test 5: Test util_cy functions (if available)
     print("\n[TEST 5] Testing util_cy preprocessing compatibility...")

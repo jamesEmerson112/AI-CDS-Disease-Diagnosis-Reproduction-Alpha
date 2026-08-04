@@ -1,0 +1,21 @@
+#!/bin/sh
+# Reject NEWLY ADDED files under data/raw/ or data/folds/.
+# Rationale: MIMIC-III is distributed under a PhysioNet DUA that prohibits
+# redistribution, and this repository is public. See docs/guides/data-use.md.
+# Existing committed files are unaffected. Bypass deliberately with --no-verify.
+
+new_data=$(git diff --cached --name-only --diff-filter=A \
+           | grep -E '^data/(raw|folds)/' || true)
+
+if [ -n "$new_data" ]; then
+    echo "BLOCKED: new clinical data files staged for commit:" >&2
+    echo "$new_data" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "MIMIC-III is under a PhysioNet DUA prohibiting redistribution, and this" >&2
+    echo "repo is public. See docs/guides/data-use.md." >&2
+    echo "" >&2
+    echo "If this is intentional (e.g. correcting an existing fold file):" >&2
+    echo "  git commit --no-verify" >&2
+    exit 1
+fi
+exit 0
