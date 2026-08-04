@@ -7,6 +7,7 @@ stale at different rates.
   hand, changes rarely, and is the part worth reading carefully.
 - **guides/** — how to operate it. Setup, environment, data handling. Changes when tooling changes.
 - **reference/** — what the system is. Module structure and data flow.
+- **plans/** — where it's going. Sequenced work, with what's done and what's next.
 - Generated artifacts and raw run outputs, described at the bottom. Never hand-edit these.
 
 ## If you are coming back to this project after a break
@@ -51,6 +52,18 @@ still be one-dimensional.
 - [reference/architecture.md](reference/architecture.md) — module layout, data flow, and the
   design constraint that keeps the two arms comparable: both share preprocessing, fold loading,
   and evaluation, so the embedding model is the only intended variable.
+
+## What happens next
+
+[plans/revival-roadmap.md](plans/revival-roadmap.md) — the sequenced plan for reviving and
+extending the project. Phases 0 and 4 (environment repair, test suite, documentation) are done.
+Phase 1 is next: characterization tests and a deterministic stub encoder, so the pipeline gets a
+regression net *before* any code moves. Then the `src/aicds/` package layout and a single
+`main.py` CLI replacing the eight ad-hoc scripts.
+
+The roadmap also records the three decisions that shaped it and the reasoning behind the risky
+parts — notably why the two evaluation loops must **not** be merged, and why the committed
+`Prediction_Output_*` directories are treated as a read-only regression oracle.
 
 ## Generated and raw material
 
