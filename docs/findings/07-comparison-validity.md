@@ -22,12 +22,41 @@ confirmed 2026-08-05:
 |---|---|
 | `baseline_sent2vec.py:236` reads `Symptoms-Diagnosis.txt` from the repo root; it lives in `data/raw/` | `FileNotFoundError` at import time |
 | `:244-247` reference an unbound name `entity`; line 16 binds `entity_module` | `NameError` at import time |
-| `sent2vec` not installed. Two of three manifests named PyPI `sent2vec` — an **unrelated project with no `Sent2vecModel` class**, which is what produced the archived `AttributeError` in `archive/baseline_debug.txt`. `config/requirements.txt` alone had the correct `git+https://github.com/epfml/sent2vec.git` | Corrected in `pyproject.toml` 2026-08-05; **build on Windows still unverified** — GCC-only compiler flags, no Windows wheels |
+| `sent2vec` not installed. Two of three manifests named PyPI `sent2vec` — an **unrelated project with no `Sent2vecModel` class**, which is what produced the archived `AttributeError` in `archive/baseline_debug.txt`. `config/requirements.txt` alone had the correct `git+https://github.com/epfml/sent2vec.git` | Corrected in `pyproject.toml` 2026-08-05. **Windows build now confirmed impossible as-is (verified 2026-08-05)** — see below |
 | The 20.93 GiB model loads fully resident. It **is** present, at the repo root (not `data/models/`, which holds only a README) | 31.94 GiB total RAM, 8.66 GiB free at measurement **(verified 2026-08-05)** |
 
-The `sent2vec` build is the long-pole risk for the entire comparison. If it cannot be built, the
-framing must change — for example three BERT variants against a TF-IDF or averaged-word-vector
-baseline, explicitly labelled a substitute rather than a reproduction of Comito et al.
+### The `sent2vec` build, resolved (2026-08-05)
+
+Attempted directly, `pip install "sent2vec @ git+https://github.com/epfml/sent2vec.git"` against the
+repo venv (Python 3.9.13) with MSVC 14.44.35207 present. It resolves to commit `9efbc2d`, gets as
+far as building the wheel, and then fails:
+
+```
+cl : Command line error D8021 : invalid numeric argument '/Wno-cpp'
+```
+
+`setup.py` passes the GCC warning flag `-Wno-cpp`; MSVC reads it as `/Wno-cpp` and rejects it. This
+is the *first* GCC-only flag, not the only one — `-std=c++0x`, `-pthread`, `-march=native` and
+`-funroll-loops` sit behind it, and MSVC has no `-march=native` equivalent at all. Patching one flag
+would simply surface the next. Nothing was left installed; the failure is clean.
+
+**Conclusion: the baseline arm cannot be built on Windows/MSVC without patching upstream's flag
+list, and is therefore a Linux-only proposition.** Two routes, in order of preference:
+
+1. **WSL2.** Already installed here (Ubuntu 24.04.3 LTS), and the repo plus the 20.93 GiB model are
+   visible at `/mnt/c/...`. Costs nothing and **no data leaves the machine**, which avoids the
+   PhysioNet DUA question entirely. Three prerequisites, all needing elevation and therefore the
+   owner's hands: `build-essential` is absent, the system Python is 3.12.3 rather than the required
+   3.9, and WSL2 sees only 15 GiB of the host's 31.94 GiB (its default ~50%), short of the model's
+   20.93 GiB — raising it needs a `.wslconfig` `memory=` entry and `wsl --shutdown`.
+2. **A rented Linux box** (RunPod or similar) if WSL2's memory ceiling proves impractical. Choose a
+   **CPU- and RAM-heavy instance, not a GPU one**: the fold loop is single-threaded pure-Python
+   `cosine_similarity` at 99%+ of runtime, so GPU spend buys nothing here. Note this route does put
+   DUA-covered data on third-party infrastructure, which is the owner's call.
+
+If neither route is taken, the framing must change — for example three BERT variants against a
+TF-IDF or averaged-word-vector baseline, explicitly labelled a substitute rather than a reproduction
+of Comito et al.
 
 ## 2. The two arms do not preprocess the same text
 
