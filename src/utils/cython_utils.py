@@ -1,14 +1,10 @@
 import os
-import gensim
-from gensim.models import KeyedVectors
 from scipy import spatial
-from sklearn.model_selection import train_test_split
 import numpy as np
 
 from datetime import datetime
 from src.utils.Constants import *
 
-import sent2vec
 import nltk
 from nltk import word_tokenize
 from nltk.corpus import stopwords
@@ -235,6 +231,12 @@ def embending_diagnosis(model, admissions):
 
 
 def load_model():
+    # sent2vec is imported here, not at module scope, so the BERT arm can import
+    # this module without it. pyproject.toml keeps sent2vec in the `baseline`
+    # extra precisely so a BERT-only install never needs it; a module-scope
+    # import would silently break that contract. See docs/guides/setup.md.
+    import sent2vec
+
     start_time = current_time()
     print("LOAD MODEL Start time: ", start_time)
     model = sent2vec.Sent2vecModel()
