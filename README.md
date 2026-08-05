@@ -16,7 +16,7 @@ All four arms were run on **one machine** (RunPod Linux, AMD Threadripper 7960X)
 (`7da5901`) on 2026-08-05. The three transformer runs reproduce earlier Apple-silicon runs
 **bit-for-bit to all 17 significant figures**, so hardware is not a confound.
 
-### Threshold 1.0, TOP-10 — the only setting where all four separate
+### Threshold 1.0, TOP-10 — the only setting where no model is saturated
 
 | Rank | Encoder | Dim | Precision | Recall | F1 | TP | FP | `TP+FP` | Pred. rate |
 |:----:|---------|:---:|:---------:|:------:|:------:|:---:|:---:|:-------:|:----------:|
@@ -35,6 +35,34 @@ the best transformer beats the baseline by **0.005**. Both are dwarfed by the pa
 inflation of **+0.11 to +0.26** and are smaller than the per-fold standard deviation of
 **0.071–0.124**. The differences under study are an order of magnitude below the noise and the known
 contamination, so any claim that one of these encoders is better than another would be unfounded.
+
+### The ranking inverts when you move the threshold
+
+This is the sharpest evidence that the ranking is not a property of the encoders. Threshold 0.9 also
+produces four distinct values — but a **completely different order**:
+
+| Encoder | F1 @ 0.9 | rank | F1 @ 1.0 | rank | movement |
+|---------|:--------:|:----:|:--------:|:----:|----------|
+| BiomedBERT | **1.0000** *(saturated)* | 1 | 0.2545 | 3 | **1st → 3rd** |
+| Bio_ClinicalBERT | 0.7974 | 2 | **0.2853** | 1 | 2nd → 1st |
+| BlueBERT | 0.3404 | 3 | 0.2391 | 4 | 3rd → 4th |
+| **BioSentVec (baseline)** | 0.2801 | 4 | **0.2801** | 2 | **4th → 2nd** |
+
+Full F1-by-threshold grid at TOP-10:
+
+| Encoder | 0.6 | 0.7 | 0.8 | 0.9 | 1.0 |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| Bio_ClinicalBERT | 1.0000 | 1.0000 | 1.0000 | 0.7974 | 0.2853 |
+| BiomedBERT | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 0.2545 |
+| BlueBERT | 1.0000 | 1.0000 | 0.8135 | 0.3404 | 0.2391 |
+| BioSentVec | 0.4824 | 0.3658 | 0.3222 | 0.2801 | 0.2801 |
+
+**Whichever encoder "wins" is decided by an arbitrary threshold choice, not by diagnostic quality.**
+BiomedBERT tops the table at 0.9 only because it is still pinned at the ceiling there — it is the
+most compact of the three embedding spaces, so it is the last to fall off 1.000, and grading it with
+its own cosine rewards exactly that compactness. Threshold 1.0 is the only setting where **no** model
+is saturated, which is why the table above is the one to read; it is not, however, the only setting
+where the four differ numerically.
 
 **Read the `TP+FP` and prediction-rate columns together — they are the whole degeneracy story.**
 Every BERT arm sums to exactly **12.9**, the mean fold test size, so `tp + fp == nrow`; precision
