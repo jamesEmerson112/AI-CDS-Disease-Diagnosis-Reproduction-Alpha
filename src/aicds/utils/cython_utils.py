@@ -10,6 +10,28 @@ from nltk import word_tokenize
 from nltk.corpus import stopwords
 from string import punctuation
 
+# preprocess_sentence reads this at module scope, but for the whole history of
+# this file it was never defined here -- eight separate call sites monkeypatched
+# it in (four in src/scripts, four in tests), every one of them with the very
+# same `set(stopwords.words('english'))`. Any new caller that forgot the
+# incantation got a bare NameError from inside tokenization.
+#
+# Defining it here is numerically inert precisely BECAUSE all eight used an
+# identical expression: the patches that remain still assign an equal value.
+# They are removed in the very next commit, separately, because stop_words feeds
+# tokenization -> embeddings -> every number in PerformanceIndex.txt, and a
+# change that broad deserves an unambiguous culprit commit.
+#
+# The download guard matters for import order: bert_models imports this module
+# before it calls ensure_nltk_data(), so on a machine without the corpus an
+# eager set(stopwords.words(...)) would raise LookupError at import time.
+try:
+    stop_words = set(stopwords.words('english'))
+except LookupError:  # corpus not downloaded yet
+    nltk.download('stopwords', quiet=True)
+    stop_words = set(stopwords.words('english'))
+
+
 def cosine_similarity(u, v):
     """
     Compute cosine similarity between two vectors.
