@@ -13,7 +13,6 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-import aicds.entity.SymptomsDiagnosis as entity_module
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
 
@@ -193,18 +192,23 @@ script_start_time = time.perf_counter()
 ################################################################################################################
 # Use proper path joining instead of changing directory
 dataset_start = time.perf_counter()
-file_name = os.path.join(CH_DIR, "Symptoms-Diagnosis.txt")
+file_name = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
 f = open(file_name, "r").readlines()
 orig_stdout = sys.stdout
 
 admissions = dict()
 for line in f:
-    line.replace("\n", "")
+    # Was a bare `line.replace(...)` whose result was thrown away. Assigning it is
+    # provably inert here -- the diagnosis is the last ';'-delimited field, so it
+    # is the only one carrying the newline, and preprocess_diagnosis rstrips its
+    # input (verified: identical output with and without a trailing newline). Kept
+    # as a real assignment because a discarded no-op reads as a live bug.
+    line = line.replace("\n", "")
     attributes = line.split(';')
-    a = entity.SymptomsDiagnosis.SymptomsDiagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_ADMITTIME],
-                                                   attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DISCHTIME], attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_SYMPTOMS],
-                                                   util_cy.preprocess_diagnosis(attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_DIAGNOSIS]))
-    admissions.update({attributes[entity.SymptomsDiagnosis.SymptomsDiagnosis.CONST_HADM_ID]:a})
+    a = SymptomsDiagnosis(attributes[SymptomsDiagnosis.CONST_HADM_ID], attributes[SymptomsDiagnosis.CONST_SUBJECT_ID], attributes[SymptomsDiagnosis.CONST_ADMITTIME],
+                                                   attributes[SymptomsDiagnosis.CONST_DISCHTIME], attributes[SymptomsDiagnosis.CONST_SYMPTOMS],
+                                                   util_cy.preprocess_diagnosis(attributes[SymptomsDiagnosis.CONST_DIAGNOSIS]))
+    admissions.update({attributes[SymptomsDiagnosis.CONST_HADM_ID]:a})
 
 dataset_time = time.perf_counter() - dataset_start
 timing_data['dataset_loading'] = dataset_time
