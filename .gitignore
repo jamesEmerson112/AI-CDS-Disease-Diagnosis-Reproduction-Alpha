@@ -102,10 +102,15 @@ htmlcov/
 *.swp
 *~
 
-# Old empty directories (can be removed)
-entity/
-utils/
-Dataset/
+# Old pre-reorganization directories at the repository ROOT only.
+# The leading slash is load-bearing: unanchored `entity/` and `utils/` match at
+# ANY depth, so they silently swallowed src/entity/ and src/utils/. Existing
+# files survived only because git honours already-tracked paths over .gitignore,
+# but any NEW file added there would have vanished without a warning — and
+# `git mv src src/aicds` would have recreated the problem one level deeper.
+/entity/
+/utils/
+/Dataset/
 BioSentVec_PubMed_MIMICIII-bigram_d700.bin
 
 # System design visualization (local-only, detailed architecture diagrams)
