@@ -78,6 +78,45 @@ Config lives in `pyproject.toml` `[tool.pytest.ini_options]`: `pythonpath = ["."
 
 Dashboard (React 19 + Vite 7 + Tailwind 4 + d3), from `dashboard/`: `npm install && npm run dev`.
 
+## The safety net — read this before changing any code
+
+`tests/golden/stub768/PerformanceIndex.txt` is a full 10-fold run of the real pipeline, minted
+from a known-good tree. `pytest -m golden` re-runs the pipeline and compares **byte-for-byte**.
+
+Nothing is trained here, so every number the pipeline emits is a pure function of the input data
+and the arithmetic in `cython_utils.py`. That means **any behaviour change is a numerical change**,
+and the realistic failure mode of refactoring this repo is not a crash — it is the numbers moving
+while every other test stays green. The golden is the only thing that catches that.
+
+- **`tests/stubs.py` `StubEncoder`** derives each vector from `sha256(text)`, so it needs no model
+  download, no network, and no GPU, and is immune to batch-composition and hash-seed variation.
+  `run_analysis(..., encoder=...)` injects it; omitting the argument is the untouched real path.
+- **The comparison is deliberately not float-tolerant.** The formatting carries information:
+  aggregate rows print threshold `1` (int, from the set literal) while per-case rows print `1.0`,
+  and the F-score prints a bare `0` rather than `0.0` in 1597 rows. A parsing comparator sees none
+  of it. Only the wall-clock trailer and the timestamped output path are normalised away.
+- **If the golden fails, do not re-mint it to make it pass.** Read the diff. A changed number is
+  the finding. Re-minting is correct only when you *intended* to change behaviour, and then the
+  diff belongs in the commit message.
+
+Scope rule for the current refactor: **if a change moves the numbers it is out of scope; if it
+fixes something that crashes, blocks, or writes to the wrong place it is in scope.** Correctness
+work that deliberately changes results is tracked separately in `docs/plans/correctness-fixes.md`.
+
+## Environment traps that produce silently wrong answers
+
+- **`conda run -n disease-diagnosis python` resolves to the wrong interpreter** here — PATH
+  shadowing sends it to Homebrew's Python 3.11, which has neither sklearn nor sent2vec, so
+  dependency checks come back as false negatives. Invoke
+  `/Users/mrbam/miniconda3/envs/disease-diagnosis/bin/python` directly, or activate the env first.
+- **An interactive shell's `grep` may be ignore-aware** (aliased to `ugrep --ignore-files`). Before
+  `fc5d72b` that combined with unanchored `.gitignore` patterns to return **zero matches** for
+  everything under `src/utils/` and `src/entity/` — silently producing false "zero callers"
+  conclusions. The patterns are anchored now, but use `command grep` if a zero looks suspicious.
+- **`.gitignore` directory patterns must stay anchored.** Bare `entity/`/`utils/` match at any
+  depth; they hid `src/utils/` and would have swallowed the entire package after
+  `git mv src src/aicds`.
+
 ## Architecture
 
 Reference: `docs/reference/architecture.md`.
@@ -89,9 +128,9 @@ Data flow: 129 admissions from `data/raw/Symptoms-Diagnosis.txt` (`wc -l` says 1
 Things that will bite you:
 
 - **`cython_utils.py` is pure Python** despite the name — a hand-translation of the original Cython, archived at `archive/cython_source/util_cy.c`. No build step.
-- **It imports `sent2vec` at module scope**, so the BERT path transitively requires that package (not the 21 GB model). `tests/test_bert_symptom_pairwise.py` works around this by AST-loading functions out of `bert_models.py` — preserve that pattern.
+- **`sent2vec` is no longer imported at module scope** (as of `c8e4ffd`) — it moved inside `load_model()`, its only consumer, so `cython_utils` now imports with base dependencies alone. `tests/test_bert_symptom_pairwise.py` still AST-loads functions out of `bert_models.py` to dodge the old imports; that workaround is now unnecessary and **new tests should import normally**.
 - **Embedding dicts are keyed by preprocessed *text*, not HADM_ID**, each value wrapped in a one-element list so callers index `emb[0]`. Diverging silently changes results rather than raising.
-- **Folds are fixed committed files**, not computed at runtime. Do not regenerate them. `load_dataset` also drops the final character of each line assuming a trailing newline — a hand-written fold file without one silently loses its last symptom.
+- **Folds are fixed committed files**, not computed at runtime, and no generator exists anywhere in the repo or its archive — the original split was produced upstream and only its output was committed. Do not regenerate them during the refactor; regeneration is tracked in `docs/plans/correctness-fixes.md`. `load_dataset` (`cython_utils.py:184`) also drops the final character of each line assuming a trailing newline — all 20 committed fold files end in `0x0a`, but a hand-written one without it silently loses its last symptom. `tests/test_characterize_dataset.py` pins this.
 - **`baseline_sent2vec.py` runs at import time**; `bert_models.py` exposes `run_analysis(model_id)` and is the better pattern to follow.
 - `src/evaluation/bert_eval.py` is orphaned (zero callers) but contains a raw `AutoModel` + mean-pooling path distinct from sentence-transformers pooling, plus the only GPU-aware line in the repo. Salvage before deleting.
 - `src/entity/{Admission,Symptom,Drgcodes}.py` have no live callers.
@@ -116,4 +155,14 @@ Verified, unfixed, documented:
 
 ## Data handling
 
-The repo is **public** and contains committed MIMIC-III records under a PhysioNet DUA that prohibits redistribution. This is not a HIPAA breach (the data is de-identified, dates shifted) but it does conflict with the DUA. `.githooks/pre-commit` blocks *new* files under `data/raw`/`data/folds`. **Do not add clinical data to this repository**, and do not rewrite history to remove the existing data without the owner's explicit instruction. See `docs/guides/data-use.md`.
+The repo is **public** and contains committed MIMIC-III records under a PhysioNet DUA that prohibits redistribution. This is not a HIPAA breach (the data is de-identified, dates shifted) but it does conflict with the DUA. **Do not add clinical data to this repository**, and do not rewrite history to remove the existing data without the owner's explicit instruction. See `docs/guides/data-use.md`.
+
+`.githooks/pre-commit` blocks two things: new files under `data/raw`/`data/folds`, **and** any new file containing 20+ distinct `HADM_ID`s wherever it lives. The second rule exists because the first was insufficient — the generated golden under `tests/` carries all 129 IDs and sailed past a path-only check. The golden was committed deliberately with `--no-verify`, on the reasoning that the same 129 IDs are already published in the three `docs/Prediction_Output_*` files, so it adds no new exposure. Any future `--no-verify` on this hook deserves the same explicit reasoning.
+
+## Where the work is
+
+`docs/plans/revival-roadmap.md` is the sequenced plan and carries current status.
+
+- **Phases 0, 1, 4 — done.** Environment repaired, data-use guard, docs reorganised, and the Phase 1 safety net (characterization tests + `StubEncoder` + byte-exact golden).
+- **Phases 2–3 — next.** `git mv src src/aicds` plus 46 `from src.` rewrites across 15 files; real src-layout `pyproject`; consolidate the triplicated `ensure_nltk_data`/`format_time`; salvage `hf_automodel` out of `bert_eval.py` before deleting; fix the baseline crash bugs behind an `[UNVERIFIED]` banner; then one `PerformanceIndex` parser replacing three, one run-discovery rule replacing four disagreeing globs, a `main.py` CLI, and the dashboard fix. Phase 3 is the ship point.
+- **Deferred to a dedicated session** — everything in `docs/plans/correctness-fixes.md` and `docs/plans/metric-redesign.md`. Those deliberately change the numbers, which is why they cannot run concurrently with a refactor whose safety mechanism is that the numbers must not change.
