@@ -14,11 +14,11 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import *
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.utils.Constants import *
 
-from src.utils import cython_utils as util_cy
-from src.utils.cython_utils import cosine_similarity  # Direct import to avoid module caching issues
+from aicds.utils import cython_utils as util_cy
+from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid module caching issues
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -200,36 +200,7 @@ def containGreaterOrEqualsValue(topk, similarity_list, threshold):
 # Ensure NLTK data is available before first use
 import nltk
 
-def ensure_nltk_data():
-    """
-    Automatically download required NLTK data packages if they don't exist.
-    This eliminates the need for manual downloads before running the script.
-    """
-    required_data = {
-        'stopwords': 'corpora/stopwords',
-        'punkt_tab': 'tokenizers/punkt_tab',
-        'punkt': 'tokenizers/punkt'  # Fallback for older NLTK versions
-    }
-
-    missing = []
-    for name, path in required_data.items():
-        try:
-            nltk.data.find(path)
-        except LookupError:
-            missing.append(name)
-
-    if missing:
-        print("[INFO] First-time setup: Downloading required NLTK data packages...")
-        print(f"[INFO] Missing packages: {', '.join(missing)}")
-        for name in missing:
-            print(f"[INFO] Downloading '{name}'... ", end='', flush=True)
-            try:
-                nltk.download(name, quiet=True)
-                print("OK")
-            except Exception as e:
-                print(f"ERROR (Error: {e})")
-        print("[SUCCESS] NLTK data download complete!")
-        print("")
+from aicds.utils.runtime import ensure_nltk_data, format_time
 
 # Call before any NLTK usage
 ensure_nltk_data()
@@ -247,18 +218,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-# Timing utilities
-def format_time(seconds):
-    """Format seconds into human-readable time"""
-    if seconds < 60:
-        return f"{seconds:.2f} seconds"
-    elif seconds < 3600:
-        minutes = seconds / 60
-        return f"{seconds:.2f} seconds ({minutes:.2f} minutes)"
-    else:
-        hours = seconds / 3600
-        minutes = (seconds % 3600) / 60
-        return f"{seconds:.2f} seconds ({hours:.2f} hours, {minutes:.2f} minutes)"
+# Timing utilities live in aicds.utils.runtime, imported above.
 
 def compute_bert_symptom_embeddings(model, admissions):
     """

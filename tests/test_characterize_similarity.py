@@ -24,16 +24,16 @@ import math
 
 import pytest
 
-from src.utils import cython_utils as util_cy
-from src.utils.cython_utils import cosine_similarity, containGreaterOrEqualsValue
-from src.utils.Constants import (
+from aicds.utils import cython_utils as util_cy
+from aicds.utils.cython_utils import cosine_similarity, containGreaterOrEqualsValue
+from aicds.utils.Constants import (
     PRUNING_SIMILARITY,
     MIN_SIMILARITY,
     TOP_K_LOWER_BOUND,
     TOP_K_UPPER_BOUND,
     TOP_K_INCR,
 )
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 
 # cython_utils.preprocess_sentence reads a module-level `stop_words` global that
 # is never defined in the module itself -- it is monkey-patched in by every
@@ -48,7 +48,7 @@ util_cy.stop_words = set(stopwords.words("english"))
 # Importing bert_models is expensive (torch, sentence-transformers, sklearn,
 # matplotlib) but the task brief targets its functions directly, so we pay the
 # cost once at module scope like the rest of the suite does.
-from src.models.bert_models import (
+from aicds.models.bert_models import (
     compute_patient_similarity_pairwise,
     predict_topk_diagnoses_pure,
 )

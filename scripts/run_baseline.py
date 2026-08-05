@@ -7,9 +7,7 @@ Run from project root: python scripts/run_baseline.py
 import os
 import sys
 
-# Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 # Import and run the baseline module
 if __name__ == "__main__":
@@ -20,4 +18,4 @@ if __name__ == "__main__":
     print("")
 
     # Import the main module - this will execute the analysis
-    from src.models import baseline_sent2vec
+    from aicds.models import baseline_sent2vec

@@ -24,15 +24,13 @@ import random
 
 import numpy as np
 
-# Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 from sentence_transformers import SentenceTransformer
 
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import CH_DIR
-from src.utils import cython_utils as util_cy
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.utils.Constants import CH_DIR
+from aicds.utils import cython_utils as util_cy
 
 # Initialize NLTK data (required by cython_utils)
 import nltk

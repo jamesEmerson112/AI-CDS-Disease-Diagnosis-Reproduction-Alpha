@@ -18,12 +18,9 @@ import os
 import sys
 import time
 
-# Add project root to Python path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 if __name__ == "__main__":
-    from src.models.bert_models import run_analysis, MODELS
+    from aicds.models.bert_models import run_analysis, MODELS
 
     print("=" * 60)
     print("SEQUENTIAL 3-MODEL BERT COMPARISON")

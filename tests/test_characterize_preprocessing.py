@@ -28,7 +28,7 @@ are asserted as an exact literal.
 
 from nltk.corpus import stopwords
 
-from src.utils import cython_utils
+from aicds.utils import cython_utils
 
 # preprocess_sentence reads the module-level `stop_words` global, which the
 # module itself does not define -- every real call site monkey-patches it in

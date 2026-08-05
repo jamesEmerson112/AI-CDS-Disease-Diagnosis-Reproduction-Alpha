@@ -125,13 +125,19 @@ def strip_trailer(text):
             "the trailer format changed (update TRAILER_DELIMITER) or the run "
             "did not finish.".format(n=len(TRAILER_DELIMITER))
         )
-    # bert_models writes exactly "\n\n" between the body and the trailer, so
-    # strip exactly that. An earlier version used .rstrip("\n"), which swallowed
-    # ANY number of trailing blank lines -- appending 10 of them to the body
-    # still compared equal, so the "byte-for-byte" claim had a hole at the tail.
+    # bert_models writes exactly one blank-line separator between the body and
+    # the trailer, so strip exactly one -- CRLF on Windows (open(..., "w") is
+    # text mode), LF elsewhere. An earlier version used .rstrip("\n"), which
+    # swallowed ANY number of trailing blank lines -- appending 10 of them to
+    # the body still compared equal, so the "byte-for-byte" claim had a hole at
+    # the tail. Removing exactly one separator keeps that hole closed on both
+    # platforms. The two candidates are mutually exclusive (nothing can end with
+    # both), so the order is not load-bearing, but keep it explicit.
     body = text[:cut]
-    if body.endswith("\n\n"):
-        body = body[:-2]
+    for sep in ("\r\n\r\n", "\n\n"):
+        if body.endswith(sep):
+            body = body[: -len(sep)]
+            break
     return body
 
 
@@ -237,7 +243,7 @@ def run_pipeline(dim=STUB_DIM, model_id=MODEL_ID):
     directory and the result located by glob. Returns
     ``(raw_text, run_dir)``.
     """
-    from src.models import bert_models
+    from aicds.models import bert_models
     from tests.stubs import StubEncoder
 
     previous_cwd = os.getcwd()
@@ -300,6 +306,9 @@ class TestGoldenFile:
         assert TRAILER_DELIMITER not in golden
         assert "TIMING REPORT" not in golden
         assert canonicalise(golden + "\n\n" + TRAILER_DELIMITER + "\nx\n") == golden
+        assert (
+            canonicalise(golden + "\r\n\r\n" + TRAILER_DELIMITER + "\r\nx\r\n") == golden
+        )
 
     def test_golden_has_no_machine_specific_content(self):
         golden = read_golden()
@@ -319,7 +328,7 @@ class TestGoldenFile:
                 "10-FOLD PERFORMANCE INDEX of TOP-{k} SIMILARITY by MAX".format(k=topk)
                 in golden
             )
-        assert golden.rstrip("\n").endswith("*" * 108)
+        assert golden.rstrip("\r\n").endswith("*" * 108)
 
     def test_golden_preserves_the_int_float_formatting_quirks(self):
         """The formatting accidents a tolerance-based comparator would miss."""

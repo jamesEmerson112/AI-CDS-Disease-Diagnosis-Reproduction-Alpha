@@ -6,9 +6,6 @@ Run this from the project root: python -m tests.test_setup
 import os
 import sys
 
-# Add project root to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 print("=" * 60)
 print("Testing Disease Diagnosis Project Setup")
@@ -17,7 +14,7 @@ print("=" * 60)
 # Test 1: Import Constants
 print("\n[Test 1] Importing Constants...")
 try:
-    from src.utils.Constants import CH_DIR
+    from aicds.utils.Constants import CH_DIR
     print("SUCCESS: Constants imported")
     print(f"   Project path detected: {CH_DIR}")
 except Exception as e:
@@ -35,11 +32,11 @@ else:
 # Test 3: Check key files (updated for new structure)
 print("\n[Test 3] Checking key project files...")
 key_files = [
-    "src/models/baseline_sent2vec.py",
+    "src/aicds/models/baseline_sent2vec.py",
     "data/raw/Symptoms-Diagnosis.txt",
     "config/environment.yml",
     "config/requirements.txt",
-    "src/utils/Constants.py"
+    "src/aicds/utils/Constants.py"
 ]
 
 all_found = True

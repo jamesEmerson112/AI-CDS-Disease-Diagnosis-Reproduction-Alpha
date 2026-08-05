@@ -20,12 +20,12 @@ import torch
 from scipy.spatial.distance import cosine
 
 # Import entity classes
-import src.entity.SymptomsDiagnosis as entity_module
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import *
+import aicds.entity.SymptomsDiagnosis as entity_module
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.utils.Constants import *
 
 # Import util_cy for preprocessing functions only
-from src.utils import cython_utils as util_cy
+from aicds.utils import cython_utils as util_cy
 
 # Ensure NLTK data is available
 import nltk
