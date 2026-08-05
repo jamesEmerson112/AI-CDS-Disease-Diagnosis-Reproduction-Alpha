@@ -1,0 +1,377 @@
+AI-CDS DISEASE DIAGNOSIS - RANKED TODO
+Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
+
+Three plan files, three different jobs:
+  correctness-fixes.md  what is scientifically wrong, and in what order to fix it
+  metric-redesign.md    what to replace the metric with
+  revival-roadmap.md    the refactor sequence (Phases 0-5) and current status
+
+RANKED FOR ONE GOAL: producing a DEFENSIBLE BioSentVec-vs-3-BERT comparison.
+Ranked differently if the goal were "ship a clean package" - the refactor items would
+rise. They are ranked low here on purpose, not because they are worthless.
+
+THE RULE THAT SHAPES EVERYTHING
+  Refactor work must NOT move the numbers; `pytest -m golden` compares byte-for-byte.
+  Correctness work DELIBERATELY moves the numbers.
+  They cannot run at the same time. Choosing the science first means FREEZING the
+  refactor at its current point, which is a legitimate call - just make it knowingly.
+
+
+===============================================================================
+RANKED MASTER LIST
+===============================================================================
+
+TIER 1 - BLOCKS ANY VALID COMPARISON. Nothing downstream means anything until these land.
+
+  [ ] P1   Decide the re-baselining strategy      (decision, ~1 hour)  <- BLOCKS P2
+  [ ] P2   A1. GroupKFold on SUBJECT_ID           (hours)
+  [ ] P3   A4c. Unify cross-arm diagnosis preprocessing  (hours)
+  [ ] P4   A2. Encoder-independent grader         (days)
+  [ ] P5   B1. Rank-aware metrics (Option C)      (days)
+
+TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
+
+  [ ] P6   B2. Set-level soft P/R/F1 (Option B)   (days)
+  [ ] P7   A4a. Fix "w/o" -> "w" negation loss    (hours)
+  [ ] P8   A4b. Fix comma-split fragments         (hours)
+  [ ] P9   B5. Keep the legacy number, labelled   (trivial)
+  [ ] P10  A5. Centre the embeddings              (ONE LINE)
+  [ ] P11  B4. Per-model threshold calibration    (hours)
+  [ ] P12  B3. MEAN aggregator alongside MAX      (hours)
+
+TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared code.
+
+  [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
+  [ ] P14  C10. Result provenance (run_metadata.json)  (hours)
+  [ ] P15  C2.  Unify output paths + the five globs    (hours)
+
+TIER 4 - FINISH THE REFACTOR. Phase 3 is the ship point.
+
+  [ ] P16  C1.  Delete the 8 stop_words monkeypatches
+  [ ] P17  C4.  Dead code + the last 2 baseline defects
+  [ ] P18  C3.  Salvage hf_automodel before deleting bert_eval.py
+  [ ] P19  C6.  A real CLI (no main.py; input() still blocks automation)
+  [ ] P20  C7.  ONE PerformanceIndex parser replacing three
+  [ ] P21  C5.  SentenceEncoder Protocol + encoder registry
+  [ ] P22  C8.  Fix the dashboard (404s today)
+  [ ] P23  C9.  scripts/ -> deprecation shims
+
+TIER 5 - NICE TO HAVE.
+
+  [ ] P24  C12. Per-case output files are all empty (decide: implement or delete)
+  [ ] P25  C13. Fold parallelisation via multiprocessing
+  [ ] P26  Retrieval interface -> local decoder (the RAG endgame)
+
+WHY THIS ORDER
+  P1 first because it is an undocumented decision that P2 forces and nobody has made.
+  P2 next because the leakage is ~10x the effect under study - every other number is
+    noise until it is fixed, and it affects BOTH arms.
+  P3 third because it is cheap and it targets YOUR specific question: today the two
+    arms preprocess diagnoses differently, so any baseline-vs-BERT delta is partly
+    measuring text handling rather than the encoder.
+  P4/P5 next because they are what make a cross-ENCODER claim defensible at all.
+  P13 sits above the rest of the refactor because the baseline arm now works and has
+    zero regression protection, and cython_utils.py is SHARED between the arms.
+
+
+===============================================================================
+TIER 1 DETAIL
+===============================================================================
+
+[ ] P1. DECIDE THE RE-BASELINING STRATEGY          *** BLOCKS P2 ***
+        Not in any plan document. This is a real gap, not an oversight you can skip.
+
+        P2 invalidates tests/golden/stub768/PerformanceIndex.txt, because the fold
+        files are INPUTS to the golden run. P7/P8/P10 invalidate it again. No document
+        says who re-mints the golden, or how the old and new baselines stay comparable.
+
+        The only stated discipline anywhere is the Phase 5 gate: "--aggregator max
+        still byte-reproduces the stub golden", i.e. keep the legacy path reproducible
+        while adding new paths beside it. That is probably the answer - decide it
+        explicitly before moving a single number.
+
+[ ] P2. A1 - REGROUP THE FOLDS BY PATIENT (GroupKFold on SUBJECT_ID)
+        Effort: hours.  Impact: largest single correction available.
+        "None of this is worth measuring until the fold leakage is fixed."
+
+        Why: folds split on HADM_ID, but 129 admissions come from only 100 patients
+        (one patient has 15). 41 of 129 test cases (31.8%) have another admission from
+        the same SUBJECT_ID sitting in their own retrieval pool. Per-fold contamination
+        15%-54%. Measured inflation at threshold 1.0: +0.11 to +0.26, against encoder
+        differences of only 0.015-0.046 and per-fold sigma of 0.071-0.124.
+        THE CONTAMINATION IS ~10x THE EFFECT UNDER STUDY.
+
+        Tell: on leaked cases all three encoders score IDENTICALLY (0.293 MAX,
+        0.415 TOP-10); on clean cases they diverge (0.080 / 0.114 / 0.125).
+
+        Affects BOTH arms - the fold files are shared static artifacts, so the
+        published 0.489/0.512/0.521 carry the leakage too.
+
+        This is a data regeneration, not a code change (folds are committed files).
+
+        TRAP: cython_utils.py:202 does line[line.index("_")+1 : len(line)-1] and drops
+        the last character unconditionally. ANY regenerated fold file MUST end with a
+        trailing newline or the last symptom of the last line loses a character.
+        (Docs citing :184 are stale - the package move shifted it.)
+
+        FOLD FILE FORMAT, verified across all 1290 existing lines:
+          {HADM_ID}_{raw SYMPTOMS field verbatim}.\n    <- note the APPENDED PERIOD
+        Files live at data/folds/Fold{0..9}/{TrainingSet,TestSet}.txt (116/13 lines,
+        117/12 for Fold9). Pure LF, zero CR bytes, despite a Windows checkout under
+        .gitattributes "* text=auto" - so write with newline="\n".
+        Raw file fields (';'-delimited): HADM_ID=0 SUBJECT_ID=1 SYMPTOMS=4 DIAGNOSIS=5.
+        Copy field 4 byte-for-byte; do not re-derive it.
+        Expect UNEVEN folds after grouping: subject 41976's 15 admissions land in one
+        test set, so sizes run ~9-17 rather than a uniform 13.
+        Two tests hard-code the current sizes and must change in the same commit:
+        test_characterize_dataset.py:114-127 and :158.
+
+        Grouped folds will be uneven in size. That is correct - report the per-fold n.
+        Re-measure the 58.1% ceiling afterwards; it was computed on the leaky folds.
+
+[ ] P3. A4c - UNIFY CROSS-ARM DIAGNOSIS PREPROCESSING
+        Effort: hours.  Impact: highest leverage on the baseline-vs-BERT question.
+
+        Baseline calls preprocess_sentence on diagnosis text (cython_utils.py:226);
+        the BERT path does NOT (bert_models.py:318-332).
+        119 of 145 (82.1%) unique diagnosis descriptions differ between the arms.
+
+        This breaks the project's central design constraint - both arms are supposed
+        to share everything EXCEPT the embedding model. Until it is fixed, no
+        baseline-vs-BERT number isolates the encoder.
+
+[ ] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
+        Effort: days.  Impact: makes cross-encoder comparison valid AT ALL.
+
+        Why: the same encoder both RETRIEVES and JUDGES. The grader is
+        get_diagnosis_similarity_by_description_max (cython_utils.py:315), which reads
+        the SAME embedding dict used for retrieval. Called from cython_utils.py:126
+        and :151 (baseline) and bert_models.py:509 (BERT) - so ALL FOUR ARMS
+        SELF-GRADE, not just the transformers.
+
+        A more compressed embedding space grades itself more leniently, "which is
+        exactly why BiomedBERT, the most compressed of the three, 'wins' at threshold
+        0.9" - 99.71% of its patient pairs clear 0.9 regardless of whether the
+        diagnosis is right.
+
+        Enabler: the DIAGNOSIS field already carries DRG group names. String
+        comparison needs no embedding.
+
+        *** PARTIAL HEAD START IN THE REPO - BUT NOT USABLE AS WRITTEN ***
+        Two encoder-independent graders already exist, ZERO CALLERS:
+          cython_utils.py:353  get_diagnosis_similarity_baseline
+                               graded - fraction of true diagnoses matched
+          cython_utils.py:365  get_diagnosis_similarity_by_drgcode
+                               binary  - 1 if any true diagnosis was predicted
+        DO NOT let P17's dead-code sweep delete them; they look dead only because
+        nothing calls them yet.
+
+        CORRECTED 2026-08-05 - an earlier version of this file called these a
+        ready-made head start. They are NOT. Four independent failure modes:
+          1. They compare the "apr,ms:" PREFIX as part of the string. `c in list`
+             is exact whole-string equality. The real grader at :315 strips the
+             prefix first (:321, :323); these two do not. So "hcfa:septicemia
+             age >17" and "apr,hcfa:septicemia age >17" - the same DRG - miss.
+          2. Prefix ORDER is hash-order nondeterministic. It is built by iterating
+             list(set(...)) at :291/:305-307, so "apr,hcfa:foo" vs "hcfa,apr:foo"
+             varies BETWEEN PROCESSES. A string-equality grader is therefore
+             nondeterministic. PYTHONHASHSEED is not actually pinned.
+          3. The prefix is a DRG *type* label (apr/hcfa/ms = three coding systems),
+             NOT a DRG code. There is no numeric DRG code anywhere in the data -
+             only description text. Cross-system exact matching essentially never
+             fires: "Intracranial Hemorrhage" vs "INTRACRANIAL HEMORRHAGE OR
+             CEREBRAL INFARCTION" for the same admission.
+          4. Prefix reconstruction is itself buggy - `if x in d` at :306 is
+             SUBSTRING containment, so "sepsis" inherits hcfa from "hcfa:severe
+             sepsis", and description "a" inherits hcfa because "a" is inside the
+             literal word "hcfa". Pinned at test_characterize_preprocessing.py:231-273.
+        Also: get_diagnosis_similarity_baseline divides by len(gt_diagnosis) with
+        no zero guard (:362).
+        Still the right starting point. Budget real work, not a one-liner.
+
+        DO NOT use exact match alone - see the 58.1% ceiling. Use graded relevance:
+        full credit for an exact DRG match, partial for a same-family match.
+
+[ ] P5. B1 - RANK-AWARE RETRIEVAL METRICS (Option C: Recall@K, MRR, nDCG)
+        Effort: days.  Depends on P4 (needs the encoder-independent relevance label).
+        The ONLY option that fixes all three metric defects at once.
+
+        Why: rank IS computed at bert_models.py:170 and then DISCARDED. The scorer
+        (containGreaterOrEqualsValue, cython_utils.py:366-370) returns true if ANY of
+        the K candidates clears threshold, so a hit at rank 1 and a hit at rank 50
+        count identically. That makes score(TOP-50) >= score(TOP-10) true BY
+        CONSTRUCTION - verified monotonic in 18/18 model x threshold combinations,
+        zero violations. The TOP-K curve in the README is arithmetic, not a finding.
+
+        Bonus: rank-aware metrics are SCALE-FREE, so they are immune to both the
+        saturation problem and the per-model calibration problem.
+
+
+===============================================================================
+TIER 2 DETAIL
+===============================================================================
+
+[ ] P6. B2 - SET-LEVEL SOFT PRECISION / RECALL / F1 (Option B)
+        Makes precision and recall genuinely independent quantities that can trade
+        off, which KILLS THE DEGENERACY. Does not fix the self-grading or rank defects.
+            soft_precision = mean over predicted p of ( max over true g of cos(g,p) )
+            soft_recall    = mean over true g      of ( max over predicted p of cos(g,p) )
+            soft_f1        = harmonic mean of the two
+
+[ ] P7. A4a - "w/o" COLLAPSES TO "w"; NEGATION IS DESTROYED
+        preprocess_sentence (cython_utils.py:251-260) pads "/" so "w/o" becomes
+        ["w","/","o"]; "/" is dropped as punctuation and "o" IS AN NLTK ENGLISH
+        STOPWORD. Verified: "Tracheostomy w/o Extensive Procedure" and
+        "Tracheostomy w Extensive Procedure" BOTH become
+        "tracheostomy w extensive procedure".
+        Fix: protect "w/o" before slash-padding, or drop "o" from the stopword set.
+        MUST BE ITS OWN COMMIT - it moves every number.
+
+[ ] P8. A4b - COMMA-SPLIT FRAGMENTS
+        Symptoms are ","-split but ICD-9 short titles contain commas, so 80 of 1,805
+        tokens (4.4%) are orphan fragments. " organism NOS" appears in 26 admissions;
+        because similarity is mean-of-max, any two of those get a spurious 1.0
+        contribution from a token carrying no clinical content. Severity distinctions
+        also collapse (stage I vs stage IV).
+        Fix is deterministic, no model needed: every fragment begins with a leading
+        space (the separator is "," while intra-label commas are ", "), so if a token
+        starts with a space, rejoin it to the previous token.
+        Verified to recover all 80: 573 -> 564 unique symptom strings.
+
+[ ] P9. B5 - KEEP THE LEGACY NUMBER
+        Report the existing MAX-at-0.6 result alongside everything new, clearly
+        labelled as legacy, so results stay comparable to Comito et al. and to this
+        project's own history. Keep every metric SIDE BY SIDE rather than replacing.
+
+[ ] P10. A5 - CENTRE THE EMBEDDINGS BEFORE COMPUTING COSINE
+        Effort: ONE LINE.  Impact: unknown, worth measuring.
+        BERT embeddings are anisotropic (Ethayarajh 2019) - a documented property of
+        the MODELS, not of MIMIC-III. Demo with random vectors: a shared offset moves
+        mean pairwise cosine from 0.001 to 0.94, reproducing the three models'
+        measured similarity profiles with no medical content whatsoever.
+        Fix: subtract the mean embedding (the core of BERT-whitening). If it works, a
+        single shared threshold becomes meaningful again.
+        NOT THE SAME as normalize_embeddings=False at bert_models.py:337-343, which
+        cannot affect results at all - L2-normalising before a cosine that already
+        divides by the norms is algebraically a no-op.
+
+[ ] P11. B4 - PER-MODEL THRESHOLD CALIBRATION (Option D)
+        Set each threshold at a fixed PERCENTILE of that model's own similarity
+        distribution instead of a hardcoded 0.6. Equal-selectivity values from the
+        measured medians: BiomedBERT ~0.93, Bio_ClinicalBERT ~0.84, BlueBERT ~0.72.
+        A patch, not a fix - makes cross-model comparison meaningful without
+        addressing leniency or rank.
+
+[ ] P12. B3 - MEAN INSTEAD OF MAX (Option A)
+        Cheap. Fixes only the leniency defect. New problem: dilution - a patient with
+        3 true diagnoses and 1 correct prediction averages the correct match against
+        2 irrelevant comparisons, so patients with more diagnoses are penalised for
+        having more diagnoses. Worth having as a registered aggregator, not an end state.
+
+
+===============================================================================
+THE 58.1% CEILING - READ BEFORE DESIGNING ANY EXACT-MATCH METRIC
+===============================================================================
+The method predicts by copying an answer from a retrieved patient, so the answer must
+EXIST in the pool to be copied. 145 unique diagnosis descriptions across 129
+admissions; 105 of them (72.4%) occur exactly once in the whole dataset.
+Only 75 of 129 test cases (58.1%) have their correct DRG present anywhere in their
+fold's training pool. The other 41.9% are unwinnable under exact matching - not
+because retrieval is bad, but because the answer is not in the library.
+A PERFECT RETRIEVER THEREFORE CAPS AT 58.1% UNDER EXACT MATCH.
+
+Three ways to handle it, in order of preference:
+  1. Graded relevance - partial credit for a same-family DRG. Raises the ceiling and
+     is more clinically sensible than all-or-nothing.
+  2. Report against the ceiling - "X of a possible 58.1%". Honest and standard.
+  3. Restrict evaluation to the 75 winnable cases and say so. Cleanest signal,
+     smallest n.
+
+NOTE: measured on the CURRENT, LEAKY folds. Re-measure after P2. Neither plan says so.
+
+
+===============================================================================
+TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
+===============================================================================
+
+[ ] P13. C11 - MINT A BASELINE-ARM GOLDEN
+        tests/golden/ covers the BERT/stub path ONLY. cython_utils.py is SHARED
+        between the arms, so a change there could move the baseline numbers with every
+        test still green - exactly the failure mode the golden exists to prevent.
+        Now mintable, because the arm finally runs. Linux only; needs the 21 GB model
+        and ~13 minutes of compute.
+
+[ ] P14. C10 - RESULT PROVENANCE
+        No output directory records the commit, machine, or library versions that
+        produced it. A four-line run_metadata.json per run closes it, and it matters
+        for defending any number later.
+
+[ ] P15. C2 - UNIFY OUTPUT PATHS AND THE FIVE GLOBS
+        BIGGER THAN THE ROADMAP RECORDS: five discovery sites disagree four ways about
+        the base directory, AND the baseline writes "Prediction Output_" with a SPACE
+        (baseline_sent2vec.py:272-274), so NO glob in the repo matches baseline output
+        at all. Fix direction is FORCED by test_golden.py:115, which hard-codes
+        \d{8}_\d{2}-\d{2}-\d{2} - writers must unify onto the UNDERSCORE spelling.
+        See docs/findings/10-output-path-fragmentation.md.
+
+[ ] P16. C1 - DELETE THE 8 stop_words MONKEYPATCHES  (the roadmap says 4; it is WRONG)
+        baseline_sent2vec.py:36, bert_models.py:211, bert_eval.py:63,
+        analyze_score_distributions.py:46, test_characterize_dataset.py:196 and :215,
+        test_characterize_similarity.py:46, test_characterize_preprocessing.py:37.
+        All eight are the identical set(stopwords.words('english')), so removal is
+        provably inert. Three explanatory comment blocks go stale with them.
+
+[ ] P17. C4 - DEAD CODE + THE LAST 2 BASELINE DEFECTS
+        Baseline still outstanding: everything from baseline_sent2vec.py:186 to EOF
+        runs AT IMPORT TIME (no run_analysis(), no __main__ guard); and two conflicting
+        PerformanceIndex handles (:279 opened 'w' and never closed, :420 a second
+        handle 'a' to the same path).
+        *** DO NOT DELETE cython_utils.py:353 and :365 - see P4. ***
+        entity/{Admission,Symptom,Drgcodes} are imported by test_reorganization.py:17-19,
+        so deletion needs a same-commit test edit.
+
+[ ] P18. C3 - SALVAGE hf_automodel BEFORE DELETING bert_eval.py
+        Those 545 orphaned lines hold a raw AutoModel + mean-pooling path (genuinely
+        different from sentence-transformers pooling) and the repo's ONLY GPU-aware
+        line (:74). Archive rather than delete; record the SHA.
+        Do NOT carry its three defects across: :106 wrong data path, :121 the unbound
+        `entity` NameError, :367 an os.getcwd() output root.
+
+[ ] P19. C6 - A REAL CLI
+        There is no main.py and no [project.scripts]. bert_models.py:80 still calls
+        input("Select model [1-3, Q]: ") interactively, which blocks automation.
+        Needs a stdin-closed test over every subcommand.
+
+[ ] P20. C7 - ONE PerformanceIndex PARSER REPLACING THREE
+        analyze_performance.py:73, build_readme_plots.py:37, build_dashboard_data.py:29
+        - the latter two are near-identical clones that disagree only on emitting "FS"
+        vs "F1". Plus one discovery rule. Gate on an equivalence test.
+
+[ ] P21. C5 - SentenceEncoder PROTOCOL + ENCODER REGISTRY
+        embed_sentence(text) -> seq[seq[float]], with readable names and 1|2|3 aliases.
+        This is also the seam the RAG work needs.
+
+[ ] P22. C8 - FIX THE DASHBOARD (it 404s today)
+        Regenerate into dashboard/public/data/, commit it, delete the stray
+        dashboard/dashboard/ tree.
+
+[ ] P23. C9 - CONVERT scripts/ TO DEPRECATION SHIMS
+
+[ ] P24. C12 - PER-CASE OUTPUT FILES ARE ALL EMPTY
+        The baseline emits 258 zero-byte files; cython_utils.py:65-66 opens the two
+        handles and :170-171 closes them with NOTHING written in between. The BERT arm
+        never opens them but still creates the Fold*/ dirs (bert_models.py:451-456).
+        Neither arm has EVER produced per-case output. Decide: implement or delete.
+
+[ ] P25. C13 - FOLD PARALLELISATION
+        The 10 folds are embarrassingly parallel and the loop is 93%+ of runtime.
+        Use multiprocessing, NOT threads - the loop is pure-Python arithmetic, so the
+        GIL serialises it. Do NOT vectorise with numpy: pairwise/SIMD summation changes
+        the last bits and breaks the byte-exact golden.
+
+[ ] P26. RETRIEVAL INTERFACE -> LOCAL DECODER  (the RAG endgame)
+        The pipeline is ALREADY retrieve-then-predict, so this is a short conceptual
+        hop: what is missing is a clean retrieval interface (P21) plus a generation
+        step. A HOSTED LLM API IS RULED OUT - the repo carries MIMIC-III under a
+        PhysioNet DUA, so the decoder must run locally. This is where a GPU finally
+        earns its keep; for the encoder arms it buys under 0.5%.

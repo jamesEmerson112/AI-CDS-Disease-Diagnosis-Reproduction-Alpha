@@ -118,7 +118,7 @@ Nothing can be verified until torch imports.
 
 **Gate:** `pytest -m "not network"` green; `python -c "import torch"` clean.
 
-### Phase 1 — Characterize and freeze (~2–3 days) — **NEXT**
+### Phase 1 — Characterize and freeze (~2–3 days) — **DONE**
 
 **The safety net goes in before any code moves.** This is the phase that makes the rest safe, and it's the one that's tempting to skip.
 
@@ -135,10 +135,12 @@ Nothing can be verified until torch imports.
 - `git mv src src/aicds` + mechanical import rewrite. **Nothing else in this commit.**
 - Real `pyproject.toml`: dependencies, extras `baseline`/`bert`/`dev`, `[project.scripts]`, readme → root README. Collapse the three dependency manifests. Delete every `sys.path.insert`.
 - Consolidate `ensure_nltk_data` (×3) and `format_time` (×3).
-- `stop_words` into `preprocessing.py` as **two commits**: define it while leaving all 4 monkey-patches in place, then delete the patches. It feeds tokenization → embeddings → every number, so it deserves an unambiguous culprit commit.
-- Replace `os.getcwd()` output roots with an explicit `--out`/`results/` root; fix the `build_readme_plots` glob in the same commit.
+- `stop_words` into `preprocessing.py` as **two commits**: define it while leaving all **8** monkey-patches in place, then delete the patches. It feeds tokenization → embeddings → every number, so it deserves an unambiguous culprit commit. (First commit landed as `5ae01a0`, which defines it in `cython_utils.py` rather than a new `preprocessing.py`. The count of 4 here was wrong: the sites are `baseline_sent2vec.py:36`, `bert_models.py:211`, `bert_eval.py:63`, `analyze_score_distributions.py:46`, `test_characterize_dataset.py:196` and `:215`, `test_characterize_similarity.py:46`, `test_characterize_preprocessing.py:37` — all the identical `set(stopwords.words('english'))`, so deletion is provably inert.)
+- Replace `os.getcwd()` output roots with an explicit `--out`/`results/` root; fix the `build_readme_plots` glob in the same commit. **Bigger than recorded here** — there are five discovery sites disagreeing four ways about the base directory, *and* the baseline writes `Prediction Output_` with a space so no glob matches it at all. See `docs/findings/10-output-path-fragmentation.md`; the fix direction is forced by `test_golden.py:115`.
 - **Salvage `encoders/hf_automodel.py` out of `bert_eval.py` before deleting the rest.** Those 545 orphaned lines contain a raw `AutoModel` + mean-pooling path — a genuinely different encoder from SentenceTransformer's pooling — and the repo's only GPU-aware line. That's exactly what roadmap items (iii) more encoders and (vi) a decoder chatbot would reuse. Archive rather than delete; record the SHA.
 - Then delete the verified-dead: 4 `cython_utils` functions, `print_log` (references an undefined `LOG`), unused gensim/sklearn imports, `orig_stdout`, dead matplotlib import, `entity/{Admission,Symptom,Drgcodes}`.
+  - **DO NOT delete `get_diagnosis_similarity_baseline` (`cython_utils.py:353`) or `get_diagnosis_similarity_by_drgcode` (`:365`).** They are zero-caller, so they look dead, but they are the only **encoder-independent** graders in the repository — pure string comparison, no embedding — and they are precisely what `correctness-fixes.md` item 2 ("replace the cosine grader") needs. `:353` returns graded credit (fraction of ground-truth diagnoses matched), `:365` returns a binary hit. Deleting them would throw away a written-and-committed head start on the metric work. Move them somewhere honest instead; only `get_diagnosis_similarity_by_description_max_model` (`:334`) and `print_log` are genuinely disposable.
+  - Note `entity/{Admission,Symptom,Drgcodes}` are imported by `tests/test_reorganization.py:17-19`, so deletion needs a same-commit test edit.
 - **Fix the baseline's 5 defects** — data path, the `entity.` NameError, wrap module scope in `run_analysis()` with a `__main__` guard, collapse the two conflicting `PerformanceIndex` handles (`:315` opened and abandoned, `:456` a second handle to the same path), and the discarded `line.replace("\n","")`. Ship it behind an **`[UNVERIFIED]`** banner — it cannot be validated without the 21 GB model.
 - **Do not merge the two pipeline loops.** They diverge in ways that matter: the BERT per-case header is space-padded while the aggregate uses a tab-delimited constant, and BERT per-case recall is `tp/(tp+fp)` where the baseline's is `tp/nrow`. Unifying them would silently rewrite the baseline's entire output format, and the oracle is BERT-only so nothing would catch it.
 
