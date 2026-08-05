@@ -14,21 +14,37 @@ stale at different rates.
 
 Read in this order:
 
+If you want one document, read **[findings/07-comparison-validity.md](findings/07-comparison-validity.md)** —
+it is the synthesis, and it says what the comparison would need in order to mean anything. Otherwise:
+
 1. [findings/01-baseline-reproduction.md](findings/01-baseline-reproduction.md) — what the
-   original paper (Comito et al., 2022) did, and the status of reproducing it.
+   original paper (Comito et al., 2022) did, and the status of reproducing it. **Superseded by 09:
+   the baseline now runs.**
 2. [findings/02-encoder-comparison.md](findings/02-encoder-comparison.md) — the four-encoder
    comparison (BioSentVec plus the three BERT models), which is the original contribution here.
-   Note that only three of the four were ever measured.
+   All four have now been measured, on one machine.
 3. [findings/03-metric-saturation.md](findings/03-metric-saturation.md) — why all three encoders
    score a perfect 1.000 at threshold 0.6.
 4. [findings/04-metric-degeneracy.md](findings/04-metric-degeneracy.md) — the reported precision,
    recall, and F-score are the same number in all 12,600 committed BERT rows, so every "F1" there
-   is accuracy. (The baseline may be a genuine F-score — see the section on that.)
+   is accuracy. **Resolved 2026-08-05** — it is the embedding space, not the code; see 09.
 5. [findings/05-patient-leakage.md](findings/05-patient-leakage.md) — **read this one.** 41 of 129
    test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, roughly
    ten times the difference between the encoders being compared.
 6. [findings/06-preprocessing-defects.md](findings/06-preprocessing-defects.md) — `w/o` becomes
    `w`, so negation is destroyed; and 4.4% of symptom tokens are fragments of shredded labels.
+7. [findings/07-comparison-validity.md](findings/07-comparison-validity.md) — the synthesis of
+   01–06: five separable reasons the comparison is not valid yet, and what would fix each.
+8. [findings/08-runtime-and-cost.md](findings/08-runtime-and-cost.md) — the encoder costs almost
+   nothing. Embedding is 0.17–0.45% of wall-clock; 93%+ is a single-threaded pure-Python cosine
+   loop. **A GPU buys nothing for these arms.** Also: results are platform-independent, verified
+   bit-for-bit across macOS/ARM and x86 Linux.
+9. [findings/09-baseline-first-run.md](findings/09-baseline-first-run.md) — the baseline finally
+   ran, reproducing the published F1 to within 0.007 (0.482 vs 0.489), and in doing so settled the
+   open question in 04.
+10. [findings/10-output-path-fragmentation.md](findings/10-output-path-fragmentation.md) — nothing
+    in the repo can find the baseline's output: it writes `Prediction Output_` with a space while
+    all five discovery sites glob `Prediction_Output_*`. Also, every per-case output file is empty.
 
 ## If you are setting up on a new machine
 
@@ -39,7 +55,7 @@ OpenMP runtime.
 [guides/data-use.md](guides/data-use.md) explains why this repository must not receive new
 clinical data, and how the pre-commit hook enforces that.
 
-## The four problems, and why they are separate
+## The four problems, and how they relate
 
 These are easy to conflate, and conflating them leads to fixing the wrong thing. The first two are
 metric design; the last two are plain bugs that nobody would defend.
@@ -51,10 +67,18 @@ metric design; the last two are plain bugs that nobody would defend.
 | **Leakage** (05) | 41 of 129 test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, ~10× the encoder differences | `GroupKFold` on `SUBJECT_ID`; regenerate the folds |
 | **Preprocessing** (06) | `w/o` → `w` destroys negation; 4.4% of symptom tokens are fragments of comma-shredded labels | Protect `w/o`; rejoin space-prefixed tokens |
 
-Fixing any one of these does not fix the others. Saturation and degeneracy are related — degeneracy
-may be a *downstream consequence* of compactness, since a well-spread space lets the pruning gate
-fire and cases abstain (see doc 04) — but leakage and preprocessing are wholly independent of both,
-and of each other.
+Fixing any one of these does not fix the others — with one exception, now settled.
+
+**Saturation and degeneracy turned out to be the same root cause at two different gates**
+(confirmed 2026-08-05, when the baseline finally ran and supplied the missing artifact). A compact
+biomedical embedding space means nothing ever falls below `PRUNING_SIMILARITY = 0.5`, so the BERT
+arm **never abstains**, so `tp + fp == nrow`, so precision collapses into recall — that is
+degeneracy. The same compactness means nearly every pair clears 0.6 — that is saturation. The
+baseline's looser 700D space trips neither: it abstains on 30 of 129 cases (23.3%) and scores 0.482
+rather than 1.000. The tell is a single column: `TP+FP` sums to exactly 12.9, the mean fold test
+size, for all three BERT arms, and to 9.9 for the baseline.
+
+Leakage and preprocessing remain wholly independent of both, and of each other.
 
 **Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md). Leakage first:
 it is the largest correction and the cheapest, since the folds are data rather than code.
