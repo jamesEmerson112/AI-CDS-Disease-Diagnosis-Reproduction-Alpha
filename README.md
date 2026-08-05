@@ -2,12 +2,86 @@
 
 Clinical Decision Support System for disease diagnosis prediction using patient symptom similarity.
 
-## Overview
+This project reproduces the clinical decision support system of *"AI-Driven Clinical Decision
+Support: Enhancing Disease Diagnosis Exploiting Patients Similarity"* (Comito et al., 2022) and then
+swaps its 2019 BioSentVec encoder for three modern biomedical BERT models behind the **identical**
+retrieval and scoring pipeline. The result is a null result, and the null result is the
+contribution: under this evaluation the old encoder and the new ones cannot be told apart.
 
-This project reproduces and extends the clinical decision support system from *"AI-Driven Clinical Decision Support: Enhancing Disease Diagnosis Exploiting Patients Similarity"* (Comito et al., 2022). We first reproduce the original BioSentVec baseline, then replace it with three biomedical BERT models as an original extension. Our score distribution analysis reveals that the BERT evaluation metric saturates at the paper's threshold, making the F1 scores unsuitable for model comparison — this is the key finding and an open problem for future work.
+---
 
-> **Three caveats on every score below.**
->
+## Headline comparison — four encoders, one pipeline
+
+All four arms were run on **one machine** (RunPod Linux, AMD Threadripper 7960X) from **one commit**
+(`7da5901`) on 2026-08-05. The three transformer runs reproduce earlier Apple-silicon runs
+**bit-for-bit to all 17 significant figures**, so hardware is not a confound.
+
+### Threshold 1.0, TOP-10 — the only setting where all four separate
+
+| Rank | Encoder | Dim | Precision | Recall | F1 | TP | FP | `TP+FP` | Pred. rate |
+|:----:|---------|:---:|:---------:|:------:|:------:|:---:|:---:|:-------:|:----------:|
+| 1 | Bio_ClinicalBERT | 768 | 0.2853 | 0.2853 | **0.2853** | 3.7 | 9.2 | 12.9 | 1.0000 |
+| 2 | **BioSentVec — the 2019 baseline** | 700 | **0.3254** | 0.2474 | **0.2801** | 3.2 | 6.7 | **9.9** | **0.7679** |
+| 3 | BiomedBERT | 768 | 0.2545 | 0.2545 | **0.2545** | 3.3 | 9.6 | 12.9 | 1.0000 |
+| 4 | BlueBERT | 768 | 0.2391 | 0.2391 | **0.2391** | 3.1 | 9.8 | 12.9 | 1.0000 |
+
+*TP and FP are means across the 10 folds (~12.9 test cases per fold). Pred. rate is the fraction of
+test cases on which the system predicts at all.*
+
+**Verdict — no encoder ranking is supported by this experiment.** The 700-dimensional,
+non-contextual, 2019 baseline lands **second of four** and is statistically indistinguishable from
+all three modern transformers. The total spread across the four arms is **0.046** (0.239 to 0.285);
+the best transformer beats the baseline by **0.005**. Both are dwarfed by the patient-leakage
+inflation of **+0.11 to +0.26** and are smaller than the per-fold standard deviation of
+**0.071–0.124**. The differences under study are an order of magnitude below the noise and the known
+contamination, so any claim that one of these encoders is better than another would be unfounded.
+
+**Read the `TP+FP` and prediction-rate columns together — they are the whole degeneracy story.**
+Every BERT arm sums to exactly **12.9**, the mean fold test size, so `tp + fp == nrow`; precision
+therefore reduces to `tp/nrow`, which *is* recall, and their harmonic mean is that same number. Every
+BERT "F1" in this table is accuracy. The baseline sums to **9.9** because it abstains on 23.2% of
+cases when nothing clears the pruning gate — which is also why it holds the **highest precision of
+all four arms** (0.3254) while scoring second on F1.
+
+### Threshold 0.6, TOP-10 — SATURATED. This is the metric, not the model.
+
+| Encoder | Precision | Recall | F1 | Pred. rate | Reading |
+|---------|:---------:|:------:|:------:|:----------:|---------|
+| BioSentVec (baseline) | 0.5624 | 0.4256 | **0.4824** | 0.7679 | reproduces published 0.489 (Δ 0.007) |
+| Bio_ClinicalBERT | 1.0000 | 1.0000 | **1.000** | 1.0000 | **saturated — not a result** |
+| BiomedBERT | 1.0000 | 1.0000 | **1.000** | 1.0000 | **saturated — not a result** |
+| BlueBERT | 1.0000 | 1.0000 | **1.000** | 1.0000 | **saturated — not a result** |
+
+**The three 1.000s are an artifact and must not be read as an achievement.** At threshold 0.6 the
+compactness of biomedical embedding space (mean pairwise cosine 0.72–0.93 *even between unrelated
+diagnoses*) combined with the MAX-over-Cartesian-product aggregator puts ~100% of patient pairs above
+the bar, so essentially everything counts as a match. 0.6 is the paper's threshold, which is why it
+appears here at all; it cannot discriminate between models. The threshold-1.0 table above is the one
+to read.
+
+**These numbers carry three known defects** — metric saturation, metric degeneracy, and patient
+leakage in the folds. Read [the caveat block immediately below](#three-caveats-that-apply-to-every-score-in-this-repo)
+before quoting any figure from this README.
+
+**Full six-page visual version:** `results/model_comparison.pdf`, generated by
+
+```bash
+python scripts/compare_models.py
+```
+
+It covers provenance, the summary table, threshold curves, TOP-K curves, the prediction-rate
+(degeneracy) page, and the complete threshold × TOP-K grid.
+
+**An inversion worth noting.** The baseline model file is **20.93 GiB**; the three transformers are
+416 MB, 420 MB, and 420 MB — the 2019 baseline is roughly **17× larger than all three modern models
+combined**, because sent2vec stores an explicit unigram + bigram embedding table while BERT computes
+representations contextually from ~110M parameters. The larger, older, storage-heavy model matches
+them.
+
+---
+
+## Three caveats that apply to every score in this repo
+
 > **1. The metric saturates.** At threshold 0.6 nearly every diagnosis pair counts as a match, so
 > F1 = 1.000 measures the metric, not the model
 > ([details](docs/findings/03-metric-saturation.md)).
@@ -16,7 +90,7 @@ This project reproduces and extends the clinical decision support system from *"
 > committed BERT results, precision, recall, and F-score are the *same number*, because every test
 > case increments exactly one of TP or FP. **Confirmed 2026-08-05:** this is a property of the
 > embedding space, not the code. The baseline arm finally ran and its precision and recall *do*
-> diverge, because it abstains on 30 of 129 cases (23.3%) when nothing clears the pruning gate.
+> diverge, because it abstains on ~30 of 129 cases (23.2%) when nothing clears the pruning gate.
 > BERT's space is compact enough that it never abstains. Saturation and degeneracy are therefore
 > **one root cause at two different gates** ([details](docs/findings/04-metric-degeneracy.md)).
 >
@@ -25,9 +99,16 @@ This project reproduces and extends the clinical decision support system from *"
 > another admission from the same patient in their own retrieval pool. Inflation at threshold 1.0 is
 > **+0.11 to +0.26**, against encoder differences of **0.015–0.046**. This affects **both arms**, so
 > the published 0.489/0.512/0.521 carry it too ([details](docs/findings/05-patient-leakage.md)).
->
-> Start at [docs/](docs/README.md); the synthesis is
-> [07-comparison-validity.md](docs/findings/07-comparison-validity.md).
+
+**A fourth constraint bounds every exact-match number above.** Only **75 of 129 test cases (58.1%)**
+have their correct DRG present anywhere in their own fold's training pool — 105 of the 145 unique
+diagnoses occur exactly once in the dataset. A *perfect* retriever therefore caps at 58.1% under
+exact matching, which is the context in which the threshold-1.0 scores of 0.24–0.29 should be read.
+
+Start at [docs/](docs/README.md); the synthesis is
+[07-comparison-validity.md](docs/findings/07-comparison-validity.md).
+
+---
 
 ## Baseline Reproduction
 
@@ -53,63 +134,54 @@ Linux-only. Both were fixed and the arm ran end to end on a rented Linux box (10
 number by this codebase. Note precision ≠ recall here, unlike every BERT row: the baseline declines
 to predict on 23.2% of cases. Details: [09-baseline-first-run.md](docs/findings/09-baseline-first-run.md).
 
+Threshold 0.6 is the paper's own operating point, so this row is the correct comparison against the
+paper — but it is still a saturated threshold for the BERT arms, and it is not where the four
+encoders can be compared to each other. For that, see the threshold-1.0 table above.
+
 ```bash
 python scripts/run_baseline.py    # Linux only; needs the 20.93 GiB BioSentVec model
 ```
 
 ## BERT Extension (Original Contribution)
 
-We replace BioSentVec with three biomedical BERT models that produce 768-dimensional embeddings:
+We replace BioSentVec with three biomedical BERT models that produce 768-dimensional embeddings.
+Everything else in the pipeline — fold splits, pruning, aggregation, scoring, thresholds — is
+unchanged, so the encoder is the only moving part:
 
-| Model | HuggingFace Path | Training Data |
-|-------|-------------------|---------------|
-| Bio_ClinicalBERT | `emilyalsentzer/Bio_ClinicalBERT` | MIMIC-III clinical notes |
-| BiomedBERT | `microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract` | PubMed abstracts |
-| BlueBERT | `bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12` | PubMed + MIMIC-III |
+| Model | HuggingFace Path | Training Data | Size |
+|-------|-------------------|---------------|:----:|
+| Bio_ClinicalBERT | `emilyalsentzer/Bio_ClinicalBERT` | MIMIC-III clinical notes | 416 MB |
+| BiomedBERT | `microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract` | PubMed abstracts | 420 MB |
+| BlueBERT | `bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12` | PubMed + MIMIC-III | 420 MB |
 
-**Results at threshold = 0.6 (baseline reference point):**
+**Results at threshold = 0.6 — SATURATED across all three BERT arms. This table measures the metric,
+not the models; it is included only because 0.6 is the paper's threshold.**
 
-| Method | BioSentVec (Baseline) | Bio_ClinicalBERT | BiomedBERT | BlueBERT |
-|--------|:---------------------:|:-----------------:|:----------:|:--------:|
-| TOP-10 | 0.489 | 1.000 | 1.000 | 1.000 |
-| TOP-20 | 0.512 | 1.000 | 1.000 | 1.000 |
-| TOP-30 | 0.521 | 1.000 | 1.000 | 1.000 |
+| Method | BioSentVec (published) | Bio_ClinicalBERT | BiomedBERT | BlueBERT |
+|--------|:----------------------:|:-----------------:|:----------:|:--------:|
+| TOP-10 @ 0.6 | 0.489 | 1.000 *(saturated)* | 1.000 *(saturated)* | 1.000 *(saturated)* |
+| TOP-20 @ 0.6 | 0.512 | 1.000 *(saturated)* | 1.000 *(saturated)* | 1.000 *(saturated)* |
+| TOP-30 @ 0.6 | 0.521 | 1.000 *(saturated)* | 1.000 *(saturated)* | 1.000 *(saturated)* |
 
-All three BERT models achieve perfect F1 = 1.000 at threshold 0.6. BiomedBERT maintains perfect scores through threshold 0.9. **However, these results are misleading** — see the score distribution analysis below.
+All three BERT models reach F1 = 1.000 at threshold 0.6, and BiomedBERT holds it through threshold
+0.9. **This is not diagnostic accuracy** — see the score distribution analysis below for the
+mechanism. Note also that TOP-K scores rise monotonically with K because a single hit inside K
+suffices and there is no penalty for the other K−1 predictions; that curve is an artifact of the
+metric, not evidence that larger K retrieves better.
 
-### The comparison that is actually informative
-
-Threshold 0.6 cannot distinguish the models because all three saturate there. **Threshold 1.0 is the
-only setting where all four arms separate:**
-
-| Method | Bio_ClinicalBERT | **BioSentVec** | BiomedBERT | BlueBERT |
-|--------|:----------------:|:--------------:|:----------:|:--------:|
-| TOP-10 @ 1.0 | 0.285 | **0.280** | 0.254 | 0.239 |
-| `TP+FP` per fold | 12.9 | **9.9** | 12.9 | 12.9 |
-| precision == recall? | yes | **no** | yes | yes |
-
-Two things to read off this table.
-
-**The baseline sits *inside* the BERT range, not below it.** The gap between the best transformer and
-the 700D baseline is **0.005** — far smaller than the +0.11 to +0.26 leakage inflation and smaller
-than the per-fold σ of 0.071–0.124. **No encoder ranking is supported by this experiment.** That is
-the honest conclusion, and a more interesting one than a spurious win.
-
-**The `TP+FP` column is the whole degeneracy finding at a glance.** Every BERT arm sums to exactly
-12.9 — the mean fold test size — so `tp + fp == nrow`, precision collapses into recall, and the
-"F1" is accuracy. The baseline sums to 9.9 because it abstains.
-
-A four-arm comparison PDF is generated by `python scripts/compare_models.py` →
-`results/model_comparison.pdf`.
+The informative comparison is the [threshold-1.0 headline table](#threshold-10-top-10--the-only-setting-where-all-four-separate)
+at the top of this README.
 
 ### Runtime — the encoder is not the bottleneck
 
-Measured across the three committed runs: **embedding is 0.17–0.45% of wall-clock**, while the
-single-threaded pure-Python cosine loop is over 93%. Total fold time varies only **1.7%** across the
-three transformers. Making embedding instantaneous would cut a 21.98-minute run to 21.88 minutes, so
-**a GPU buys essentially nothing for these arms** ([details](docs/findings/08-runtime-and-cost.md)).
+On the four-arm pod run: **14.27 / 14.18 / 14.05 minutes** for Bio_ClinicalBERT / BiomedBERT /
+BlueBERT, and **~12.7 minutes** for the BioSentVec baseline. Measured across the committed runs,
+**embedding is 0.17–0.45% of wall-clock**, while the single-threaded pure-Python cosine loop is over
+93%. Total fold time varies only **1.7%** across the three transformers. Making embedding
+instantaneous would cut a 21.98-minute run to 21.88 minutes, so **a GPU buys essentially nothing for
+these arms** ([details](docs/findings/08-runtime-and-cost.md)).
 
-Results are also **platform-independent**: re-running Bio_ClinicalBERT on x86 Linux reproduced the
+Results are also **platform-independent**: re-running the BERT arms on x86 Linux reproduced the
 Apple-silicon numbers **bit-for-bit, to all 17 significant figures.**
 
 ```bash
@@ -126,13 +198,15 @@ These plots are generated directly from the three experiment outputs in:
 - `Prediction_Output_BlueBERT_15022026_12-24-38/PerformanceIndex.txt`
 
 ![F1 vs threshold (TOP-10)](docs/readme_plots/f1_vs_threshold_top10.svg)
-*At TOP-10, BiomedBERT stays saturated through 0.9 while BlueBERT drops earlier.*
+*At TOP-10, BiomedBERT stays saturated through 0.9 while BlueBERT drops earlier. The 1.000 region on
+the left of this chart is metric saturation, not accuracy.*
 
 ![F1 vs threshold (TOP-50)](docs/readme_plots/f1_vs_threshold_top50.svg)
 *At TOP-50, all models improve at strict thresholds, but separation remains at 0.9/1.0.*
 
 ![F1 vs TOP-K at threshold 0.9](docs/readme_plots/f1_vs_topk_t09.svg)
-*Top-K expansion strongly helps Bio_ClinicalBERT and BlueBERT at threshold 0.9.*
+*Top-K expansion strongly helps Bio_ClinicalBERT and BlueBERT at threshold 0.9 — but one hit inside K
+suffices and the other K−1 predictions are unpenalised, so the upward slope is a metric artifact.*
 
 ![F1 vs TOP-K at threshold 1.0](docs/readme_plots/f1_vs_topk_t10.svg)
 *At exact-match threshold 1.0, model differences are modest and increase gradually with K.*
@@ -198,12 +272,14 @@ src/                     # Source code
 scripts/                 # Entry point scripts
   run_baseline.py        # Run BioSentVec baseline
   run_all_bert_models.py # Run all 3 BERT models sequentially
+  compare_models.py      # Four-arm comparison PDF -> results/model_comparison.pdf
   analyze_score_distributions.py  # Score distribution analysis
 data/                    # Data files
   folds/                 # 10-fold cross-validation splits
   raw/                   # Raw data files
   models/                # Pre-trained model files
 docs/                    # Documentation and analysis reports
+results/                 # Comparison outputs (model_comparison.pdf, per-arm runs)
 config/                  # Environment and requirements files
 tests/                   # Test files
 ```
@@ -219,7 +295,7 @@ conda activate disease-diagnosis
 
 **Key dependencies:** sentence-transformers, torch, matplotlib, numpy
 
-**For baseline only:** Also requires sent2vec and the BioSentVec pre-trained model (~21 GB). See [docs/guides/setup.md](docs/guides/setup.md) for details. Note the baseline arm does not currently run — see [docs/findings/01-baseline-reproduction.md](docs/findings/01-baseline-reproduction.md).
+**For baseline only:** Also requires sent2vec and the BioSentVec pre-trained model (20.93 GiB). See [docs/guides/setup.md](docs/guides/setup.md) for details. The baseline arm is **Linux-only** — `sent2vec` cannot be built under MSVC — and first ran successfully on 2026-08-05; see [docs/findings/09-baseline-first-run.md](docs/findings/09-baseline-first-run.md) for that run and [docs/findings/01-baseline-reproduction.md](docs/findings/01-baseline-reproduction.md) for the history of the crash bugs.
 
 ## Citation
 
