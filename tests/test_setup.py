@@ -6,10 +6,6 @@ Run this from the project root: python -m tests.test_setup
 import os
 import sys
 
-# Add project root to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-sys.path.insert(0, os.path.join(project_root, "src"))
 
 print("=" * 60)
 print("Testing Disease Diagnosis Project Setup")

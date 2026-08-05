@@ -7,10 +7,7 @@ Run from project root: python scripts/run_baseline.py
 import os
 import sys
 
-# Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-sys.path.insert(0, os.path.join(project_root, "src"))
 
 # Import and run the baseline module
 if __name__ == "__main__":

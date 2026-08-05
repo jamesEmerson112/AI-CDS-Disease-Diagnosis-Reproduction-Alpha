@@ -6,10 +6,7 @@ Run after reorganization: python -m pytest tests/test_reorganization.py -v
 import sys
 import os
 
-# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-sys.path.insert(0, os.path.join(project_root, "src"))
 
 
 class TestImports:
