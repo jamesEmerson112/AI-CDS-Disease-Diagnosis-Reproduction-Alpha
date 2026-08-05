@@ -3,7 +3,7 @@ from scipy import spatial
 import numpy as np
 
 from datetime import datetime
-from src.utils.Constants import *
+from aicds.utils.Constants import *
 
 import nltk
 from nltk import word_tokenize

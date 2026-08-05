@@ -47,7 +47,7 @@ def _load_bert_functions():
     module-level code (model loading, dataset reading, interactive prompts).
     """
     import pathlib
-    src_path = pathlib.Path(__file__).parent.parent / "src" / "models" / "bert_models.py"
+    src_path = pathlib.Path(__file__).parent.parent / "src" / "aicds" / "models" / "bert_models.py"
     source = src_path.read_text()
     tree = ast.parse(source, filename=str(src_path))
 

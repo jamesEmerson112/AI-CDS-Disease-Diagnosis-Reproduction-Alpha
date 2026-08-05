@@ -18,9 +18,9 @@ import os
 
 from nltk.corpus import stopwords
 
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils import cython_utils
-from src.utils.Constants import CH_DIR
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.utils import cython_utils
+from aicds.utils.Constants import CH_DIR
 
 RAW_DATASET_PATH = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
 FOLDS_DIR = os.path.join(CH_DIR, "data", "folds")

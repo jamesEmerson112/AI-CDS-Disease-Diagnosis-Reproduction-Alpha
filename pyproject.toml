@@ -40,9 +40,9 @@ include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Puts the repo root on sys.path so tests import `src.*` without the
-# sys.path.insert boilerplate each file currently repeats.
-pythonpath = ["."]
+# "src" makes the `aicds` package importable; "." keeps the repo root there so
+# tests can import their own helpers (`from tests.stubs import StubEncoder`).
+pythonpath = [".", "src"]
 markers = [
     "network: needs internet (downloads models from HuggingFace)",
     "slow: takes minutes — full pipeline runs",

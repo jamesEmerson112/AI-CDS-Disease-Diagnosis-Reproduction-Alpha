@@ -13,11 +13,11 @@ import sklearn
 from scipy import spatial
 from sklearn.model_selection import train_test_split, KFold
 
-import src.entity.SymptomsDiagnosis as entity_module
-from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
-from src.utils.Constants import *
+import aicds.entity.SymptomsDiagnosis as entity_module
+from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
+from aicds.utils.Constants import *
 
-from src.utils import cython_utils as util_cy
+from aicds.utils import cython_utils as util_cy
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False

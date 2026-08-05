@@ -10,6 +10,7 @@ import os
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, "src"))
 
 def main():
     print("=" * 50)
@@ -22,7 +23,8 @@ def main():
     # Check 1: Directory structure
     print("\n[1] Checking directory structure...")
     required_dirs = [
-        "src", "src/models", "src/entity", "src/utils", "src/evaluation",
+        "src", "src/aicds", "src/aicds/models", "src/aicds/entity",
+        "src/aicds/utils", "src/aicds/evaluation",
         "scripts", "tests", "data", "data/folds", "data/raw",
         "output", "docs", "config", "archive"
     ]
@@ -37,21 +39,21 @@ def main():
     # Check 2: Import tests
     print("\n[2] Checking imports...")
     try:
-        from src.entity.SymptomsDiagnosis import SymptomsDiagnosis
+        from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
         print("    OK: src.entity.SymptomsDiagnosis")
     except ImportError as e:
         print(f"    FAIL: src.entity.SymptomsDiagnosis - {e}")
         failed = True
 
     try:
-        from src.utils.Constants import CH_DIR, K_FOLD
+        from aicds.utils.Constants import CH_DIR, K_FOLD
         print(f"    OK: src.utils.Constants (CH_DIR={CH_DIR})")
     except ImportError as e:
         print(f"    FAIL: src.utils.Constants - {e}")
         failed = True
 
     try:
-        from src.utils import cython_utils
+        from aicds.utils import cython_utils
         print("    OK: src.utils.cython_utils")
     except ImportError as e:
         if "nltk" in str(e) or "gensim" in str(e) or "sent2vec" in str(e):
@@ -95,7 +97,7 @@ def main():
     # Check 5: CH_DIR resolution
     print("\n[5] Checking Constants.CH_DIR resolution...")
     try:
-        from src.utils.Constants import CH_DIR
+        from aicds.utils.Constants import CH_DIR
         if os.path.isdir(CH_DIR):
             print(f"    OK: CH_DIR exists")
             if os.path.isfile(os.path.join(CH_DIR, "pyproject.toml")):

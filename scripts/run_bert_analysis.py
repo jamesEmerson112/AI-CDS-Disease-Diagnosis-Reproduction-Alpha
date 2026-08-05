@@ -11,6 +11,7 @@ import sys
 # Add project root to Python path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.join(project_root, "src"))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BERT Disease Diagnosis Analysis")
@@ -28,7 +29,7 @@ if __name__ == "__main__":
     print(f"Project root: {project_root}")
     print("")
 
-    from src.models.bert_models import run_analysis, MODELS
+    from aicds.models.bert_models import run_analysis, MODELS
 
     if args.model == "all":
         output_dirs = []

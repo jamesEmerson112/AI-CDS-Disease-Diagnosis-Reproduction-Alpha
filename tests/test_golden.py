@@ -243,7 +243,7 @@ def run_pipeline(dim=STUB_DIM, model_id=MODEL_ID):
     directory and the result located by glob. Returns
     ``(raw_text, run_dir)``.
     """
-    from src.models import bert_models
+    from aicds.models import bert_models
     from tests.stubs import StubEncoder
 
     previous_cwd = os.getcwd()
