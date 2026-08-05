@@ -16,13 +16,19 @@ Read in this order:
 
 1. [findings/01-baseline-reproduction.md](findings/01-baseline-reproduction.md) — what the
    original paper (Comito et al., 2022) did, and the status of reproducing it.
-2. [findings/02-encoder-comparison.md](findings/02-encoder-comparison.md) — the three-encoder
-   BERT comparison, which is the original contribution here.
+2. [findings/02-encoder-comparison.md](findings/02-encoder-comparison.md) — the four-encoder
+   comparison (BioSentVec plus the three BERT models), which is the original contribution here.
+   Note that only three of the four were ever measured.
 3. [findings/03-metric-saturation.md](findings/03-metric-saturation.md) — why all three encoders
    score a perfect 1.000 at threshold 0.6.
-4. [findings/04-metric-degeneracy.md](findings/04-metric-degeneracy.md) — **read this one.** The
-   reported precision, recall, and F-score are the same number in all 12,600 result rows. Every
-   "F1" in this project is accuracy.
+4. [findings/04-metric-degeneracy.md](findings/04-metric-degeneracy.md) — the reported precision,
+   recall, and F-score are the same number in all 12,600 committed BERT rows, so every "F1" there
+   is accuracy. (The baseline may be a genuine F-score — see the section on that.)
+5. [findings/05-patient-leakage.md](findings/05-patient-leakage.md) — **read this one.** 41 of 129
+   test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, roughly
+   ten times the difference between the encoders being compared.
+6. [findings/06-preprocessing-defects.md](findings/06-preprocessing-defects.md) — `w/o` becomes
+   `w`, so negation is destroyed; and 4.4% of symptom tokens are fragments of shredded labels.
 
 ## If you are setting up on a new machine
 
@@ -33,19 +39,25 @@ OpenMP runtime.
 [guides/data-use.md](guides/data-use.md) explains why this repository must not receive new
 clinical data, and how the pre-commit hook enforces that.
 
-## The two problems, and why they are separate
+## The four problems, and why they are separate
 
-These are easy to conflate, and conflating them leads to fixing the wrong thing.
+These are easy to conflate, and conflating them leads to fixing the wrong thing. The first two are
+metric design; the last two are plain bugs that nobody would defend.
 
-| | Saturation (doc 03) | Degeneracy (doc 04) |
+| Problem | What goes wrong | Fix |
 |---|---|---|
-| **What** | Nearly every diagnosis pair clears threshold 0.6 | P, R, and F1 are always the same number |
-| **Cause** | Compact embedding space + MAX over the Cartesian product | `tp + fp == nrow` by construction, so precision reduces to `tp/nrow`, which is recall |
-| **Depends on threshold?** | Yes — raising it helps | No — holds at every threshold |
-| **Fix** | A different aggregator, or a stricter threshold | A genuine set-level P/R/F1 over the diagnosis sets |
+| **Saturation** (03) | Nearly every diagnosis pair clears threshold 0.6, because the embedding space is compact and MAX over the Cartesian product amplifies it | A different aggregator, a stricter threshold, or centring the embeddings |
+| **Degeneracy** (04) | P, R, and F1 are the same number in all 12,600 committed BERT rows — every case increments exactly one of TP or FP | A genuine set-level P/R/F1, or rank-aware metrics |
+| **Leakage** (05) | 41 of 129 test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, ~10× the encoder differences | `GroupKFold` on `SUBJECT_ID`; regenerate the folds |
+| **Preprocessing** (06) | `w/o` → `w` destroys negation; 4.4% of symptom tokens are fragments of comma-shredded labels | Protect `w/o`; rejoin space-prefixed tokens |
 
-Fixing saturation alone would not fix degeneracy. The scores would come down from 1.000 and
-still be one-dimensional.
+Fixing any one of these does not fix the others. Saturation and degeneracy are related — degeneracy
+may be a *downstream consequence* of compactness, since a well-spread space lets the pruning gate
+fire and cases abstain (see doc 04) — but leakage and preprocessing are wholly independent of both,
+and of each other.
+
+**Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md). Leakage first:
+it is the largest correction and the cheapest, since the folds are data rather than code.
 
 ## Reference
 

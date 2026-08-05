@@ -15,10 +15,12 @@ In every committed result file — all three BERT arms, all 10 folds, all 6 retr
 
 `P`, `R`, and `FS` are printed as three separate columns, but they carry one bit of information
 between them: whether this test case's retrieved diagnosis cleared the threshold. There is no
-row anywhere in the committed data where they diverge. **Every "F1" this project has ever
-reported — the published baseline 0.489 / 0.512 / 0.521, and the BERT arm's F1 = 1.000 — is
-arithmetically identical to accuracy**, not to precision, recall, or a genuine harmonic mean of
-the two.
+row anywhere in the committed data where they diverge. **Every "F1" in the committed BERT results
+— including the headline F1 = 1.000 — is arithmetically identical to accuracy**, not to
+precision, recall, or a genuine harmonic mean of the two.
+
+The published BioSentVec figures are a separate case and this claim does **not** extend to them;
+see [The baseline may not be degenerate](#the-baseline-may-not-be-degenerate) below.
 
 **This is a different, independent problem from
 [03-metric-saturation.md](03-metric-saturation.md).** Saturation says the 0.6 threshold is too
@@ -207,14 +209,45 @@ fact about this dataset. Given the embedding-compactness finding in
 higher thresholds than 0.5 — it holds without exception here, which is exactly what the
 zero-violation `prediction_rate` count above confirms.
 
+### The baseline may not be degenerate
+
+The invariant is verified across the 12,600 committed BERT rows. It has **not** been shown for the
+BioSentVec arm, and the only surviving record of a baseline run suggests it did *not* hold there.
+[`archive/stale-docs/Reproduce_w_transformers.md`](../../archive/stale-docs/Reproduce_w_transformers.md)
+lines 134-143 report, at threshold 0.6:
+
+| Method | F1 | Precision | Recall |
+|---|---:|---:|---:|
+| TOP-10 | 0.489 | 0.621 | 0.412 |
+| TOP-20 | 0.512 | 0.598 | 0.448 |
+| TOP-30 | 0.521 | 0.587 | 0.467 |
+
+Precision and recall diverge, and the F1 column is a genuine harmonic mean of them — TOP-20 and
+TOP-30 reproduce to three decimals. If those numbers are real then `tp + fp < nrow` for that run:
+some test cases had *no* candidate clearing `PRUNING_SIMILARITY = 0.5` and abstained entirely.
+That is what one would expect from sent2vec's less compressed similarity distribution, and it
+would make degeneracy a **downstream consequence of embedding compactness** rather than an
+independent structural property of the code.
+
+Treat this as unresolved rather than settled, because the table is itself suspect: the implied
+prediction rate (`recall / precision`) drifts 0.663 → 0.749 → 0.795 as K increases, but the
+pruning gate is independent of K, so one run of this pipeline should abstain on the same cases at
+every K. Either the table was assembled from more than one run or it was edited by hand. No
+artifact survives to check it against — see
+[01-baseline-reproduction.md](01-baseline-reproduction.md).
+
+**What this changes:** the degeneracy result stands for everything this repository has actually
+measured. The claim that the *published baseline* numbers are also accuracy is withdrawn — it was
+an inference from shared code, not an observation, and the only surviving evidence points the
+other way.
+
 ## Why this matters
 
-- **Every published score in this project is accuracy, not F1.** The baseline's 0.489 / 0.512 /
-  0.521 (per [`README.md`](../../README.md)) and the BERT arm's F1 = 1.000 are all, by this
-  arithmetic, "fraction of test patients for whom the retrieved diagnosis (or diagnoses, for
-  TOP-K) cleared the threshold." That is a real, computable, and honest quantity — but it is not a
-  precision/recall trade-off, and comparing it directly to the paper's own reported F1 assumes a
-  measurement that was never actually taken.
+- **Every score in the committed BERT results is accuracy, not F1.** The BERT arm's F1 = 1.000 is,
+  by this arithmetic, "fraction of test patients for whom the retrieved diagnosis (or diagnoses,
+  for TOP-K) cleared the threshold." That is a real, computable, and honest quantity — but it is
+  not a precision/recall trade-off, and comparing it directly to the paper's own reported F1
+  assumes a measurement that was never actually taken.
 
 - **The metric cannot trade precision against recall**, because there is no mechanism by which
   retrieving more candidates can cost anything. A TOP-K test case is scored TP the moment *any one*

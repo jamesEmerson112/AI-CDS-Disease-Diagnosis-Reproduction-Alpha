@@ -9,14 +9,22 @@ A reproduction and extension of Comito et al. (2022), *"AI-Driven Clinical Decis
 1. **Baseline** — BioSentVec (sent2vec, 700D). **Scaffolded from the original authors' code, not this repo owner's contribution.** Published F1 0.489/0.512/0.521 at threshold 0.6. **Currently crashes — see Known defects.**
 2. **BERT extension (the original contribution)** — Bio_ClinicalBERT, BiomedBERT, BlueBERT (768D) behind the *identical* pipeline.
 
-### Two independent problems with the headline metric
+### Four independent problems with the headline result
 
-Do not conflate these; fixing one does not fix the other.
+Do not conflate these; fixing one does not fix the others. The first two are metric design; the
+last two are plain bugs.
 
 - **Saturation.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. See `docs/findings/03-metric-saturation.md`.
-- **Degeneracy.** Across **all 12,600 rows of committed results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow` always, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" ever reported here — baseline included — is accuracy.** Threshold-*independent*. See `docs/findings/04-metric-degeneracy.md`.
+- **Degeneracy.** Across **all 12,600 rows of committed BERT results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow`, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" in the committed BERT results is accuracy.** Threshold-*independent*. **Do not extend this to the baseline** — `archive/stale-docs/Reproduce_w_transformers.md:134-143` reports P=0.621/R=0.412/F1=0.489 at TOP-10, i.e. P≠R, meaning that run abstained on cases with no candidate above `PRUNING_SIMILARITY`. If real, degeneracy is a *consequence* of BERT's compact space rather than a structural property of the code. Unresolved; no artifact survives. See `docs/findings/04-metric-degeneracy.md`.
+
+- **Patient leakage.** The folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15). **41 of 129 test cases (31.8%) have another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0: **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination is ~10× the effect under study. Tell: on leaked cases all three encoders score *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverge. **Affects both arms** — the folds are shared static files, so the published 0.489/0.512/0.521 carry it too. Fix: `GroupKFold` on `SUBJECT_ID`. See `docs/findings/05-patient-leakage.md`.
+- **Preprocessing defects.** `preprocess_sentence` pads `/` then drops `o` as an NLTK stopword, so **`w/o` becomes `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both become `tracheostomy w extensive procedure`. Negation is destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) are orphan fragments** (`" organism NOS"` ×26) that get embedded as if they were symptoms and create spurious 1.0 matches. See `docs/findings/06-preprocessing-defects.md`.
 
 A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. That curve is an artifact, not a result. The real fix is a genuine set-level P/R/F1 over the diagnosis sets, which is why "pluggable metrics" is the substance of the next phase rather than a nicety.
+
+**Before designing any exact-match metric:** only **75 of 129 test cases (58.1%)** have their correct DRG present anywhere in their fold's training pool — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at 58.1% under exact matching. Prefer graded relevance. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
+
+**The shared-pipeline constraint is already broken.** The baseline calls `preprocess_sentence` on diagnosis text (`cython_utils.py:226`); the BERT path does not (`bert_models.py:318-332`), so 119/145 (82.1%) of descriptions differ between arms. Any baseline-vs-BERT number is confounded by preprocessing, not just encoder.
 
 ## Setting up on a new machine
 

@@ -9,10 +9,12 @@ This project reproduces and extends the clinical decision support system from *"
 > **Two caveats on every score below.** First, the metric **saturates**: at threshold 0.6 nearly
 > every diagnosis pair counts as a match, so F1 = 1.000 measures the metric, not the model
 > ([details](docs/findings/03-metric-saturation.md)). Second, and independently, the metric is
-> **degenerate**: across all 12,600 rows of committed results, precision, recall, and F-score are
-> the *same number*, because `tp + fp == nrow` by construction. Every "F1" reported here — the
-> baseline's 0.489/0.512/0.521 included — is arithmetically identical to accuracy
-> ([details](docs/findings/04-metric-degeneracy.md)). Start at [docs/](docs/README.md).
+> **degenerate**: across all 12,600 rows of committed BERT results, precision, recall, and F-score
+> are the *same number*, because every test case increments exactly one of TP or FP. Every "F1" in
+> the BERT tables below is arithmetically identical to accuracy. (The baseline row is a separate
+> case — precision and recall diverged in the only surviving record of that run, so it may be a
+> genuine F-score; see [details](docs/findings/04-metric-degeneracy.md).) Start at
+> [docs/](docs/README.md).
 
 ## Baseline Reproduction
 
