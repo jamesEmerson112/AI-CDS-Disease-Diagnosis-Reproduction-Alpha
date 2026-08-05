@@ -76,11 +76,21 @@ Re-apply the symlink if `import torch` starts failing again.
 
 ```bash
 pytest
-# 32 passed, 1 deselected
+# 93 passed, 2 deselected
 ```
 
-The deselected test downloads a model from HuggingFace. Run it explicitly when you want to
-confirm network access and the model cache:
+The two deselected tests are opt-in. One downloads a model from HuggingFace; the other is the
+**golden regression** — it runs the full 10-fold pipeline against a committed byte-exact
+reference and takes about 20 minutes:
+
+```bash
+pytest -m golden
+```
+
+Run that one before and after any refactoring commit. Nothing else in the suite will notice if
+the pipeline's numbers change, because every other test checks a piece rather than the whole.
+
+The HuggingFace download test, when you want to confirm network access and the model cache:
 
 ```bash
 pytest -m network

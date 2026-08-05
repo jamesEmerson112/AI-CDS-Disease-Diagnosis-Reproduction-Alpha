@@ -1,10 +1,19 @@
 # Reviving AI-CDS: reorganization, `main.py`, and docs
 
-> **Status — Phase 0 complete** (commit `bb84b82`). Environment repaired, test suite green at
-> 32 passed / 1 deselected, data-use guard installed, and `docs/` rebuilt into
-> `findings/` + `guides/` + `reference/`. **Phase 4 (docs) was pulled forward and is also done.**
-> Phases 1–3 — the characterization harness, the `src/aicds/` package move, and the `main.py`
-> CLI — are the remaining work. Phase 5 is optional payoff.
+> **Status — Phases 0, 1 and 4 complete.** Phase 0 (`bb84b82`): environment repaired, data-use
+> guard installed, `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4 (docs)
+> was pulled forward and is also done. **Phase 1 (safety net) is now done**: 93 passed /
+> 2 deselected in ~4s, plus `pytest -m golden` — a byte-exact 10-fold regression against a
+> committed reference, ~20 min.
+>
+> **Phases 2–3 are the remaining work**: the `src/aicds/` package move and the `main.py` CLI.
+> Phase 5's metric work has been **removed from this roadmap** — the scientific correctness
+> fixes (patient leakage, the `w/o` negation bug, comma-split fragments, embedding centring,
+> rank-aware metrics) are tracked separately in [correctness-fixes.md](correctness-fixes.md)
+> and [metric-redesign.md](metric-redesign.md), to be done in a dedicated session.
+>
+> The scope rule for Phases 2–3: **if a change moves the numbers it is out of scope; if it fixes
+> something that crashes, blocks, or writes to the wrong place it is in scope.**
 >
 > Decisions, now settled by the repo owner:
 > 1. **Committed MIMIC-III data — leave it.** No history rewrite. A pre-commit hook blocks

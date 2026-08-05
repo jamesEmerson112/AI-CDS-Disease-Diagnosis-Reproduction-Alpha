@@ -63,12 +63,18 @@ python scripts/verify_setup.py                   # smoke test (reports one spuri
 Tests:
 
 ```bash
-pytest                    # 32 passed, 1 deselected, ~2s — this is the green baseline
+pytest                    # 93 passed, 2 deselected, ~4s — this is the green baseline
+pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
+                          # byte-exact reference. ~20 min. Run it before and after
+                          # any refactor commit; it is the only thing that catches
+                          # the numbers moving while every other test stays green.
 pytest -m network         # opt in to the HuggingFace download test
 pytest tests/test_bert_symptom_pairwise.py::TestComputePatientSimilarityPairwise -v
 ```
 
-Config lives in `pyproject.toml` `[tool.pytest.ini_options]`: `pythonpath = ["."]` (so tests need no `sys.path` hack), markers `network`/`slow`/`golden`, and `addopts = -m 'not network'`. `tests/conftest.py` pins `PYTHONHASHSEED=0` — this matters because `bert_models` builds its encode batch from `list(unique_symptoms)` over a *set*, so hash order changes batch composition, padding, and the last ulp of every embedding.
+Config lives in `pyproject.toml` `[tool.pytest.ini_options]`: `pythonpath = ["."]` (so tests need no `sys.path` hack), markers `network`/`slow`/`golden`, and `addopts = -m 'not network and not slow'`.
+
+**`tests/conftest.py`'s `PYTHONHASHSEED` line does not do what it looks like.** CPython reads that variable at interpreter start-up, before any Python code — including `conftest.py` — runs, so `os.environ.setdefault("PYTHONHASHSEED", "0")` has no effect on the current process. It only affects subprocesses. This matters because `bert_models` builds its encode batch from `list(unique_symptoms)` over a *set*, and `preprocess_diagnosis` routes through `list(set(...))` twice, so hash order genuinely varies run to run. Export it in the shell if you need determinism: `PYTHONHASHSEED=0 pytest`. The golden test is immune either way — `StubEncoder` derives every vector from `sha256(text)` alone, which was verified across seeds 0 and 12345.
 
 Dashboard (React 19 + Vite 7 + Tailwind 4 + d3), from `dashboard/`: `npm install && npm run dev`.
 

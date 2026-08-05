@@ -351,13 +351,17 @@ def compute_bert_diagnosis_embeddings(model, admissions):
     print(f"[INFO] Format: Wrapped in arrays for util_cy compatibility")
     return embeddings
 
-def run_analysis(model_id=None):
+def run_analysis(model_id=None, encoder=None):
     """
     Run the full BERT disease diagnosis analysis pipeline.
 
     Args:
         model_id: '1' (Bio_ClinicalBERT), '2' (BiomedBERT), '3' (BlueBERT),
                   or None for interactive selection.
+        encoder: optional pre-built encoder to use instead of loading a
+                 SentenceTransformer. Must expose .device, .max_seq_length and
+                 .encode(...). Only the model construction is bypassed; every
+                 downstream step is unchanged. Leave as None for normal runs.
 
     Returns:
         str: Path to the output directory containing results.
@@ -404,8 +408,9 @@ def run_analysis(model_id=None):
     print(f"[INFO] Training: {model_config['description']}")
     print("[INFO] This replaces the 21GB BioSentVec model with contextualized BERT embeddings")
     print("[INFO] USING PURE PYTHON PREDICTION - No util_cy.predictS2V dependencies")
+    injected = encoder is not None
     try:
-        model = SentenceTransformer(model_path)
+        model = encoder if injected else SentenceTransformer(model_path)
         print(f"[INFO] Model device: {model.device}")
         print(f"[INFO] Model max sequence length: {model.max_seq_length}")
         model_time = time.perf_counter() - model_start
@@ -413,6 +418,8 @@ def run_analysis(model_id=None):
         print(f"[SUCCESS] {model_name} loaded successfully!")
         print(f"[TIMING] Model loading: {format_time(model_time)}")
     except Exception as e:
+        if injected:
+            raise
         print(f"[ERROR] Loading {model_name} failed: {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()

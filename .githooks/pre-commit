@@ -18,4 +18,30 @@ if [ -n "$new_data" ]; then
     echo "  git commit --no-verify" >&2
     exit 1
 fi
+
+# Content check, not just a path check. The path rule above missed a real case:
+# a generated golden file under tests/ carried all 129 MIMIC-III HADM_IDs and
+# would have been committed silently. Any NEW file that carries a meaningful
+# number of clinical identifiers is worth a deliberate decision, wherever it
+# lives. Threshold is 20 so ordinary prose citing an ID or two still passes.
+id_carriers=""
+for f in $(git diff --cached --name-only --diff-filter=A); do
+    [ -f "$f" ] || continue
+    case "$f" in *.png|*.jpg|*.svg|*.pdf|*.bin) continue ;; esac
+    n=$(grep -o -E 'HADM_ID[=: ]*[0-9]{6}' "$f" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    [ "${n:-0}" -ge 20 ] && id_carriers="$id_carriers  $f ($n distinct HADM_IDs)
+"
+done
+
+if [ -n "$id_carriers" ]; then
+    echo "BLOCKED: new file(s) carrying clinical identifiers:" >&2
+    printf '%s' "$id_carriers" >&2
+    echo "" >&2
+    echo "These are MIMIC-III admission IDs, covered by the same PhysioNet DUA." >&2
+    echo "See docs/guides/data-use.md." >&2
+    echo "" >&2
+    echo "If this is intentional, commit deliberately with:" >&2
+    echo "  git commit --no-verify" >&2
+    exit 1
+fi
 exit 0

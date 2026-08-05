@@ -48,5 +48,10 @@ markers = [
     "slow: takes minutes — full pipeline runs",
     "golden: byte-compares output against a committed reference run",
 ]
-# Network tests are opt-in: `pytest -m network` to include them.
-addopts = "-m 'not network'"
+# Network and slow tests are both opt-in. The golden regression runs the full
+# 10-fold pipeline and takes ~26 minutes, so a bare `pytest` must not include
+# it or nobody will run tests at all.
+#   pytest              fast unit + characterization  (~4s)
+#   pytest -m golden    the byte-exact pipeline regression
+#   pytest -m network   the HuggingFace download smoke test
+addopts = "-m 'not network and not slow'"
