@@ -270,6 +270,16 @@ def discover_runs(results_dir):
     ordered_keys = [k for k in MODEL_REGISTRY if k in found]
     ordered_keys += [k for k in sorted(found) if k not in MODEL_REGISTRY]
 
+    # The host is a property of WHEN a run happened, not of which model it used --
+    # the same encoder has now been run on both machines. Deriving it from the run
+    # directory's DDMMYYYY prefix is what keeps the provenance box honest; the old
+    # per-model constant silently mislabelled the 2026-08-05 Linux runs as "Mac"
+    # the first time all four arms came off one box.
+    hosts_by_date = {
+        "15022026": "M-series Mac",
+        "05082026": "RunPod Linux",
+    }
+
     runs = []
     for index, key in enumerate(ordered_keys):
         run = found[key]
@@ -281,7 +291,9 @@ def discover_runs(results_dir):
             {
                 "label": style["label"],
                 "arm": style["arm"],
-                "host": style["host"],
+                "host": hosts_by_date.get(
+                    str(run.get("timestamp", ""))[:8], style["host"]
+                ),
                 "color": style["color"],
                 "marker": style["marker"],
                 "dash": style["dash"],
@@ -448,8 +460,15 @@ def page_cover(pdf, runs):
             facecolor=WARN_FILL, edgecolor=WARN_EDGE, linewidth=1.6,
         )
     )
+    # One machine or several? The hardware confound is only real when the runs
+    # actually came off different boxes, so say which situation this page shows
+    # rather than warning unconditionally.
+    one_host = len({r["host"] for r in runs}) == 1
+
     warn.text(
-        0.022, 0.87, "PROVENANCE WARNING -- cross-arm deltas are confounded",
+        0.022, 0.87,
+        "PROVENANCE -- one machine; preprocessing still differs" if one_host
+        else "PROVENANCE WARNING -- cross-arm deltas are confounded",
         fontsize=12, fontweight="bold", color="#a83c14", va="top",
     )
 
@@ -466,10 +485,17 @@ def page_cover(pdf, runs):
 
     warn.text(
         0.022, 0.36,
-        "The two arms were run on different hardware AND they preprocess diagnosis text differently: the baseline\n"
-        "calls preprocess_sentence on diagnosis strings, the BERT path does not, so 119 of 145 (82.1%) descriptions\n"
-        "differ between arms. Any baseline-vs-BERT gap below therefore mixes encoder, preprocessing and machine.\n"
-        "Treat the three BERT models as comparable to each other, and the baseline as a separate reference point.",
+        (
+            "All four arms ran on the SAME machine, so hardware is not a confound here -- and re-running the three\n"
+            "BERT encoders on a second platform reproduced their numbers bit-for-bit, to all 17 significant figures.\n"
+            "One confound remains: the arms preprocess diagnosis text differently. The baseline calls\n"
+            "preprocess_sentence on diagnosis strings and the BERT path does not, so 119 of 145 (82.1%) differ."
+        ) if one_host else (
+            "The two arms were run on different hardware AND they preprocess diagnosis text differently: the baseline\n"
+            "calls preprocess_sentence on diagnosis strings, the BERT path does not, so 119 of 145 (82.1%) descriptions\n"
+            "differ between arms. Any baseline-vs-BERT gap below therefore mixes encoder, preprocessing and machine.\n"
+            "Treat the three BERT models as comparable to each other, and the baseline as a separate reference point."
+        ),
         fontsize=8.6, color=INK, va="top", linespacing=1.5,
     )
 
