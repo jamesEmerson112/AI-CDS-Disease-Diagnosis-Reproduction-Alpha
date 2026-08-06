@@ -19,6 +19,14 @@ from aicds.utils.Constants import *
 
 from aicds.utils import cython_utils as util_cy
 from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid module caching issues
+# Imported by name rather than reached as util_cy.use_corrected_preprocessing
+# because tests/test_bert_symptom_pairwise.py AST-loads the functions below
+# against a MagicMock util_cy: an attribute lookup there would return a
+# MagicMock, which is TRUTHY, silently flipping the stub namespace onto the
+# corrected branch. A bare name raises NameError instead unless the test
+# registers it (it does, at the _load_bert_functions namespace).
+from aicds.utils.cython_utils import use_corrected_preprocessing
+from aicds.config import LEGACY
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -220,14 +228,20 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 # Timing utilities live in aicds.utils.runtime, imported above.
 
-def compute_bert_symptom_embeddings(model, admissions):
+def compute_bert_symptom_embeddings(model, admissions, config=LEGACY):
     """
     Compute BERT embeddings for individual symptoms, keyed by preprocessed symptom text.
 
     Matches baseline util_cy.embending_symptoms() which:
-    1. Splits admission.symptoms by comma
+    1. Splits admission.symptoms via util_cy.split_symptoms
     2. Preprocesses each symptom individually
     3. Keys the dict by preprocessed symptom text (not HADM_ID)
+
+    `config` MUST be the same one passed to util_cy.load_dataset. This dict is
+    keyed by preprocessed text and the fold loader produces the lookup keys, so
+    mixing versions does not raise -- it silently misses every lookup and
+    scores every patient pair at zero. Defaults to LEGACY, which is what the
+    golden run exercises.
     """
     embeddings = {}
 
@@ -236,9 +250,9 @@ def compute_bert_symptom_embeddings(model, admissions):
     # Collect all unique preprocessed symptoms across all admissions
     unique_symptoms = set()
     for admission_key, admission in admissions.items():
-        symptoms_list = admission.symptoms.split(',')
+        symptoms_list = util_cy.split_symptoms(admission.symptoms, config)
         for s in symptoms_list:
-            preprocessed = util_cy.preprocess_sentence(s)
+            preprocessed = util_cy.preprocess_sentence(s, config)
             unique_symptoms.add(preprocessed)
 
     unique_symptoms_list = list(unique_symptoms)
@@ -264,10 +278,19 @@ def compute_bert_symptom_embeddings(model, admissions):
 
     return embeddings
 
-def compute_bert_diagnosis_embeddings(model, admissions):
+def compute_bert_diagnosis_embeddings(model, admissions, config=LEGACY):
     """
     Compute BERT embeddings KEYED BY DIAGNOSIS TEXT (not HADM_ID)
     This matches util_cy.embending_diagnosis() which keys by diagnosis description
+
+    FIX 4 -- shared diagnosis preprocessing across the two arms. Only the text
+    handed to the encoder is affected; the dict KEYS stay raw under both
+    versions, because that is what the baseline does and what the consumer
+    (util_cy.get_diagnosis_similarity_by_description_max) looks up by. See the
+    comment on the encode call below.
+
+    ``config`` defaults to LEGACY, so the golden's run_analysis path encodes
+    the same raw strings it always did.
     """
     embeddings = {}
     
@@ -294,16 +317,53 @@ def compute_bert_diagnosis_embeddings(model, admissions):
     print(f"[INFO] Computing BERT embeddings for {len(unique_diagnoses)} unique diagnosis texts...")
     print(f"[INFO] Batch size: 32")
 
+    # ----------------------------------------------------------------------
+    # FIX 4 -- both arms must hand the encoder the same string.
+    #
+    # util_cy.embending_diagnosis (the baseline arm) does:
+    #     embs = model.embed_sentence(preprocess_sentence(diagnosis_description))
+    #     embending_diagnosis_dict.update({diagnosis_description: embs})
+    # i.e. it embeds the PREPROCESSED text but keys by the RAW description.
+    # This arm reproduced the keying and missed the preprocessing, so 119 of
+    # the 145 unique descriptions (82.1%) reached the two encoders as different
+    # strings -- meaning any BioSentVec-vs-BERT delta was partly a measurement
+    # of text handling rather than of the encoder, which is precisely what the
+    # shared-pipeline constraint exists to rule out.
+    #
+    # Only the ENCODED text moves. The dict keys below stay raw under both
+    # versions: get_diagnosis_similarity_by_description_max looks up by the raw
+    # description sliced out of the ground-truth/predicted diagnosis strings,
+    # so preprocessing the keys would break every lookup rather than fix
+    # anything.
+    #
+    # Dedup semantics are preserved, not tightened. Two raw descriptions that
+    # preprocess to the same string still get two entries here holding equal
+    # embeddings -- exactly what the baseline produces, since it re-embeds per
+    # occurrence and keys by raw text. Collapsing them would re-diverge the
+    # arms.
+    #
+    # Gated because it moves every BERT number: LEGACY keeps encoding raw text
+    # so tests/golden/stub768/PerformanceIndex.txt stays byte-exact.
+    # ----------------------------------------------------------------------
+    if use_corrected_preprocessing(config):
+        texts_to_encode = [util_cy.preprocess_sentence(d, config) for d in unique_diagnoses]
+        print("[INFO] FIX 4: encoding preprocessed diagnosis text (matches the baseline arm)")
+    else:
+        texts_to_encode = unique_diagnoses
+
     # TESTING: normalize_embeddings=False to see if scores spread out more naturally
     bert_embeddings = model.encode(
-        unique_diagnoses,
+        texts_to_encode,
         batch_size=32,
         show_progress_bar=True,
         convert_to_numpy=True,
         normalize_embeddings=False  # Testing without L2 norm to spread similarity scores
     )
 
-    # CRITICAL: Wrap in array format to match util_cy expectations (embedding[0] indexing)
+    # CRITICAL: zip against unique_diagnoses, NOT texts_to_encode -- the keys are
+    # raw descriptions under both versions (see FIX 4 above); only the vectors
+    # came from the preprocessed strings. Wrapped in a list to match util_cy's
+    # embedding[0] indexing.
     for diagnosis_text, embedding in zip(unique_diagnoses, bert_embeddings):
         embeddings[diagnosis_text] = [embedding]  # Wrap in list for util_cy compatibility
 
@@ -311,7 +371,7 @@ def compute_bert_diagnosis_embeddings(model, admissions):
     print(f"[INFO] Format: Wrapped in arrays for util_cy compatibility")
     return embeddings
 
-def run_analysis(model_id=None, encoder=None):
+def run_analysis(model_id=None, encoder=None, config=LEGACY):
     """
     Run the full BERT disease diagnosis analysis pipeline.
 
@@ -322,6 +382,12 @@ def run_analysis(model_id=None, encoder=None):
                  SentenceTransformer. Must expose .device, .max_seq_length and
                  .encode(...). Only the model construction is bypassed; every
                  downstream step is unchanged. Leave as None for normal runs.
+        config: PipelineConfig selecting which variant of each pipeline stage
+                to run. Defaults to aicds.config.LEGACY, which reproduces the
+                published pipeline bit-for-bit -- the golden regression calls
+                run_analysis without it and must stay byte-identical. Pass
+                aicds.config.CORRECTED for the correctness-fixed pipeline,
+                which deliberately moves the numbers.
 
     Returns:
         str: Path to the output directory containing results.
@@ -391,14 +457,14 @@ def run_analysis(model_id=None, encoder=None):
     embeddings_start = time.perf_counter()
     print("[INFO] Computing BERT symptom embeddings...")
     symptom_emb_start = time.perf_counter()
-    embendings_symptoms = compute_bert_symptom_embeddings(model, admissions)
+    embendings_symptoms = compute_bert_symptom_embeddings(model, admissions, config)
     symptom_emb_time = time.perf_counter() - symptom_emb_start
     timing_data['symptom_embeddings'] = symptom_emb_time
     print(f"[TIMING] Symptom embeddings: {format_time(symptom_emb_time)}")
 
     print("[INFO] Computing BERT diagnosis embeddings...")
     diagnosis_emb_start = time.perf_counter()
-    embendings_diagnosis = compute_bert_diagnosis_embeddings(model, admissions)
+    embendings_diagnosis = compute_bert_diagnosis_embeddings(model, admissions, config)
     diagnosis_emb_time = time.perf_counter() - diagnosis_emb_start
     timing_data['diagnosis_embeddings'] = diagnosis_emb_time
     print(f"[TIMING] Diagnosis embeddings: {format_time(diagnosis_emb_time)}")
@@ -458,8 +524,8 @@ def run_analysis(model_id=None, encoder=None):
         ######################################################################################################
         # LOAD TRAIN AND TEST SET
         ######################################################################################################
-        x_test = util_cy.load_dataset(nFold, TEST)
-        x_train = util_cy.load_dataset(nFold, TRAIN)
+        x_test = util_cy.load_dataset(nFold, TEST, config)
+        x_train = util_cy.load_dataset(nFold, TRAIN, config)
 
         performance_out_file.write(f'\n FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)} \n')
         print(f'FOLD {nFold}: LEN train: {len(x_train)}, LEN test: {len(x_test)}')

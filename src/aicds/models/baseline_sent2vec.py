@@ -17,6 +17,16 @@ from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
 
 from aicds.utils import cython_utils as util_cy
+from aicds.config import LEGACY
+
+# This module runs at IMPORT time -- there is no run_analysis() to take a
+# config argument, so the seam is a module-level binding instead. LEGACY keeps
+# the resolved fold path identical to what it was before this existed. A
+# corrected run means rebinding this before the fold loop executes, i.e.
+# `aicds.models.baseline_sent2vec.PIPELINE_CONFIG = CORRECTED` is TOO LATE
+# (the loop has already run by the time the import returns). Restructuring
+# this file into a function is tracked separately; do not do it here.
+PIPELINE_CONFIG = LEGACY
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -240,7 +250,7 @@ except Exception as e:
 embeddings_start = time.perf_counter()
 print("[INFO] Computing symptom embeddings...")
 symptom_emb_start = time.perf_counter()
-embendings_symptoms = util_cy.embending_symptoms(model,admissions)
+embendings_symptoms = util_cy.embending_symptoms(model,admissions,PIPELINE_CONFIG)
 symptom_emb_time = time.perf_counter() - symptom_emb_start
 timing_data['symptom_embeddings'] = symptom_emb_time
 print(f"[SUCCESS] Symptom embeddings computed: {len(embendings_symptoms)} items")
@@ -248,7 +258,7 @@ print(f"[TIMING] Symptom embeddings: {format_time(symptom_emb_time)}")
 
 print("[INFO] Computing diagnosis embeddings...")
 diagnosis_emb_start = time.perf_counter()
-embendings_diagnosis = util_cy.embending_diagnosis(model,admissions)
+embendings_diagnosis = util_cy.embending_diagnosis(model,admissions,PIPELINE_CONFIG)
 diagnosis_emb_time = time.perf_counter() - diagnosis_emb_start
 timing_data['diagnosis_embeddings'] = diagnosis_emb_time
 print(f"[SUCCESS] Diagnosis embeddings computed: {len(embendings_diagnosis)} items")
@@ -294,8 +304,8 @@ for nFold in range(0,K_FOLD):
     ##########################################################################################################
     # LOAD TRAIN AND TEST SET
     ##########################################################################################################
-    x_test = util_cy.load_dataset(nFold,TEST)
-    x_train = util_cy.load_dataset(nFold,TRAIN)
+    x_test = util_cy.load_dataset(nFold,TEST,PIPELINE_CONFIG)
+    x_train = util_cy.load_dataset(nFold,TRAIN,PIPELINE_CONFIG)
     performance_out_file.write('\n FOLD %s: LEN train: %s, LEN test: %s \n' % (nFold, len(x_train), len(x_test)))
     print('FOLD %s: LEN train: %s, LEN test: %s' % (nFold, len(x_train), len(x_test)))
     ##########################################################################################################

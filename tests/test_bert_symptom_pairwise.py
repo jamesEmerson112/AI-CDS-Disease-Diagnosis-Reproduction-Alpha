@@ -12,9 +12,18 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
+from aicds.config import LEGACY
+from aicds.utils.cython_utils import (
+    split_symptoms as real_split_symptoms,
+    use_corrected_preprocessing as real_use_corrected_preprocessing,
+)
+
 
 # ---------------------------------------------------------------------------
-# Inlined helper functions (avoid importing cython_utils which requires sent2vec)
+# Inlined helper functions. These were inlined back when importing cython_utils
+# pulled in sent2vec at module scope; that import moved inside load_model in
+# c8e4ffd, so the import above is safe and new code here should just import.
+# They are kept as-is only because rewriting them would change nothing.
 # ---------------------------------------------------------------------------
 def cosine_similarity(u, v):
     """Pure Python cosine similarity — same as cython_utils.cosine_similarity."""
@@ -59,7 +68,12 @@ def _load_bert_functions():
 
     # Build namespace with dependencies that the functions reference
     mock_util_cy = MagicMock()
-    mock_util_cy.preprocess_sentence = lambda s: s
+    # Both take a trailing `config` now (aicds.config.PipelineConfig), which
+    # bert_models forwards. A MagicMock attribute would satisfy the call but
+    # return a MagicMock, and iterating one yields nothing -- so split_symptoms
+    # is stubbed explicitly rather than left to the mock.
+    mock_util_cy.preprocess_sentence = lambda s, config=LEGACY: s
+    mock_util_cy.split_symptoms = real_split_symptoms
     mock_util_cy.cosine_similarity = cosine_similarity
 
     ns = {
@@ -72,6 +86,15 @@ def _load_bert_functions():
         "containGreaterOrEqualsValue": containGreaterOrEqualsValue,
         "np": np,
         "numpy": np,
+        # run_analysis's `config=LEGACY` default is evaluated when its `def`
+        # executes, so the name must be present even though no test here calls
+        # run_analysis. The loader strips imports, hence the manual re-supply.
+        "LEGACY": LEGACY,
+        # compute_bert_diagnosis_embeddings gates FIX 4 on this. The REAL
+        # function, not a mock attribute: bert_models imports it by name
+        # precisely so a truthy MagicMock cannot silently select the corrected
+        # branch here, and supplying the real one keeps that guarantee.
+        "use_corrected_preprocessing": real_use_corrected_preprocessing,
     }
 
     exec(code, ns)
@@ -127,7 +150,7 @@ class TestComputeBertSymptomEmbeddingsKeyStructure(unittest.TestCase):
         mock_model.encode = fake_encode
         mock_model.device = "cpu"
 
-        _ns["util_cy"].preprocess_sentence = lambda s: s.strip().lower()
+        _ns["util_cy"].preprocess_sentence = lambda s, config=LEGACY: s.strip().lower()
         result = fn(mock_model, admissions)
 
         # Keys should NOT be HADM_IDs
@@ -149,7 +172,7 @@ class TestComputeBertSymptomEmbeddingsKeyStructure(unittest.TestCase):
         mock_model.encode = lambda texts, **kw: np.random.randn(len(texts), 768).astype(np.float32)
         mock_model.device = "cpu"
 
-        _ns["util_cy"].preprocess_sentence = lambda s: s.strip().lower()
+        _ns["util_cy"].preprocess_sentence = lambda s, config=LEGACY: s.strip().lower()
         result = fn(mock_model, admissions)
 
         # "fever", "cough", "headache" = 3 unique symptoms
@@ -165,7 +188,7 @@ class TestComputeBertSymptomEmbeddingsKeyStructure(unittest.TestCase):
         mock_model.encode = lambda texts, **kw: np.random.randn(len(texts), 768).astype(np.float32)
         mock_model.device = "cpu"
 
-        _ns["util_cy"].preprocess_sentence = lambda s: s.strip().lower()
+        _ns["util_cy"].preprocess_sentence = lambda s, config=LEGACY: s.strip().lower()
         result = fn(mock_model, admissions)
 
         for key, val in result.items():
@@ -339,7 +362,7 @@ class TestEmbeddingStructureCompatibility(unittest.TestCase):
         mock_model.encode = lambda texts, **kw: np.random.randn(len(texts), 768).astype(np.float32)
         mock_model.device = "cpu"
 
-        _ns["util_cy"].preprocess_sentence = lambda s: s.strip().lower()
+        _ns["util_cy"].preprocess_sentence = lambda s, config=LEGACY: s.strip().lower()
         result = fn(mock_model, admissions)
 
         # Simulated load_dataset output

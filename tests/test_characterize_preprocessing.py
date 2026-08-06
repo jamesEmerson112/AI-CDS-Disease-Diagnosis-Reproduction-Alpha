@@ -13,6 +13,16 @@ reading its output -- never by calling the function again inside the
 assertion. Follows tests/test_reorganization.py style: plain classes, bare
 assert, no fixtures.
 
+Scope note added when the config seam landed: every class up to and including
+TestPreprocessDiagnosisNonDeterminism pins the LEGACY pipeline and is
+untouched by the FIX 3a/3b work -- that is the point, since LEGACY is what
+minted tests/golden/stub768/PerformanceIndex.txt and must stay bit-identical
+forever. The CORRECTED classes at the very bottom of this file are the
+opposite kind of test: they assert that the fixed variant differs, and in
+exactly one respect. If a legacy assertion here ever starts failing because
+of a correctness fix, the fix is insufficiently gated -- repair the gating,
+not the assertion.
+
 Non-determinism note (see TestPreprocessDiagnosisNonDeterminism at the
 bottom): PYTHONHASHSEED pinning in tests/conftest.py happens via
 os.environ.setdefault() *after* the interpreter has already started, so it
@@ -26,8 +36,10 @@ by content/sets, not list position); only genuinely single-element results
 are asserted as an exact literal.
 """
 
+import pytest
 from nltk.corpus import stopwords
 
+from aicds.config import CORRECTED, LEGACY, PipelineConfig
 from aicds.utils import cython_utils
 
 # preprocess_sentence reads the module-level `stop_words` global, which the
@@ -296,3 +308,147 @@ class TestPreprocessDiagnosisNonDeterminism:
         assert _diagnosis_by_description(first) == {
             "sepsis": frozenset({"apr", "hcfa"})
         }
+
+
+# ===========================================================================
+# Everything above pins LEGACY. Everything below exercises CORRECTED.
+# ===========================================================================
+
+# Strings deliberately chosen to cover every rule preprocess_sentence applies:
+# slash padding, '.-' / '.' / apostrophe padding, lowercasing, punctuation
+# stripping and stopword removal -- plus the two w/o examples. Used to assert
+# both that the default argument still means LEGACY and that CORRECTED touches
+# nothing except the negation.
+_REPRESENTATIVE_INPUTS = [
+    "Tracheostomy w/o Extensive Procedure",
+    "Tracheostomy w Extensive Procedure",
+    "Dvrtcli colon w/o hmrhg",
+    "SEPTICEMIA OR SEVERE SEPSIS W/O MV 96+ HOURS W MCC",
+    "Gall&bil cal w/oth w obs",
+    "Some/Value.-Test",
+    "end.-of sentence",
+    "Diagnosis: A.B. Test",
+    "Patient's condition",
+    "Hello, World!",
+    "MiXeD CaSe Text",
+    "plain text no punctuation",
+    "Pneumonia, organism NOS",
+]
+
+
+class TestPreprocessSentenceDefaultIsLegacy:
+    """The whole seam rests on this: an unqualified call means LEGACY.
+
+    Every pre-existing call site -- including the one the byte-exact golden
+    runs through -- omits the argument, so if this ever fails the golden is
+    already broken.
+    """
+
+    def test_omitted_config_equals_explicit_legacy(self):
+        for text in _REPRESENTATIVE_INPUTS:
+            assert cython_utils.preprocess_sentence(text) == cython_utils.preprocess_sentence(
+                text, LEGACY
+            ), text
+
+
+class TestPreprocessSentenceCorrectedNegation:
+    """FIX 3a. Under CORRECTED, 'w/o' is rewritten to 'without' before the
+    slash-padding runs, so the negation survives tokenisation instead of
+    being reduced to 'w' (the abbreviation for its opposite).
+    See docs/findings/06-preprocessing-defects.md defect 1."""
+
+    def test_w_o_expands_to_without(self):
+        assert (
+            cython_utils.preprocess_sentence(
+                "Tracheostomy w/o Extensive Procedure", CORRECTED
+            )
+            == "tracheostomy without extensive procedure"
+        )
+
+    def test_w_o_and_plain_w_no_longer_collide(self):
+        # The exact inverse of TestPreprocessSentenceNegationDestruction's
+        # test_w_o_and_plain_w_collide, which still passes for LEGACY.
+        with_negation = cython_utils.preprocess_sentence(
+            "Tracheostomy w/o Extensive Procedure", CORRECTED
+        )
+        without_negation = cython_utils.preprocess_sentence(
+            "Tracheostomy w Extensive Procedure", CORRECTED
+        )
+        assert with_negation == "tracheostomy without extensive procedure"
+        assert without_negation == "tracheostomy w extensive procedure"
+        assert with_negation != without_negation
+
+    def test_second_example_dvrtcli(self):
+        assert (
+            cython_utils.preprocess_sentence("Dvrtcli colon w/o hmrhg", CORRECTED)
+            == "dvrtcli colon without hmrhg"
+        )
+
+    def test_uppercase_w_o_expands_too(self):
+        # DRG names in the committed file are upper-case; the rewrite runs
+        # before .lower(), so it has to be case-insensitive. 'OR' is still
+        # lost -- that is a separate stopword defect, deliberately not fixed
+        # here, so the corrected arm's delta stays attributable to negation.
+        assert (
+            cython_utils.preprocess_sentence(
+                "SEPTICEMIA OR SEVERE SEPSIS W/O MV 96+ HOURS W MCC", CORRECTED
+            )
+            == "septicemia severe sepsis without mv 96+ hours w mcc"
+        )
+
+    def test_both_occurrences_in_one_string_expand(self):
+        assert (
+            cython_utils.preprocess_sentence(
+                "CORONARY BYPASS W/O CARDIAC CATH W/O MCC", CORRECTED
+            )
+            == "coronary bypass without cardiac cath without mcc"
+        )
+
+    def test_w_oth_is_not_rewritten(self):
+        # 'Gall&bil cal w/oth w obs' -- "with other with obstruction". This is
+        # the one 'w/o' substring in the committed file that is NOT the
+        # negation (52 case-insensitive substrings, 51 genuine). A boundary-
+        # free regex would turn it into 'withoutth', so this is the test that
+        # justifies the \b anchors.
+        text = "Gall&bil cal w/oth w obs"
+        assert cython_utils.preprocess_sentence(text, CORRECTED) == "gall bil cal w oth w obs"
+        assert cython_utils.preprocess_sentence(text, CORRECTED) == cython_utils.preprocess_sentence(
+            text
+        )
+
+    def test_correction_changes_nothing_else(self):
+        # Everything that does not contain a genuine 'w/o' must come out of
+        # CORRECTED byte-identical to LEGACY. This is what makes any movement
+        # in the corrected arm's numbers attributable to negation alone.
+        for text in _REPRESENTATIVE_INPUTS:
+            legacy = cython_utils.preprocess_sentence(text, LEGACY)
+            corrected = cython_utils.preprocess_sentence(text, CORRECTED)
+            if "w/o " in text.lower():
+                assert corrected != legacy, text
+            else:
+                assert corrected == legacy, text
+
+    def test_without_is_not_a_stopword(self):
+        # The fix works only because NLTK drops 'with' but keeps 'without'.
+        # If a future NLTK release adds 'without', the expansion would delete
+        # the negation entirely instead of preserving it, and every corrected
+        # number would silently regress to the legacy collision.
+        english_stopwords = set(stopwords.words("english"))
+        assert "without" not in english_stopwords
+        assert "with" in english_stopwords
+        assert "o" in english_stopwords  # why 'w/o' loses its 'o' in the first place
+
+
+class TestPreprocessVersionValidation:
+    """An unrecognised preprocess_version must raise, not quietly pick a side.
+
+    Silently falling back to legacy is the specific failure this project
+    cannot absorb: the run would complete, produce legacy numbers, and be
+    filed under the corrected arm.
+    """
+
+    def test_unknown_version_raises(self):
+        bogus = PipelineConfig(preprocess_version="correced")
+        with pytest.raises(ValueError) as excinfo:
+            cython_utils.preprocess_sentence("Tracheostomy w/o Extensive Procedure", bogus)
+        assert "correced" in str(excinfo.value)

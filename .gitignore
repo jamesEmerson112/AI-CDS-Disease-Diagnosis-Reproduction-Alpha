@@ -115,3 +115,15 @@ BioSentVec_PubMed_MIMICIII-bigram_d700.bin
 
 # System design visualization (local-only, detailed architecture diagrams)
 .system-design-visualization
+
+# The GroupKFold-on-SUBJECT_ID replacement splits (aicds.config.CORRECTED).
+# These are MIMIC-III derived and fall under the PhysioNet DUA, so they are
+# generated locally and never committed. Anchored, per the note above.
+#
+# The pre-commit hook does NOT cover this path: its rule is
+# `^data/(raw|folds)/`, which requires a literal '/' after "folds" and so does
+# not match "folds_grouped/"; and its 20-distinct-HADM_ID fallback greps for a
+# literal `HADM_ID[=: ]*\d{6}` token, which fold files (`123456_symptom,...`)
+# do not contain. This .gitignore entry is the only thing standing between
+# `git add -A` and a DUA violation.
+/data/folds_grouped/
