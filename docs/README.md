@@ -61,6 +61,13 @@ and it says what the comparison would need in order to mean anything. Otherwise,
     itself leniently. Replaced with an exact DRG-label match: one ruler for all four arms. Records
     the 58.9% ceiling this imposes, the partial-credit ladder that was designed and rejected, and
     two consequences written down *before* the runs so they could be wrong.
+13. [findings/13-rank-aware-metrics.md](findings/13-rank-aware-metrics.md) — **the knobless
+    comparison.** With the threshold gone (finding 12) and `K` gone (MRR), the encoders still do not
+    separate — max paired |*t*| 1.718 against 2.262, on all three populations, exactly as predicted
+    in writing beforehand. The unpredicted result is that a **third** knob was underneath: how you
+    treat abstention reorders all four arms and inverts every sign, and it cannot be designed away
+    because abstention belongs to the arm rather than the metric. Also records a vacuous test that
+    was computed, believed, and withdrawn, because it is convincing enough to fool a careful reader.
 
 ## If you are setting up on a new machine
 
@@ -79,15 +86,19 @@ self-grading sits in between — defensible in the original paper, indefensible 
 comparison *between* embedding spaces.
 
 The list was four items long until 2026-08-06. Self-grading is the fifth, found while asking why
-every remaining defect happened to bias the same direction.
+every remaining defect happened to bias the same direction. **Rank-blindness is the sixth and
+abstention asymmetry the seventh** — the seventh found only *because* the sixth was fixed, which is
+the usual pattern here: removing a knob reveals the one it was masking.
 
 | Problem | What goes wrong | Fix | Status |
 |---|---|---|---|
-| **Saturation** (03) | Nearly every diagnosis pair clears threshold 0.6, because the embedding space is compact and MAX over the Cartesian product amplifies it | A different aggregator, a stricter threshold, or centring the embeddings | **Survives** the corrected pipeline — all three BERT arms still sit at 1.000. Addressed by the DRG grader (12), which is scale-free |
-| **Degeneracy** (04) | P, R, and F1 are the same number in all 12,600 committed BERT rows — every case increments exactly one of TP or FP | A genuine set-level P/R/F1, or rank-aware metrics | **Survives**, and was *predicted* to: it comes from the retrieval-side pruning gate, upstream of any grader. Open (P5, P6) |
+| **Saturation** (03) | Nearly every diagnosis pair clears threshold 0.6, because the embedding space is compact and MAX over the Cartesian product amplifies it | A different aggregator, a stricter threshold, or centring the embeddings | **Survives** the corrected pipeline — all three BERT arms still sit at 1.000. Does not arise under the DRG grader (12), which has no threshold |
+| **Degeneracy** (04) | P, R, and F1 are the same number in all 12,600 committed BERT rows — every case increments exactly one of TP or FP | A genuine set-level P/R/F1, or rank-aware metrics | **Explained** 2026-08-06 by (13): it is `PR == 1.0`, i.e. those arms never abstain so the answered and all-cases populations are the *same set*. Never a metric collapse — the columns were unlabelled, not wrong |
 | **Leakage** (05) | 41 of 129 test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, ~10× the encoder differences | `GroupKFold` on `SUBJECT_ID`; regenerate the folds | **Fixed** 2026-08-05 (`c2115ba`). 41 → 0, recounted independently |
 | **Preprocessing** (06) | `w/o` → `w` destroys negation; 4.4% of symptom tokens are fragments of comma-shredded labels | Protect `w/o`; rejoin space-prefixed tokens | **Fixed** 2026-08-05 (`c2115ba`), 80 of 89 fragments; nine remain (P27) |
-| **Self-grading** (12) | Each arm scores its own predictions by cosine in the space that produced them, so a compact space marks itself leniently | Grade on an exact DRG label match instead — one ruler for all arms | **Fixed** 2026-08-06 (`75b6530`), behind `--pipeline drg` |
+| **Self-grading** (12) | Each arm scores its own predictions by cosine in the space that produced them, so a compact space marks itself leniently | Grade on an exact DRG label match instead — one ruler for all arms | **Fixed** 2026-08-06 (`75b6530`), behind `--pipeline drg`. It reproduces cosine@1.0 bit-exactly, so the bias was possible but never actual |
+| **Rank-blindness** (13) | A hit at rank 1 and a hit at rank 50 score identically, so TOP-K rises with `K` by construction | MRR, which has no `K`; Precision@K as a within-arm check | **Fixed** 2026-08-06 (`5393cab`). Additive — `PerformanceIndex.txt` untouched, golden byte-exact |
+| **Abstention asymmetry** (13) | The baseline declines to answer 24.4% of cases and the BERT arms never do, so *how you score a declined case* reorders all four arms and inverts every sign | None available | **Open and not closable.** Abstention belongs to the arm, not the metric, so no convention is neutral. All three are reported; the null result survives all three |
 
 Fixing any one of these does not fix the others — with one exception, now settled.
 

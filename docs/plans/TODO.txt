@@ -1,6 +1,6 @@
 AI-CDS DISEASE DIAGNOSIS - RANKED TODO
 Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
-Updated 2026-08-06 (late): P4 COMPLETE, P34/P36 done, P5's code landed.
+Updated 2026-08-06 (late): P4 AND P5 BOTH COMPLETE. Both metric knobs are gone.
 
 STATUS
   DONE     P1 P2 P3 P7 P9 P28 P29 P30 P34 P36
@@ -11,20 +11,27 @@ STATUS
                corrected cosine at threshold 1.0 BIT-EXACTLY, 144 numbers.
                So P4 did not move the numbers -- it removed the reason to
                doubt them. See docs/findings/12-drg-grader.md.
+           P5  COMPLETE 2026-08-06. Code (47e81bd, 5393cab) + four-arm run.
+               Golden BYTE-EXACT in 43:28; PerformanceIndex.txt identical to
+               the pre-P5 drg run on all four arms; and the 16 compare_models
+               sanity checks MINTED FROM THE PRE-P5 RUN pass on the post-P5
+               run. Three independent confirmations that P5 is additive.
+               RESULT: no pair separates on any population, max |t| = 1.718
+               vs 2.262 needed -- the written-in-advance prediction held.
+               UNPREDICTED: abstention treatment is a THIRD knob and it
+               inverts every sign. See docs/findings/13-rank-aware-metrics.md.
   PARTIAL  P8   80 of 89 fragments; see P27
            P29  configs defined, the attribution RUNS are still to do
-           P32  all four arms RAN; root README REWRITTEN (e83b5be);
-                comparison PDF now BUILDS for all three pipelines (P34 fixed);
+           P32  all four arms RAN; root README REWRITTEN (e83b5be) and again
+                for P4+P5; comparison PDF BUILDS for all pipelines (P34 fixed);
                 docs/README.md refreshed (2e5c6f3)
-           P5   CODE COMPLETE 2026-08-06 (47e81bd, 5393cab), golden BYTE-EXACT
-                in 43:28. rank_metrics (differentially validated) + populations
-                + rank_report + both arms wired + 69 tests. The four-arm run
-                that produces the numbers is IN FLIGHT on the second pod.
-  NEXT     read P5's four-arm RankMetrics.txt, then the paired t-test on MRR
-           P38 (clean public repo) is the hard blocker on publication
+  NEXT     P40 per-case output -- now the highest-VALUE open item, because it
+                is the only thing blocking the self-selection test that P5
+                could not run (see the P40 detail section)
+           P38 (clean public repo) is the hard BLOCKER on publication
   NEW      P27 P29 P30 P31 P32 P33 P34 - found while implementing Tier 1
            P35 P36 P37 - found while implementing P4
-           P39 - found while implementing P5 (tie-break divergence)
+           P39 P40 - found while implementing P5 (tie-breaks; per-case output)
 
 THE RESULT SO FAR - all four arms, corrected pipeline, 2026-08-06
 Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
@@ -83,8 +90,59 @@ Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
 
   Tier 1 removed two of the four documented confounds: PATIENT LEAKAGE (41 leaked
   test cases -> 0) and DIVERGENT CROSS-ARM PREPROCESSING (26/145 matching -> 145/145).
-  The other two - SELF-GRADING (P4) and RANK-BLINDNESS (P5) - are untouched, so a
-  corrected-pipeline number is a better reproduction but still NOT an encoder ranking.
+  SUPERSEDED 2026-08-06: the other two are now DONE as well. SELF-GRADING (P4) is
+  closed by the drg-exact grader, and RANK-BLINDNESS (P5) by MRR. All four are in.
+
+THE KNOBLESS RESULT - P5, all four arms, --pipeline drg, 2026-08-06
+Full writeup in docs/findings/13-rank-aware-metrics.md.
+
+  With the threshold knob gone (drg-exact collapses all five rows) and the K
+  knob gone (MRR has no K), this is the first number the project has produced
+  with ZERO reported knobs. 76 winnable cases, mean-of-per-fold-rates:
+
+                      MRR@50   Hit@1   Hit@50    P@1     P@50   coverage
+    Bio_ClinicalBERT  0.2462  0.1749   0.6967  0.1749  0.0290    1.0000
+    BiomedBERT        0.2432  0.1693   0.6656  0.1693  0.0280    1.0000
+    BlueBERT          0.2314  0.1549   0.7300  0.1549  0.0316    1.0000
+    BioSentVec        0.2029  0.1484   0.3577  0.1484  0.0857    0.8477
+
+  NO PAIR SEPARATES. Max |t| over all six pairs: 1.718 (winnable), 1.651
+  (all-cases), 1.174 (answered) -- all under the 2.262 needed for p<0.05. The
+  written-in-advance prediction held on every population.
+
+  PRECISION@K INVERTS THE TOP-K CURVE, as designed. It FALLS with K for every
+  arm (6.0x from K=1 to 50 for Bio_ClinicalBERT) where TOP-K rises for every
+  arm, and it is NOT monotone (BioSentVec 0.0868 -> 0.0845 -> 0.0855 ->
+  0.0858 -> 0.0857), so unlike Hit@K nothing forces its direction. Within-arm
+  only: truncating your own candidate list inflates reported P@K 3.53x.
+
+  THE UNPREDICTED RESULT - A THIRD KNOB WAS UNDERNEATH. MRR is not abstention-
+  neutral: a declined case scores RR=0 while an arm that always offers 50
+  candidates has some chance of a hit. The baseline abstains; the BERT arms
+  never do. So the CONVENTION reorders all four arms:
+
+    abstention scores 0     Bio_ClinicalBERT > BiomedBERT > BlueBERT > BioSentVec
+    abstention excluded     BioSentVec > Bio_ClinicalBERT > BiomedBERT > BlueBERT
+                            (0.1474)     (0.1321)          (0.1302)     (0.1229)
+
+  EVERY SIGN FLIPS; the baseline goes last to first. Neither convention is
+  neutral and THERE IS NO THIRD THAT IS -- penalising abstention charges "I
+  don't know" the same as a wrong answer, while excluding it scores the
+  baseline on 98 self-chosen cases against the BERT arms' 129. Abstention is a
+  property of the ARM, not of the metric, so this knob cannot be designed away.
+  All three populations are reported; the conclusion survives all three.
+  Quantifying the self-selection half of it is P40.
+
+  THE VALIDATION THAT MAKES IT TRUSTWORTHY. RankMetrics.txt's three populations
+  reproduce legacy's P / R / PR columns EXACTLY, from an independent code path:
+    R  0.19230769230769232 == all-cases Hit@10
+    P  0.25124098124098121 == answered  Hit@10
+    PR 0.75576923076923075 == coverage
+  Exact to the last bit, and predicted in rank_metrics.py's N2 note before the
+  code existed. This also RETIRES the degeneracy confusion for good: P == R was
+  never the metric collapsing, it is PR == 1.0, i.e. the answered and all-cases
+  populations being the SAME SET because those arms never abstain. The columns
+  were never wrong, only unlabelled.
 
 Three plan files, three different jobs:
   correctness-fixes.md  what is scientifically wrong, and in what order to fix it
@@ -125,8 +183,14 @@ TIER 1 - BLOCKS ANY VALID COMPARISON. Nothing downstream means anything until th
            One line. embending_diagnosis embeds the PREPROCESSED text but keys
            the dict by the RAW description, so the BERT arm's keys were already
            right -- only the encode input was wrong.
-  [~] P4   A2. Encoder-independent grader   CODE LANDED 2026-08-06, runs pending
-  [~] P5   B1. Rank-aware metrics (Option C)      CODE DONE 2026-08-06; run in flight
+  [x] P4   A2. Encoder-independent grader        DONE 2026-08-06 (75b6530 + run)
+           drg-exact reproduces corrected cosine @1.0 BIT-EXACTLY on all four
+           arms (144 numbers). So it did not move the numbers -- it removed the
+           reason to doubt them. finding 12.
+  [x] P5   B1. Rank-aware metrics (Option C)     DONE 2026-08-06 (47e81bd,
+           5393cab + run). No pair separates on any population, max |t| 1.718.
+           Additive, confirmed three ways. Found a THIRD knob: abstention
+           treatment inverts every sign. finding 13.
 
 TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
 
@@ -183,11 +247,16 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
 
 WHY THIS ORDER
   P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
-  P4 is now the top item: with leakage gone and preprocessing unified, SELF-GRADING
-    is the largest remaining threat to a cross-encoder claim - all four arms still
-    use the same embedding space to retrieve AND to judge, so a more compressed
-    space grades itself more leniently.
-  P5 follows P4 because it needs P4's encoder-independent relevance label.
+  SUPERSEDED 2026-08-06: P4 AND P5 ARE BOTH DONE. What follows is the reasoning
+    that put them at the top, kept because it explains the ordering, not the state.
+  P4 was the top item: with leakage gone and preprocessing unified, SELF-GRADING
+    was the largest remaining threat to a cross-encoder claim - all four arms
+    used the same embedding space to retrieve AND to judge, so a more compressed
+    space graded itself more leniently. Outcome: the bias was POSSIBLE but never
+    ACTUAL, which only measuring it could establish.
+  P5 followed P4 because it needs P4's encoder-independent relevance label.
+  P40 is now the top item, and it inherits P5's open question rather than
+    starting a new one - see the P40 detail section.
   P28 before any further fold work - one careless --out overwrites data/folds/ and
     destroys the golden's inputs. Minutes to fix; unbounded to recover from.
   P27 is small, measured, and lands in the same function as P8.
@@ -438,7 +507,13 @@ TIER 1 DETAIL
         DO NOT use exact match alone - see the 58.1% ceiling. Use graded relevance:
         full credit for an exact DRG match, partial for a same-family match.
 
-[ ] P5. B1 - RANK-AWARE RETRIEVAL METRICS (Option C: Recall@K, MRR, nDCG)
+[x] P5. B1 - RANK-AWARE RETRIEVAL METRICS (Option C: Recall@K, MRR, nDCG)
+        DONE 2026-08-06. Code 47e81bd + 5393cab, four-arm run under --pipeline drg,
+        results in docs/findings/13-rank-aware-metrics.md. The analysis below is the
+        pre-implementation reasoning, kept because two of its claims were REFUTED by
+        the differential test (nDCG is not immune to expanding K; Precision@K's
+        min(K,len) is a gaming lever, not abstention protection) and the record of
+        being wrong is worth more than a tidied-up version.
         Effort: days.  Depends on P4 (needs the encoder-independent relevance label).
         The ONLY option that fixes all three metric defects at once.
 
@@ -981,3 +1056,63 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
 
         Worth doing because "the arms are comparable" should be true by
         construction, not by an impact bound that happens to be small this time.
+
+--------------------------------------------------------------------------------
+P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
+     Priority: HIGHEST of the open non-blocker items. Found 2026-08-06 while
+     writing up P5.
+
+     WHY IT IS SUDDENLY VALUABLE. It has been on the known-defects list for
+     months as a cosmetic wart. P5 turned it into the binding constraint on the
+     one question P5 raised and could not answer.
+
+     THE QUESTION. P5 found that how you treat abstention reorders all four
+     arms. The `answered` population (abstentions excluded) puts BioSentVec
+     FIRST; `winnable`/`all-cases` (abstentions score 0) put it LAST. Every
+     sign inverts. So the obvious doubt about `answered` is SELF-SELECTION: the
+     baseline chose which 98 of 129 cases to answer, so those 98 may simply be
+     the easy ones, and comparing its MRR on 98 self-chosen cases against the
+     BERT arms' 129 is not a matched comparison.
+
+     THE TEST THAT ANSWERS IT. Compute each BERT arm's MRR restricted to the
+     baseline's 98 answered cases, and compare against its MRR on all 129. If
+     the restricted figure is higher, those cases ARE easier and `answered`
+     flatters the baseline by a measurable amount. That is a matched
+     comparison, and it is the only way to put a number on the confound.
+
+     THE TRAP - DO NOT USE THE RATIO. MRR_all-cases / coverage looks like it
+     bounds the effect and returns ~1.0, which reads as "confound is 0.5%, move
+     on". It is ALGEBRAICALLY IDENTICAL to MRR_answered: abstentions contribute
+     0 to the all-cases numerator, and coverage is exactly the denominator
+     ratio, so the quotient is MRR_answered by construction and carries zero
+     information. This was computed, believed for about a minute, and withdrawn
+     on 2026-08-06. The warning is now in analyze_rank_metrics.py's docstring
+     and in finding 13, because it is convincing enough to fool a careful
+     reader twice.
+
+     WHY IT IS BLOCKED. The test needs the per-case relevance vector for each
+     (arm, HADM_ID). RankMetrics.txt carries only per-fold and 10-FOLD
+     aggregates. The per-case files that would carry it are ALL EMPTY:
+       cython_utils.py:65-66   opens the two handles
+       cython_utils.py:170-171 closes them
+       ... with NOTHING written in between
+       bert_models.py:451-456  never opens them at all, yet still mkdir's Fold*/
+     The baseline emits 258 zero-byte files. Neither arm has EVER produced
+     per-case output.
+
+     SCOPE, and the reason it is not a golden risk: write a NEW sibling file
+     (RankCases.txt or per-case rows inside RankMetrics.txt) rather than
+     repairing the two dead handles. PerformanceIndex.txt stays untouched, so
+     the byte-exact golden still covers exactly what it covered before -- the
+     same reasoning that made P5 additive. Repairing the dead handles is a
+     separate, lower-value cleanup.
+
+     DATA-USE CONSTRAINT: per-case output is keyed by HADM_ID, so it is
+     DUA-covered and must stay under results*/ (gitignored by glob) and out of
+     docs/. Only aggregates go in findings. The pre-commit hook's 20-distinct-
+     HADM_ID rule is the second line of defence, not the first.
+
+     REPORTABLE EITHER WAY. If the 98 are no easier, `answered` stops being
+     suspect and the baseline's first place there becomes the honest headline.
+     If they are easier, that quantity IS the confound and belongs in the
+     README. There is no outcome in which this measurement is wasted.

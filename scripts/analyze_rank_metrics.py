@@ -16,11 +16,25 @@ TOP-K meaningless, in a quieter form.
 
 The baseline abstains; all three BERT arms never do. So:
 
-  winnable / all-cases  mixes ranking quality with willingness to answer
-  answered              isolates ranking quality -- USE THIS for cross-arm claims
+  winnable / all-cases  PENALISE abstention -- declining scores the same as
+                        answering wrongly
+  answered              EXCLUDE abstention -- but those cases are self-selected,
+                        the arm chose which to answer, and n is not matched
+                        (baseline 98 vs BERT 129)
 
-Both are printed, because the disagreement between them IS the finding, and a
-reader who only sees the flattering one is being misled.
+**Neither population is neutral, and there is no third one that is.** Abstention
+is a property of the arm, not of the metric, so every convention takes a side.
+Measured 2026-08-06: the ranking FLIPS between them and every sign inverts --
+baseline last on winnable/all-cases, first on answered. All three are therefore
+printed, because the disagreement between them IS the finding, and a reader shown
+only one of them is being misled. See docs/findings/13-rank-aware-metrics.md.
+
+Do NOT use the ratio MRR_all-cases / coverage to bound the self-selection effect.
+It is algebraically identical to MRR_answered (abstentions contribute 0 to the
+numerator, and coverage is exactly the denominator ratio), so it returns ~1.0 by
+construction and looks like evidence while carrying none. The real test needs the
+BERT arms restricted to the baseline's answered cases, which requires per-case
+relevance vectors that RankMetrics.txt does not carry.
 """
 
 from __future__ import annotations
@@ -56,7 +70,11 @@ def parse_rank_metrics(path):
         line = raw.rstrip("\n")
         m = BLOCK.match(line)
         if m:
-            block = m.group(1).strip()
+            # Collapse internal whitespace: the writer emits "10-FOLD  (mean of
+            # per-fold rates)" with two spaces, and matching that by eye is how a
+            # lookup silently returns nothing and every aggregate row prints
+            # "(missing)" while the per-fold parse quietly succeeds.
+            block = " ".join(m.group(1).split())
             blocks.setdefault(block, {})
             population = None
             continue
@@ -153,11 +171,13 @@ def _report(parsed, arms, population):
     print("=" * 78)
     print("POPULATION: %s" % population)
     if population == "answered":
-        print("  Abstentions excluded -> ranking quality ISOLATED from willingness")
-        print("  to answer. THIS is the population for cross-arm claims.")
+        print("  Abstentions EXCLUDED. May flatter the abstaining arm: these cases are")
+        print("  self-selected, and n is not matched (baseline 98 vs BERT 129).")
     else:
-        print("  Abstentions score 0 -> this mixes ranking quality with willingness")
-        print("  to answer. The baseline abstains; the BERT arms never do.")
+        print("  Abstentions score 0 -> PENALISED, the same as answering wrongly.")
+        print("  The baseline abstains; the BERT arms never do.")
+    print("  NEITHER population is neutral. Compare against the other two before")
+    print("  quoting any ranking from this block.")
     print("=" * 78)
 
     agg = "10-FOLD (mean of per-fold rates)"
@@ -200,8 +220,9 @@ def _report(parsed, arms, population):
     print("-" * 78)
     if any_sig:
         print("AT LEAST ONE PAIR SEPARATES on this population. Before reporting it as")
-        print("an encoder result, check the confounds -- on winnable/all-cases the")
-        print("most likely explanation is the abstention asymmetry, not the encoder.")
+        print("an encoder result, check whether it separates on the OTHER TWO as well.")
+        print("The abstention asymmetry alone reorders all four arms, so a result that")
+        print("holds on only one population is a statement about the convention.")
     else:
         print("NO PAIR SEPARATES. With the threshold knob gone (drg-exact) and the K")
         print("knob gone (MRR), the encoders remain statistically indistinguishable.")
