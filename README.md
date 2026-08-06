@@ -255,10 +255,34 @@ diagnoses occur exactly once in the dataset. A *perfect* retriever therefore cap
 exact matching, which is the context in which the threshold-1.0 scores of 0.18–0.25 should be read.
 **This figure was measured on the old folds and has not been re-measured on the grouped ones.**
 
-**The bottom line for anyone quoting this repo:** these numbers are leakage-free and
-preprocessing-unified, which makes them a defensible *reproduction*. They are still self-graded and
-still rank-blind, which means they are **not** an encoder ranking. Say so explicitly rather than
-letting a reader infer otherwise.
+**Every remaining defect biases in the same direction.** This is the most important sentence in the
+README, and it is why "the transformers look slightly better" cannot be reported as a result:
+
+| Defect | Which arm it favours | Why |
+|---|---|---|
+| Self-grading | **BERT** | each arm judges its own predictions with its own cosine, and a compact space marks its own work leniently (Bio_ClinicalBERT's mean pairwise cosine between *unrelated* diagnoses is 0.83) |
+| TOP-K rewards guessing | **BERT** | the baseline abstains on 24.4% of cases, so extra `K` cannot help it; every BERT arm always predicts and gains a free guess per unit of `K` |
+| Saturation | **BERT** | all three BERT arms sit at 1.000 at the paper's own threshold, so their behaviour there is unobservable |
+
+Bio_ClinicalBERT is nominally ahead of the baseline at **5 of the 6 aggregators**, and its margin grows
+monotonically with `K` (+0.0328 at TOP-10 rising to +0.1681 at TOP-50 — while the baseline's score
+plateaus at 0.2383 from TOP-40 on, because it is abstaining). **That is precisely the pattern the three
+biases above predict with zero capability difference**, which is also why no paired test reaches
+significance. The observed result is currently unfalsifiable, and making it falsifiable is exactly what
+the encoder-independent grader (TODO P4) is for.
+
+**The bottom line for anyone quoting this repo.** Two claims are defensible and one is not:
+
+- ✅ **Efficiency.** The transformers match the baseline using ~1/51 the parameters and ~1/17 the disk.
+  This is a hardware fact, independent of the metric.
+- ✅ **Non-inferiority.** No significant difference between any pair of encoders, at any aggregator or
+  threshold. A null result, and the honest headline.
+- ❌ **Superiority.** Not supported for *any* encoder, and specifically not for the transformers, since
+  every known bias in the metric points that way already.
+
+These numbers are leakage-free and preprocessing-unified, which makes them a defensible
+*reproduction*. They remain self-graded and rank-blind, which means they are **not** an encoder
+ranking. Say so explicitly rather than letting a reader infer otherwise.
 
 Start at [docs/](docs/README.md); the synthesis is
 [07-comparison-validity.md](docs/findings/07-comparison-validity.md) and the corrected results are
