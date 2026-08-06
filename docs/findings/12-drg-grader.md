@@ -162,6 +162,75 @@ Recorded because each would silently produce a wrong or unnoticed result:
 
 ---
 
+## The results: both predictions held, and a third thing nobody predicted
+
+Run 2026-08-06 on RunPod Linux, `--pipeline drg`, `PYTHONHASHSEED=0`, HEAD `538d368`.
+
+**Prediction 1 — the five threshold rows became identical. CONFIRMED.** Every aggregate block prints
+the same `TP FP P R FS PR` at 0.6, 0.7, 0.8, 0.9 and 1.0. A binary grader returns only 0.0 or 1.0,
+1.0 clears every threshold and 0.0 clears none, so the sweep collapses to one number per aggregator.
+**The threshold knob is gone** — one of the two arbitrary dials that decided the encoder ordering.
+
+**Prediction 2 — degeneracy survived. CONFIRMED.** Bio_ClinicalBERT still prints
+`P == R == FS == 0.2491025641025641` with `PR` exactly `1.0` and `TP+FP = 3.3 + 9.6 = 12.9`, the mean
+fold test size. The baseline alone has `P = 0.2512 != R = 0.1923`, `PR = 0.7558`, `TP+FP = 9.8`. As
+predicted, this comes from the retrieval-side `PRUNING_SIMILARITY` gate, entirely upstream of the
+grader, so no grader change could touch it. Saturation, by contrast, is gone — with the threshold
+sweep collapsed there is nothing left to saturate.
+
+### The unpredicted result: `drg-exact` reproduces corrected cosine at threshold 1.0 EXACTLY
+
+Not approximately. **72 numbers — 6 aggregators × 6 columns × 2 arms — bit-identical.**
+
+| aggregator | baseline cos@1.0 | baseline drg | Bio_ClinicalBERT cos@1.0 | drg |
+|---|---|---|---|---|
+| MAX | 0.087652 | 0.087652 | 0.086154 | 0.086154 |
+| TOP-10 | 0.216278 | 0.216278 | 0.249103 | 0.249103 |
+| TOP-20 | 0.222944 | 0.222944 | 0.304872 | 0.304872 |
+| TOP-30 | 0.229611 | 0.229611 | 0.351282 | 0.351282 |
+| TOP-40 | 0.238307 | 0.238307 | 0.391026 | 0.391026 |
+| TOP-50 | 0.238307 | 0.238307 | 0.406410 | 0.406410 |
+
+**Why, measured rather than assumed.** Cosine reaches exactly 1.0 only when two diagnosis
+*embeddings* are parallel, and `embending_diagnosis` keys the dict by the **raw** description while
+embedding the **preprocessed** string. So the two graders can differ only where distinct raw
+descriptions preprocess to the same text. Counted over all 145 descriptions that reach the grader:
+
+| preprocessing | distinct forms | colliding groups | spurious 1.0 pairs |
+|---|---:|---:|---:|
+| `legacy` | 143 | **2** | 2 |
+| `corrected` | 144 | **1** | 1 |
+
+The single surviving collision under `corrected` is `respiratory system diagnosis w/ ventilator
+support 96+ hours` against `... w ventilator support 96+ hours` — semantically **the same thing**,
+since `w/` and `w` both mean "with". It never occurs as a (truth, prediction) pair in the 129 test
+cases, which is why the agreement is exact rather than merely close.
+
+**The collision that `legacy` had and `corrected` does not is the `w/o` defect itself:**
+`tracheostomy w long term mechanical ventilation **w** extensive procedure` and
+`... **w/o** extensive procedure` collapse to one string under legacy preprocessing. So **on the
+legacy pipeline the two graders would have disagreed, and `drg-exact` would have been the correct
+one.** P7's `w/o` fix is what makes them equivalent — the two corrections compose.
+
+### What this does and does not buy
+
+**Does:** the README's threshold-1.0 table — the only column it reports, chosen because it is the
+only setting where the encoders separate at all — turns out to have been an encoder-independent
+exact-match metric all along. That is now proven numerically instead of argued. The self-grading
+defect is real at thresholds 0.6–0.9, which is exactly where the three BERT arms saturate, and
+structurally absent at 1.0.
+
+The honest way to state the outcome: **P4 did not move the numbers, it removed the reason to doubt
+them.** A defect that turns out not to have contaminated the reported column is still worth finding,
+because "it didn't matter here" is a measurement, not an assumption — and it did matter under legacy.
+
+**Does not:** rescue the encoder comparison. `drg-exact` kills the *threshold* knob but not the *K*
+knob, and the ordering still inverts on K alone (BioSentVec 1st under MAX, 4th under TOP-30). The
+conclusion stands unchanged: **no encoder ranking is supported by this experiment.** Removing the
+last knob is P5's job, and MRR is the metric with no K at all.
+
+---
+
 *Companion documents:* [04](04-metric-degeneracy.md) degeneracy ·
 [05](05-patient-leakage.md) leakage · [07](07-comparison-validity.md) the synthesis ·
 [11](11-corrected-pipeline-first-results.md) the corrected four-arm results
