@@ -72,6 +72,12 @@ from aicds.utils.Constants import K_FOLD  # noqa: E402
 DEFAULT_DATA = "data/raw/Symptoms-Diagnosis.txt"
 DEFAULT_OUT = "data/folds_grouped"
 
+# data/folds/ holds the committed LEGACY folds.  They are inputs to
+# tests/golden/stub768/, so overwriting them makes the byte-exact golden
+# impossible to re-verify -- and the golden is the only regression protection
+# this repo has.  Guarded by --force-legacy rather than left to care.
+PROTECTED_OUT = "data/folds"
+
 FIELD_SEPARATOR = ";"
 N_FIELDS = 6
 ID_SEPARATOR = "_"
@@ -186,6 +192,61 @@ def write_fold_file(path, records):
             "%s: missing trailing newline; load_dataset would drop the last "
             "symptom's final character" % path
         )
+
+
+def _same_path(a, b):
+    """Compare two paths tolerantly enough for Windows and for '..' segments."""
+    return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def existing_fold_dirs(out_dir):
+    """Fold*/ directories already present under out_dir, so we never clobber blind."""
+    if not os.path.isdir(out_dir):
+        return []
+    return sorted(
+        name
+        for name in os.listdir(out_dir)
+        if name.startswith("Fold") and os.path.isdir(os.path.join(out_dir, name))
+    )
+
+
+def check_out_dir(out_dir, force_legacy=False, overwrite=False):
+    """Return an error string if writing to out_dir would destroy something.
+
+    Two separate hazards, deliberately gated by two separate flags:
+
+    * out_dir IS the committed legacy fold set.  Nothing about a GroupKFold run
+      should ever land there; that set is a fixed historical artifact and an
+      input to the golden.
+    * out_dir already holds folds from an earlier run.  Regenerating with a
+      different --n-splits leaves the surplus Fold*/ directories behind, so the
+      result is a silent mixture of two runs rather than a clean overwrite.
+    """
+    if _same_path(out_dir, PROTECTED_OUT) and not force_legacy:
+        return (
+            "refusing to write to %s -- those are the committed LEGACY folds and "
+            "inputs to tests/golden/stub768/. Overwriting them means the "
+            "byte-exact golden can never be re-verified.\n"
+            "Write somewhere else (the default is %s), or pass --force-legacy if "
+            "you genuinely mean to replace the legacy fold set." % (PROTECTED_OUT, DEFAULT_OUT)
+        )
+
+    present = existing_fold_dirs(out_dir)
+    if present and not overwrite:
+        return (
+            "refusing to write to %s -- it already contains %d fold director%s "
+            "(%s%s).\n"
+            "Re-run with --overwrite to replace them. Note that fold directories "
+            "beyond the new --n-splits are NOT removed, so a smaller run leaves "
+            "stale folds behind." % (
+                out_dir,
+                len(present),
+                "y" if len(present) == 1 else "ies",
+                ", ".join(present[:4]),
+                ", ..." if len(present) > 4 else "",
+            )
+        )
+    return None
 
 
 def write_folds(records, splits, out_dir):
@@ -305,7 +366,23 @@ def main(argv=None):
         action="store_true",
         help="after writing, re-read the files and report per-fold sizes and leakage",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="allow writing into a directory that already contains Fold*/ dirs",
+    )
+    parser.add_argument(
+        "--force-legacy",
+        action="store_true",
+        help="allow writing into %s, the committed legacy folds. Almost certainly "
+        "not what you want: they are inputs to the byte-exact golden." % PROTECTED_OUT,
+    )
     args = parser.parse_args(argv)
+
+    problem = check_out_dir(args.out, args.force_legacy, args.overwrite)
+    if problem is not None:
+        sys.stderr.write("ERROR: %s\n" % problem)
+        return 2
 
     records = read_records(args.data)
     n_subjects = len(set(record.subject_id for record in records))
