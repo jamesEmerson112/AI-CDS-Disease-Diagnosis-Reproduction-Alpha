@@ -4,8 +4,16 @@
 # redistribution, and this repository is public. See docs/guides/data-use.md.
 # Existing committed files are unaffected. Bypass deliberately with --no-verify.
 
+# The pattern is (raw|folds)[^/]*/ rather than (raw|folds)/ deliberately.
+# scripts/make_folds.py writes data/folds_grouped/, which the anchored form
+# missed entirely -- and rule 2 below missed it too, because fold files carry
+# bare numeric IDs with no literal "HADM_ID" token anywhere. For a while a
+# .gitignore was the only thing keeping 1290 lines of DUA-covered text out of a
+# public repo, and a .gitignore is a convenience, not a guard. [^/]*/ covers any
+# present or future fold set (folds_grouped, folds-v2, ...) while still
+# requiring a directory, so a loose data/folds-notes.md is not caught.
 new_data=$(git diff --cached --name-only --diff-filter=A \
-           | grep -E '^data/(raw|folds)/' || true)
+           | grep -E '^data/(raw|folds)[^/]*/' || true)
 
 if [ -n "$new_data" ]; then
     echo "BLOCKED: new clinical data files staged for commit:" >&2
@@ -29,6 +37,12 @@ for f in $(git diff --cached --name-only --diff-filter=A); do
     [ -f "$f" ] || continue
     case "$f" in *.png|*.jpg|*.svg|*.pdf|*.bin) continue ;; esac
     n=$(grep -o -E 'HADM_ID[=: ]*[0-9]{6}' "$f" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    # Second pattern: the fold-file shape, "{6-digit HADM_ID}_{symptoms}.".
+    # These carry no "HADM_ID" token at all, so the rule above scores them 0 --
+    # which is exactly how data/folds_grouped/ went unguarded. Anchored to the
+    # line start and requiring the underscore keeps ordinary prose out of it.
+    b=$(grep -o -E '^[0-9]{6}_' "$f" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+    [ "${b:-0}" -gt "${n:-0}" ] && n=$b
     [ "${n:-0}" -ge 20 ] && id_carriers="$id_carriers  $f ($n distinct HADM_IDs)
 "
 done
