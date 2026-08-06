@@ -76,3 +76,36 @@ LEGACY = PipelineConfig()
 #: The correctness-fixed pipeline. Expected to produce different numbers than
 #: ``LEGACY``; that difference is the finding, not a regression.
 CORRECTED = PipelineConfig(fold_dir="folds_grouped", preprocess_version="corrected")
+
+
+# Selecting a pipeline from outside the process.
+#
+# baseline_sent2vec.py executes its whole fold loop at import time, so there is
+# no moment after import at which a caller could rebind its config -- by then
+# the run is over. An environment variable is read at import, which is the one
+# hook that arrives early enough for both arms. LEGACY stays the default, so a
+# process that sets nothing is bit-identical and the golden is unaffected.
+_ENV_VAR = "AICDS_PIPELINE"
+
+_BY_NAME = {"legacy": LEGACY, "corrected": CORRECTED}
+
+
+def from_name(name):
+    """Resolve 'legacy' or 'corrected' to a PipelineConfig. Raises on anything else."""
+    try:
+        return _BY_NAME[str(name).strip().lower()]
+    except KeyError:
+        raise ValueError(
+            "unknown pipeline %r -- expected one of %s"
+            % (name, ", ".join(sorted(_BY_NAME)))
+        )
+
+
+def from_env(default=LEGACY):
+    """Read AICDS_PIPELINE. Unset means LEGACY, so the default path never moves."""
+    import os
+
+    raw = os.environ.get(_ENV_VAR)
+    if raw is None or not raw.strip():
+        return default
+    return from_name(raw)

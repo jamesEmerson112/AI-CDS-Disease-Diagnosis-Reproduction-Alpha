@@ -17,16 +17,22 @@ from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
 
 from aicds.utils import cython_utils as util_cy
-from aicds.config import LEGACY
+from aicds.config import from_env
 
 # This module runs at IMPORT time -- there is no run_analysis() to take a
-# config argument, so the seam is a module-level binding instead. LEGACY keeps
-# the resolved fold path identical to what it was before this existed. A
-# corrected run means rebinding this before the fold loop executes, i.e.
-# `aicds.models.baseline_sent2vec.PIPELINE_CONFIG = CORRECTED` is TOO LATE
-# (the loop has already run by the time the import returns). Restructuring
-# this file into a function is tracked separately; do not do it here.
-PIPELINE_CONFIG = LEGACY
+# config argument, so the seam is a module-level binding instead. Rebinding it
+# from outside (`aicds.models.baseline_sent2vec.PIPELINE_CONFIG = CORRECTED`)
+# is TOO LATE: the fold loop has already run by the time the import returns.
+#
+# The environment is therefore the only hook that arrives early enough, and
+# from_env() reads it here, before the loop. Unset means LEGACY, so the
+# resolved fold path stays identical to what it was before this existed:
+#
+#     AICDS_PIPELINE=corrected python scripts/run_baseline.py
+#
+# Restructuring this file into a run_analysis() function is tracked separately;
+# do not do it here.
+PIPELINE_CONFIG = from_env()
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
