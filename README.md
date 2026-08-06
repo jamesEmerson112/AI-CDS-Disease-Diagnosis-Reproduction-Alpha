@@ -33,16 +33,18 @@ below cannot be attributed to one or the other. One-change-at-a-time configs (`f
 The only threshold at which no model sits on the ceiling, and therefore the only one where the four
 arms can be compared at all.
 
-| Encoder | Dim | Precision | Recall | F | TP | FP | `TP+FP` | Pred. rate | Legacy F | Δ |
-|---------|:---:|:---------:|:------:|:------:|:---:|:---:|:-------:|:----------:|:--------:|:------:|
-| Bio_ClinicalBERT | 768 | 0.2491 | 0.2491 | **0.2491** | 3.3 | 9.6 | 12.9 | 1.0000 | 0.2853 | −0.0362 |
-| **BioSentVec — the 2019 baseline** | 700 | **0.2512** | 0.1923 | **0.2163** | 2.5 | 7.3 | **9.8** | **0.7558** | 0.2801 | −0.0638 |
-| BiomedBERT | 768 | 0.1981 | 0.1981 | **0.1981** | 2.6 | 10.3 | 12.9 | 1.0000 | 0.2545 | −0.0564 |
-| BlueBERT | 768 | 0.1821 | 0.1821 | **0.1821** | 2.4 | 10.5 | 12.9 | 1.0000 | 0.2391 | −0.0570 |
+| Encoder | Dim | Model size | Precision | Recall | F | TP | FP | `TP+FP` | Pred. rate | Legacy F | Δ |
+|---------|:---:|:----------:|:---------:|:------:|:------:|:---:|:---:|:-------:|:----------:|:--------:|:------:|
+| Bio_ClinicalBERT | 768 | 416 MB | 0.2491 | 0.2491 | **0.2491** | 3.3 | 9.6 | 12.9 | 1.0000 | 0.2853 | −0.0362 |
+| **BioSentVec — the 2019 baseline** | 700 | **20.93 GiB** | **0.2512** | 0.1923 | **0.2163** | 2.5 | 7.3 | **9.8** | **0.7558** | 0.2801 | −0.0638 |
+| BiomedBERT | 768 | 420 MB | 0.1981 | 0.1981 | **0.1981** | 2.6 | 10.3 | 12.9 | 1.0000 | 0.2545 | −0.0564 |
+| BlueBERT | 768 | 420 MB | 0.1821 | 0.1821 | **0.1821** | 2.4 | 10.5 | 12.9 | 1.0000 | 0.2391 | −0.0570 |
 
 *TP and FP are means across the 10 folds (~12.9 test cases per fold). Pred. rate is the fraction of
 test cases on which the system predicts at all. "Legacy F" is the same measurement under the
-original leaky folds and divergent preprocessing.*
+original leaky folds and divergent preprocessing. Model size is the on-disk weight file:
+BioSentVec is **17× larger than all three transformers combined**, because sent2vec stores an
+explicit unigram + bigram embedding table while BERT computes representations from ~110M parameters.*
 
 **Every arm loses ground once leakage is removed — the baseline most of all (−0.0638).** That is the
 expected direction: the leaked cases were free wins, and the baseline had the most to gain from
@@ -50,7 +52,34 @@ them.
 
 **Verdict — no encoder ranking is supported by this experiment.** The 700-dimensional,
 non-contextual, 2019 baseline lands **second of four** and holds the **highest precision of all four
-arms** (0.2512). The next two sections are why the word "second" should not be trusted either.
+arms** (0.2512). The next three sections are why the word "second" should not be trusted at all.
+
+### None of these gaps clears the noise
+
+The single most important table in this README. Per-fold standard deviations are **0.054–0.139** —
+larger than every between-encoder gap. Expressing each gap as a multiple of the standard error of a
+10-fold mean (`SE = sd/√10`):
+
+| Aggregator @ 1.0 | 1st | 2nd | 1st−2nd | in SE | Full spread | in SE |
+|---|---|---|:---:|:---:|:---:|:---:|
+| MAX | BioSentVec | Bio_ClinicalBERT | 0.0015 | **0.08** | 0.0092 | 0.49 |
+| TOP-10 | Bio_ClinicalBERT | BioSentVec | 0.0328 | **0.98** | 0.0671 | 2.01 |
+| TOP-20 | Bio_ClinicalBERT | BlueBERT | 0.0010 | **0.03** | 0.0819 | 2.14 |
+| TOP-30 | BlueBERT | Bio_ClinicalBERT | 0.0167 | **0.41** | 0.1383 | 3.37 |
+
+**Not one first-vs-second gap reaches 1 SE, let alone the ~2 needed to be worth mentioning.** Per-fold
+F ranges from 0.00 to 0.67 on identical data. A leave-one-fold-out check makes it concrete: at MAX,
+dropping a single fold hands first place to **BioSentVec in 5 of 10 cases and Bio_ClinicalBERT in the
+other 5** — the baseline's "win" is a coin flip. (Bio_ClinicalBERT's TOP-10 lead is the one that does
+survive all ten leave-one-out runs, but dropping fold 0 alone shrinks it from 0.0328 to 0.0068.)
+
+**The leakage fix did not change any encoder's rank.** BioSentVec was 1st at MAX, 2nd at TOP-10, and
+4th at TOP-20 through TOP-50 *both before and after*. What the fix changed is the magnitude — and it
+moved **against** the baseline everywhere: its deficit to 1st widened at every `K` (TOP-10
+0.0051 → 0.0328; TOP-30 0.0744 → 0.1383), and at MAX its margin over 2nd *shrank* from 0.0067 to
+0.0015. So the correct reading is not "leakage removal let the old encoder catch up." It is that the
+old encoder was **never distinguishable from the new ones in this data**, and removing leakage
+removed the confound that could have explained that away.
 
 **Read the `TP+FP` and prediction-rate columns together — they are the whole degeneracy story.**
 Every BERT arm sums to exactly **12.9**, the mean fold test size, so `tp + fp == nrow`; precision
@@ -123,11 +152,11 @@ compactness of biomedical embedding space combined with the MAX-over-Cartesian-p
 puts ~100% of patient pairs above the bar, so essentially everything counts as a match. 0.6 is the
 paper's threshold, which is why it appears here at all; it cannot discriminate between models.
 
-**An inversion worth noting.** The baseline model file is **20.93 GiB**; the three transformers are
-416 MB, 420 MB, and 420 MB — the 2019 baseline is roughly **17× larger than all three modern models
-combined**, because sent2vec stores an explicit unigram + bigram embedding table while BERT computes
-representations contextually from ~110M parameters. The larger, older, storage-heavy model matches
-them.
+**An inversion worth noting.** Per the size column above, the 2019 baseline is ~17× larger on disk
+than all three modern models combined, needs its full 20.93 GiB resident to run, and cannot be built
+on Windows at all — and it still cannot be distinguished from them. The cost asymmetry is real even
+though the accuracy difference is not, which is the practical argument for the transformers that this
+experiment *does* support.
 
 ---
 
