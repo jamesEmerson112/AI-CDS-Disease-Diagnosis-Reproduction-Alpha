@@ -7,18 +7,36 @@ STATUS
            (c2115ba, 31bea66, 930c162, 45f36fc, d77de02)
   PARTIAL  P8   80 of 89 fragments; see P27
            P29  configs defined, the attribution RUNS are still to do
-  IN FLIGHT P32                (four-arm corrected run on RunPod)
-  NEXT     P4 - the encoder-independent grader
-  NEW      P27 P29 P30 P31 P32 P33 - all found while implementing Tier 1
+           P32  all four arms RAN; PDF and READMEs still to do
+  NEXT     P34 (unblocks the PDF) then P4, the encoder-independent grader
+  NEW      P27 P29 P30 P31 P32 P33 P34 - all found while implementing Tier 1
 
-FIRST CORRECTED NUMBER (baseline arm, 2026-08-06 02-18-41, TOP-10 @ 0.6)
-  legacy    P 0.5624  R 0.4256  F 0.4824   (published: 0.489)
-  corrected P 0.4692  R 0.3410  F 0.3922
-  The correction COSTS 0.090 F1 - i.e. removing patient leakage and fixing
-  preprocessing wipes out roughly a fifth of the headline number. That is the
-  right direction and the right rough magnitude (predicted +0.11 to +0.26
-  inflation), and it is the strongest single piece of evidence in the project
-  that the published result was materially inflated. BERT arms pending.
+THE RESULT SO FAR - all four arms, corrected pipeline, 2026-08-06
+Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
+
+  MAX @ threshold 1.0 -- the ONLY setting where no model saturates
+                       legacy   corrected    delta
+    BioSentVec (700D)  0.1843     0.0877    -0.0966
+    Bio_ClinicalBERT   0.1462     0.0862    -0.0600
+    BiomedBERT         0.1692     0.0855    -0.0837
+    BlueBERT           0.1776     0.0785    -0.0991
+    SPREAD             0.0381     0.0092
+
+  The between-encoder spread collapses FOUR-FOLD, to what is effectively a
+  four-way tie with the 700D sent2vec baseline nominally on top. The single
+  most defensible statement this project can make is therefore NOT that some
+  encoder wins - it is that MOST OF THE MEASURED DIFFERENCE BETWEEN ENCODERS
+  WAS CONTAMINATION. Finding 05 predicted this before the runs existed.
+
+  Baseline TOP-10 @ 0.6:  0.4824 -> 0.3922  (published 0.489)
+  i.e. roughly a fifth of the headline number was leakage + preprocessing.
+  The three BERT arms cannot move there; they are pinned at 1.000.
+
+  SATURATION AND DEGENERACY BOTH SURVIVE. All three BERT arms still report
+  PR exactly 1.0000 with P == R == F in every row, so every "F1" in those
+  columns is still ACCURACY. The baseline still abstains at PR 0.7558 and
+  alone has P != R - which confirms degeneracy is a consequence of BERT's
+  compact embedding space, not a structural property of the code.
 
   Tier 1 removed two of the four documented confounds: PATIENT LEAKAGE (41 leaked
   test cases -> 0) and DIVERGENT CROSS-ARM PREPROCESSING (26/145 matching -> 145/145).
@@ -597,17 +615,47 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         Fix: parse the timestamp into a real date before sorting, record the
         pipeline in run_metadata.json (P14), and put it on the PDF.
 
-[ ] P32. COLLECT THE CORRECTED-PIPELINE RESULTS AND REPUBLISH   *** IN FLIGHT ***
-        A four-arm corrected run was launched on the RunPod box on 2026-08-05
-        (AICDS_PIPELINE=corrected, all four arms, ~1 hour).
+[~] P32. COLLECT THE CORRECTED-PIPELINE RESULTS         PARTIAL 2026-08-06 (3b8aed9)
+        DONE: all four arms ran on the pod, exit 0, ~48 min total (baseline
+        ~13 min, each BERT arm ~11.5 min). Downloaded to
+        results_corrected/<model>/<timestamp>/, GITIGNORED under the same rule
+        as results/ - the run dirs carry all 129 HADM_IDs and the pre-commit
+        hook blocks them. Aggregates written up in docs/findings/11, which
+        carries no identifiers.
 
-        When it lands:
-          - place each run under results/<model>/<timestamp>/
-          - regenerate results/model_comparison.pdf via scripts/compare_models.py
-          - update README.md and docs/README.md with the FIRST UNCONTAMINATED
-            numbers this project has ever produced
+        HEADLINE: at MAX threshold 1.0 - the only setting where nothing
+        saturates - the spread across the four encoders COLLAPSES from 0.038 to
+        0.009. Effectively a four-way tie, with the 700D sent2vec baseline
+        nominally on top. Most of the measured "difference between encoders"
+        was leakage, exactly as finding 05 predicted before these runs existed.
+        Baseline TOP-10 @ 0.6 drops 0.4824 -> 0.3922, so about a fifth of the
+        published 0.489 was contamination.
+        Saturation and degeneracy BOTH SURVIVE untouched - expected, since they
+        are metric design rather than data splitting.
+
+        STILL TO DO:
+          - regenerate the comparison PDF -- BLOCKED by P34 below
+          - update README.md and docs/README.md with these numbers
           - re-measure the 58.1% ceiling on the grouped folds (see P2)
-          - keep the legacy numbers alongside, labelled (P9)
+          - run folds-only and preprocess-only to attribute the drop (P29)
+
+[ ] P34. compare_models.py SANITY CHECKS ARE PINNED TO LEGACY VALUES
+        Effort: ~an hour. Found 2026-08-06. BLOCKS the corrected comparison PDF.
+
+        The 16 baked-in assertions hard-code legacy numbers, so
+        --results-dir results_corrected fails all 16 and exits before writing
+        the PDF. The checks are RIGHT to fire; the expectations are simply
+        legacy-specific.
+
+        Fix: key the expected values by pipeline, inferred from the run
+        directory or - better - from run_metadata.json once P14 lands.
+        DO NOT delete the assertions to unblock the PDF. They are the only
+        thing verifying the parser reads the columns correctly.
+
+        Same commit should fix the host label: hosts_by_date maps 15022026 and
+        05082026 only, so the 06082026 corrected runs fall through to the
+        per-model default and are mislabelled "M-series Mac" when they ran on
+        RunPod Linux. Deriving host from a date prefix was always a stopgap.
 
         REMEMBER when writing them up: these numbers are leakage-free and
         preprocessing-unified, but they are STILL SELF-GRADED (P4) and still
