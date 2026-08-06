@@ -3,8 +3,10 @@ Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain a
 Updated 2026-08-05 after Tier 1 landed.
 
 STATUS
-  DONE     P1 P2 P3 P7 P9 P28  (commits c2115ba, 31bea66, 930c162)
-  PARTIAL  P8                  (80 of 89 fragments; see P27)
+  DONE     P1 P2 P3 P7 P9 P28 P29 P30
+           (c2115ba, 31bea66, 930c162, 45f36fc, d77de02)
+  PARTIAL  P8   80 of 89 fragments; see P27
+           P29  configs defined, the attribution RUNS are still to do
   IN FLIGHT P32                (four-arm corrected run on RunPod)
   NEXT     P4 - the encoder-independent grader
   NEW      P27 P29 P30 P31 P32 P33 - all found while implementing Tier 1
@@ -535,33 +537,36 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         tests/test_make_folds_guard.py, 13 tests. Suite 122 -> 135 passed.
         Also pins the determinism the gitignore rests on: two runs byte-identical.
 
-[ ] P29. ADD THE THIRD ARM - FOLDS-ONLY - SO EFFECTS CAN BE ATTRIBUTED
-        Effort: trivial. Impact: real explanatory power for the writeup.
+[x] P29. THE TWO ONE-CHANGE-AT-A-TIME CONFIGS    DONE 2026-08-05 (45f36fc)
+        CONFIGS DEFINED; THE RUNS THEMSELVES ARE STILL TO DO.
 
-        CORRECTED bundles TWO independent changes: grouped folds AND corrected
-        preprocessing. A legacy-vs-corrected delta therefore cannot say how much of
-        the movement came from removing leakage and how much from fixing "w/o" and
-        the comma fragments. For a comparison whose entire point is attribution,
-        that is a real gap.
+          folds-only       grouped folds, legacy preprocessing -> leakage effect
+          preprocess-only  legacy folds, fixed preprocessing    -> preproc effect
 
-        Fix: PipelineConfig("folds_grouped", "legacy") as a third named config, and
-        a fourth if wanted - PipelineConfig("folds", "corrected"). Both fall out of
-        the existing dataclass; no new machinery. Register in config._BY_NAME so
-        --pipeline and $AICDS_PIPELINE pick them up automatically.
+        preprocess-only STILL LEAKS PATIENTS by construction. It is an attribution
+        instrument; never report a number from it as a result.
 
-[ ] P30. WIDEN .githooks/pre-commit - IT DOES NOT COVER data/folds_grouped/
-        Effort: minutes.
+        --pipeline's choices now derive from config.PIPELINE_NAMES instead of a
+        hand-kept list, so a config cannot exist-but-be-unselectable. That was a
+        real bug here: c2115ba shipped the seam with no CLI able to reach
+        CORRECTED, and 31bea66 had to add the plumbing afterwards.
 
-        The hook has two rules and BOTH miss the new fold set:
-          rule 1 greps ^data/(raw|folds)/ - "folds_grouped" does not match
-          rule 2 looks for 20+ distinct HADM_ID tokens, but fold files carry bare
-                 numeric IDs with no "HADM_ID" header anywhere
-        So 1290 lines of DUA-covered MIMIC text are one `git add -f` away from a
-        public repo. .gitignore:129 is the only thing stopping it today, and a
-        gitignore is a convenience, not a guard.
+        TO DO: run both on the baseline arm (~13 min each on the pod) to split the
+        measured 0.090 F1 drop into a leakage part and a preprocessing part.
 
-        Fix: widen rule 1 to ^data/(raw|folds) - dropping the trailing slash covers
-        folds/, folds_grouped/, and any future fold set in one change.
+[x] P30. WIDEN .githooks/pre-commit                   DONE 2026-08-05 (d77de02)
+        Both rules had missed data/folds_grouped/ - verified, not assumed:
+          rule 1 ^data/(raw|folds)/ did not match "folds_grouped"
+          rule 2 scored those files ZERO, because fold lines are bare
+                 "{6-digit id}_{symptoms}." with no literal HADM_ID token
+
+        rule 1 is now ^data/(raw|folds)[^/]*/ and rule 2 also counts lines
+        matching ^[0-9]{6}_, taking the larger of the two counts.
+
+        Both were needed. A TestSet.txt holds only 15 IDs, BELOW the threshold of
+        20, so the content rule alone would not have stopped it - the path rule
+        does. Same defence-in-depth reasoning that added rule 2 originally.
+        Verified end to end: staging a grouped fold file now exits 1.
 
 [ ] P31. THE GOLDEN TAKES ~44 MINUTES, NOT 20-26. FOUR DOCS SAY OTHERWISE.
         Effort: minutes. Measured twice on an M-series Mac: 43:50 and 44:32.
