@@ -12,10 +12,13 @@ stale at different rates.
 
 ## If you are coming back to this project after a break
 
-Read in this order:
+**Read the [root README](../README.md) first.** As of 2026-08-06 it leads with the corrected,
+leakage-free four-arm result and states what can and cannot be claimed from it. This index is the
+map of how that conclusion was reached; the root README is the conclusion.
 
-If you want one document, read **[findings/07-comparison-validity.md](findings/07-comparison-validity.md)** —
-it is the synthesis, and it says what the comparison would need in order to mean anything. Otherwise:
+Then, if you want one document from here, read
+**[findings/07-comparison-validity.md](findings/07-comparison-validity.md)** — it is the synthesis,
+and it says what the comparison would need in order to mean anything. Otherwise, in order:
 
 1. [findings/01-baseline-reproduction.md](findings/01-baseline-reproduction.md) — what the
    original paper (Comito et al., 2022) did, and the status of reproducing it. **Superseded by 09:
@@ -29,10 +32,12 @@ it is the synthesis, and it says what the comparison would need in order to mean
    recall, and F-score are the same number in all 12,600 committed BERT rows, so every "F1" there
    is accuracy. **Resolved 2026-08-05** — it is the embedding space, not the code; see 09.
 5. [findings/05-patient-leakage.md](findings/05-patient-leakage.md) — **read this one.** 41 of 129
-   test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, roughly
-   ten times the difference between the encoders being compared.
+   test cases could retrieve the same patient's own other admission. Worth +0.11 to +0.26, roughly
+   ten times the difference between the encoders being compared. **FIXED 2026-08-05** (`c2115ba`,
+   `GroupKFold` on `SUBJECT_ID`); 11 measures what removing it cost.
 6. [findings/06-preprocessing-defects.md](findings/06-preprocessing-defects.md) — `w/o` becomes
    `w`, so negation is destroyed; and 4.4% of symptom tokens are fragments of shredded labels.
+   **FIXED 2026-08-05** (`c2115ba`) except nine fragment occurrences; see P27 in the TODO.
 7. [findings/07-comparison-validity.md](findings/07-comparison-validity.md) — the synthesis of
    01–06: five separable reasons the comparison is not valid yet, and what would fix each.
 8. [findings/08-runtime-and-cost.md](findings/08-runtime-and-cost.md) — the encoder costs almost
@@ -45,6 +50,17 @@ it is the synthesis, and it says what the comparison would need in order to mean
 10. [findings/10-output-path-fragmentation.md](findings/10-output-path-fragmentation.md) — nothing
     in the repo can find the baseline's output: it writes `Prediction Output_` with a space while
     all five discovery sites glob `Prediction_Output_*`. Also, every per-case output file is empty.
+11. [findings/11-corrected-pipeline-first-results.md](findings/11-corrected-pipeline-first-results.md)
+    — **the first uncontaminated four-arm numbers**, with leakage removed and preprocessing unified.
+    Roughly a fifth of the published headline was those two defects. Its own original headline
+    ("the spread collapses") was an overclaim, walked back in `19e602a` and preserved in place: the
+    collapse is MAX-only, and under every TOP-K the spread *widens*. What replaced it is stronger —
+    the encoder ordering inverts on the choice of K alone, so no ranking is supported.
+12. [findings/12-drg-grader.md](findings/12-drg-grader.md) — every arm was grading its own
+    predictions by cosine *in the space that produced the retrieval*, so a compact space marked
+    itself leniently. Replaced with an exact DRG-label match: one ruler for all four arms. Records
+    the 58.9% ceiling this imposes, the partial-credit ladder that was designed and rejected, and
+    two consequences written down *before* the runs so they could be wrong.
 
 ## If you are setting up on a new machine
 
@@ -55,17 +71,23 @@ OpenMP runtime.
 [guides/data-use.md](guides/data-use.md) explains why this repository must not receive new
 clinical data, and how the pre-commit hook enforces that.
 
-## The four problems, and how they relate
+## The problems, and how they relate
 
-These are easy to conflate, and conflating them leads to fixing the wrong thing. The first two are
-metric design; the last two are plain bugs that nobody would defend.
+These are easy to conflate, and conflating them leads to fixing the wrong thing. Saturation and
+degeneracy are metric *design*; leakage and preprocessing were plain bugs nobody would defend;
+self-grading sits in between — defensible in the original paper, indefensible once the point is a
+comparison *between* embedding spaces.
 
-| Problem | What goes wrong | Fix |
-|---|---|---|
-| **Saturation** (03) | Nearly every diagnosis pair clears threshold 0.6, because the embedding space is compact and MAX over the Cartesian product amplifies it | A different aggregator, a stricter threshold, or centring the embeddings |
-| **Degeneracy** (04) | P, R, and F1 are the same number in all 12,600 committed BERT rows — every case increments exactly one of TP or FP | A genuine set-level P/R/F1, or rank-aware metrics |
-| **Leakage** (05) | 41 of 129 test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, ~10× the encoder differences | `GroupKFold` on `SUBJECT_ID`; regenerate the folds |
-| **Preprocessing** (06) | `w/o` → `w` destroys negation; 4.4% of symptom tokens are fragments of comma-shredded labels | Protect `w/o`; rejoin space-prefixed tokens |
+The list was four items long until 2026-08-06. Self-grading is the fifth, found while asking why
+every remaining defect happened to bias the same direction.
+
+| Problem | What goes wrong | Fix | Status |
+|---|---|---|---|
+| **Saturation** (03) | Nearly every diagnosis pair clears threshold 0.6, because the embedding space is compact and MAX over the Cartesian product amplifies it | A different aggregator, a stricter threshold, or centring the embeddings | **Survives** the corrected pipeline — all three BERT arms still sit at 1.000. Addressed by the DRG grader (12), which is scale-free |
+| **Degeneracy** (04) | P, R, and F1 are the same number in all 12,600 committed BERT rows — every case increments exactly one of TP or FP | A genuine set-level P/R/F1, or rank-aware metrics | **Survives**, and was *predicted* to: it comes from the retrieval-side pruning gate, upstream of any grader. Open (P5, P6) |
+| **Leakage** (05) | 41 of 129 test cases can retrieve the same patient's own other admission. Worth +0.11 to +0.26, ~10× the encoder differences | `GroupKFold` on `SUBJECT_ID`; regenerate the folds | **Fixed** 2026-08-05 (`c2115ba`). 41 → 0, recounted independently |
+| **Preprocessing** (06) | `w/o` → `w` destroys negation; 4.4% of symptom tokens are fragments of comma-shredded labels | Protect `w/o`; rejoin space-prefixed tokens | **Fixed** 2026-08-05 (`c2115ba`), 80 of 89 fragments; nine remain (P27) |
+| **Self-grading** (12) | Each arm scores its own predictions by cosine in the space that produced them, so a compact space marks itself leniently | Grade on an exact DRG label match instead — one ruler for all arms | **Fixed** 2026-08-06 (`75b6530`), behind `--pipeline drg` |
 
 Fixing any one of these does not fix the others — with one exception, now settled.
 
@@ -78,10 +100,16 @@ baseline's looser 700D space trips neither: it abstains on 30 of 129 cases (23.3
 rather than 1.000. The tell is a single column: `TP+FP` sums to exactly 12.9, the mean fold test
 size, for all three BERT arms, and to 9.9 for the baseline.
 
-Leakage and preprocessing remain wholly independent of both, and of each other.
+Leakage and preprocessing remain wholly independent of both, and of each other. Fixing them
+confirmed it: the corrected pipeline moved the numbers substantially and left saturation and
+degeneracy exactly where they were, with all three BERT arms still pinned at 1.000 and `PR` still
+exactly 1.0000.
 
-**Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md). Leakage first:
-it is the largest correction and the cheapest, since the folds are data rather than code.
+**Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md), with the ranked
+digest in [plans/TODO.txt](plans/TODO.txt). Leakage went first, as planned — it was the largest
+correction and the cheapest, since the folds are data rather than code. Self-grading followed. What
+remains is rank-awareness (P5) and set-level metrics (P6): the metric still cannot tell a hit at
+rank 1 from a hit at rank 50, which is why TOP-K rises with K no matter what the encoder does.
 
 ## Reference
 
@@ -91,11 +119,17 @@ it is the largest correction and the cheapest, since the folds are data rather t
 
 ## What happens next
 
-[plans/revival-roadmap.md](plans/revival-roadmap.md) — the sequenced plan for reviving and
-extending the project. Phases 0 and 4 (environment repair, test suite, documentation) are done.
-Phase 1 is next: characterization tests and a deterministic stub encoder, so the pipeline gets a
-regression net *before* any code moves. Then the `src/aicds/` package layout and a single
-`main.py` CLI replacing the eight ad-hoc scripts.
+[plans/revival-roadmap.md](plans/revival-roadmap.md) is the refactor sequence;
+[plans/TODO.txt](plans/TODO.txt) is the ranked digest and carries current status.
+
+**Phases 0, 1, 2 and 4 are done** — environment repair, the data-use guard, this documentation, the
+byte-exact golden regression net, and the `src/aicds/` package move. **Phase 3 is next and is the
+ship point**: a `SentenceEncoder` protocol and encoder registry, a `main.py` CLI (`bert_models.py`
+still calls `input()` interactively), one `PerformanceIndex` parser replacing three, one
+run-discovery rule replacing five, and the dashboard fix.
+
+Running alongside it, and now ahead of it in priority: P5 (rank-aware metrics) and P38 (a
+code-only public repository, which blocks publication because this one carries DUA-covered data).
 
 The roadmap also records the three decisions that shaped it and the reasoning behind the risky
 parts — notably why the two evaluation loops must **not** be merged, and why the committed
