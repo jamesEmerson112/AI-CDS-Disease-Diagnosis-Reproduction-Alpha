@@ -48,10 +48,20 @@ fold_dir
 preprocess_version
     Which ``preprocess_sentence``/``preprocess_diagnosis`` behaviour to use.
     ``"legacy"`` keeps the ``w/o`` -> ``w`` negation loss and the naive
-    comma split. ``"corrected"`` is reserved for the fixed variants. **Not yet
-    consumed by anything** -- the field exists so the plumbing is in place
-    before the behaviour lands, keeping the risky change and the wiring change
-    in separate, individually reviewable commits.
+    comma split. ``"corrected"`` protects ``w/o`` before slash-padding and
+    rejoins comma fragments to their predecessor. Note the rejoin is a
+    *heuristic* and still misses nine occurrences where the intra-label comma
+    carries no trailing space -- see ``split_symptoms`` and TODO P27.
+
+Why there are four configs and not two
+--------------------------------------
+``CORRECTED`` changes **two independent things at once**: it moves to the
+grouped folds *and* to the fixed preprocessing. A ``LEGACY`` vs ``CORRECTED``
+delta therefore cannot say how much of the movement came from removing patient
+leakage and how much from fixing the text handling. For a project whose entire
+point is attributing an effect to a cause, that is not good enough, so both
+one-change-at-a-time configs exist as well. They cost nothing to define; run
+them only when the attribution question is actually being asked.
 """
 
 from dataclasses import dataclass
@@ -77,6 +87,14 @@ LEGACY = PipelineConfig()
 #: ``LEGACY``; that difference is the finding, not a regression.
 CORRECTED = PipelineConfig(fold_dir="folds_grouped", preprocess_version="corrected")
 
+#: Grouped folds, legacy text handling. Isolates the PATIENT LEAKAGE effect.
+FOLDS_ONLY = PipelineConfig(fold_dir="folds_grouped", preprocess_version="legacy")
+
+#: Legacy folds, fixed text handling. Isolates the PREPROCESSING effect.
+#: Still leaks patients, so it is an attribution instrument only -- never
+#: report a number from this config as a result.
+PREPROCESS_ONLY = PipelineConfig(fold_dir="folds", preprocess_version="corrected")
+
 
 # Selecting a pipeline from outside the process.
 #
@@ -87,7 +105,18 @@ CORRECTED = PipelineConfig(fold_dir="folds_grouped", preprocess_version="correct
 # process that sets nothing is bit-identical and the golden is unaffected.
 _ENV_VAR = "AICDS_PIPELINE"
 
-_BY_NAME = {"legacy": LEGACY, "corrected": CORRECTED}
+_BY_NAME = {
+    "legacy": LEGACY,
+    "corrected": CORRECTED,
+    "folds-only": FOLDS_ONLY,
+    "preprocess-only": PREPROCESS_ONLY,
+}
+
+
+#: Selectable pipeline names, for argparse ``choices=``. Derived from the
+#: registry so a new config cannot exist-but-be-unselectable, which is the bug
+#: this seam shipped with initially.
+PIPELINE_NAMES = tuple(sorted(_BY_NAME))
 
 
 def from_name(name):

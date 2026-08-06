@@ -11,6 +11,12 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 if __name__ == "__main__":
+    # Imported before the parser is built so --pipeline's choices come from the
+    # registry itself. A hand-kept list here would silently drift from
+    # config._BY_NAME, and the failure mode is a config that exists but cannot
+    # be selected -- which is exactly the bug 31bea66 had to fix.
+    from aicds.config import PIPELINE_NAMES, from_env, from_name
+
     parser = argparse.ArgumentParser(description="BERT Disease Diagnosis Analysis")
     parser.add_argument(
         "--model",
@@ -20,15 +26,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pipeline",
-        choices=["legacy", "corrected"],
+        choices=PIPELINE_NAMES,
         default=None,
         help="legacy (default) reproduces the committed numbers byte-for-byte; "
-        "corrected uses the GroupKFold folds and the fixed preprocessing. "
+        "corrected uses the GroupKFold folds AND the fixed preprocessing. "
+        "folds-only and preprocess-only change one thing each, so the two "
+        "effects can be told apart -- note preprocess-only still leaks patients "
+        "and is an attribution instrument, not a result. "
         "Falls back to $AICDS_PIPELINE, then legacy.",
     )
     args = parser.parse_args()
-
-    from aicds.config import from_env, from_name
 
     config = from_name(args.pipeline) if args.pipeline else from_env()
 
