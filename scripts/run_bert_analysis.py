@@ -33,6 +33,12 @@ if __name__ == "__main__":
         "folds-only and preprocess-only change one thing each, so the two "
         "effects can be told apart -- note preprocess-only still leaks patients "
         "and is an attribution instrument, not a result. "
+        "drg adds the encoder-independent grader on top of corrected: a "
+        "prediction counts only on an exact DRG label match, so all four arms "
+        "are scored by one ruler instead of each by its own embedding space. "
+        # %% -- argparse runs this string through % expansion, so a bare
+        # percent sign here breaks --help with an unrelated ValueError.
+        "Its ceiling is 58.9%%, not 100%%. "
         "Falls back to $AICDS_PIPELINE, then legacy.",
     )
     args = parser.parse_args()
@@ -43,7 +49,15 @@ if __name__ == "__main__":
     print("AI-CDS Disease Diagnosis - BERT Models")
     print("=" * 60)
     print(f"Project root: {project_root}")
+    # Every axis of the config goes in the banner, the grader included. Omitting
+    # it is how an operator ends up with cosine numbers filed as DRG ones: the
+    # run succeeds, the banner looks right, and nothing downstream records which
+    # ruler was used.
     print(f"Pipeline:     {config.preprocess_version}  (folds: {config.fold_dir})")
+    print(f"Grader:       {config.grader}")
+    if config.grader == "drg-exact":
+        print("              exact DRG label match; ceiling is 76/129 = 58.9% on")
+        print("              folds_grouped, so 1.0 is unreachable by construction")
     print("")
 
     from aicds.models.bert_models import run_analysis, MODELS

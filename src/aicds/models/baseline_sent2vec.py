@@ -17,7 +17,7 @@ from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
 
 from aicds.utils import cython_utils as util_cy
-from aicds.config import from_env
+from aicds.config import from_env, require_supported_grader
 
 # This module runs at IMPORT time -- there is no run_analysis() to take a
 # config argument, so the seam is a module-level binding instead. Rebinding it
@@ -32,7 +32,23 @@ from aicds.config import from_env
 #
 # Restructuring this file into a run_analysis() function is tracked separately;
 # do not do it here.
-PIPELINE_CONFIG = from_env()
+PIPELINE_CONFIG = require_supported_grader(from_env())
+
+# Announce every axis of the resolved config, the grader included. This arm
+# writes its output to a directory named only by timestamp -- no model name, no
+# pipeline -- so the run log is the ONLY place the configuration is recorded.
+# Without this, a corrected or DRG-graded baseline run is indistinguishable from
+# a legacy one after the fact.
+print("=" * 60)
+print("AI-CDS Disease Diagnosis - BioSentVec baseline")
+print("=" * 60)
+print("Pipeline:     %s  (folds: %s)" % (PIPELINE_CONFIG.preprocess_version,
+                                        PIPELINE_CONFIG.fold_dir))
+print("Grader:       %s" % PIPELINE_CONFIG.grader)
+if PIPELINE_CONFIG.grader == "drg-exact":
+    print("              exact DRG label match; ceiling is 76/129 = 58.9% on")
+    print("              folds_grouped, so 1.0 is unreachable by construction")
+print("=" * 60)
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -344,7 +360,7 @@ for nFold in range(0,K_FOLD):
         #######################################################
         util_cy.predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, embendings_symptoms, embendings_diagnosis,
                 admissions, similarity_matrix, None, confusion_matrix_max, None, confusion_matrix_Top_K_max_dict,
-                directory_prediction, directory_prediction_details, performance_out_file)
+                directory_prediction, directory_prediction_details, performance_out_file, PIPELINE_CONFIG)
 
         # DEBUG: Log after prediction (confusion matrix updated by C code)
         if DEBUG_MODE and i < DEBUG_CASE_LIMIT:

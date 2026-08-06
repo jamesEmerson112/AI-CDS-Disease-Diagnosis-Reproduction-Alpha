@@ -22,7 +22,9 @@ last two are plain bugs.
 
 A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. That curve is an artifact, not a result. The real fix is a genuine set-level P/R/F1 over the diagnosis sets, which is why "pluggable metrics" is the substance of the next phase rather than a nicety.
 
-**Before designing any exact-match metric:** only **75 of 129 test cases (58.1%)** have their correct DRG present anywhere in their fold's training pool — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at 58.1% under exact matching. Prefer graded relevance. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
+**Before designing any exact-match metric:** only **75 of 129 test cases (58.1%)** have their correct DRG present anywhere in their fold's training pool — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at 58.1% under exact matching (**58.9%, 76/129, on `folds_grouped`** — the leakage fix moved retrievability by one case, pinned in `tests/test_drg_grader.py`). Prefer graded relevance. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
+
+**Do not "correct" that 105 to 85.** Both are real and count different things: **85** is occurrence-level singletons over the 297 raw diagnosis entries, **105** is admission-level singletons (document frequency 1) over the 224 entries surviving `preprocess_diagnosis`'s per-admission dedup, and the 85 are a strict subset. **105 is the right figure here**, because this sentence bounds exact-match *retrieval* and a label written twice inside one admission offers a retriever no second admission to find it in. It is also the pipeline-true count — the dedup happens before any label reaches the grader. The 20-label gap exists because **71 of 129 admissions list their APR label twice byte-identically**, an upstream DRGCODES artifact. This was nearly mis-"fixed" during P4; see `docs/findings/12-drg-grader.md`.
 
 **The shared-pipeline constraint is already broken.** The baseline calls `preprocess_sentence` on diagnosis text (`cython_utils.py:226`); the BERT path does not (`bert_models.py:318-332`), so 119/145 (82.1%) of descriptions differ between arms. Any baseline-vs-BERT number is confounded by preprocessing, not just encoder.
 
@@ -32,7 +34,7 @@ At threshold 1.0 — the only setting where the encoders separate at all, since 
 
 ### The findings index
 
-`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation.
+`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement.
 
 **Runtime, measured:** encoding is 0.17–0.45% of wall-clock; over 93% is the single-threaded pure-Python cosine loop, and total fold time varies only 1.7% across the three transformers. **A GPU buys nothing for the encoder arms** — that is why the rented box is CPU-optimised. See `docs/findings/08-runtime-and-cost.md`.
 

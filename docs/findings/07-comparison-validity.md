@@ -119,6 +119,16 @@ exactly once in the dataset. **A perfect retriever caps at 58.1% under exact mat
 that rewards only exact hits is therefore measuring dataset sparsity as much as model quality,
 which is the argument for graded relevance over exact match.
 
+**Re-measured 2026-08-06 on the grouped folds: 76/129 = 58.9%.** Regrouping the folds by
+`SUBJECT_ID` moved retrievability by exactly one case, so leakage and sparsity are independent
+defects — fixing the split does not make more diagnoses findable. Both figures are now pinned by
+`tests/test_drg_grader.py`. Per fold the ceiling ranges from **3/12 (25%) to 13/15 (87%)** on the
+grouped split, which is itself a source of the per-fold variance reported elsewhere.
+
+The "105" is document frequency over the deduped labels, not occurrence count over raw entries
+(which is 85). It is the correct one for a *retrieval* bound, and the distinction is explained in
+[12-drg-grader.md](12-drg-grader.md) — an attempted "correction" to 85 was abandoned.
+
 ## What would make the comparison valid, in order
 
 1. **Unify diagnosis preprocessing across arms.** Without this the arms are not comparable at all.

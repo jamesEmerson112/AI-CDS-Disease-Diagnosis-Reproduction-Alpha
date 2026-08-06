@@ -26,7 +26,7 @@ from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid
 # corrected branch. A bare name raises NameError instead unless the test
 # registers it (it does, at the _load_bert_functions namespace).
 from aicds.utils.cython_utils import use_corrected_preprocessing
-from aicds.config import LEGACY
+from aicds.config import LEGACY, require_supported_grader
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -402,6 +402,11 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
     ################################################################################################################
     # Use proper path joining instead of changing directory
     dataset_start = time.perf_counter()
+    # Fail before the model load and the encode, not 12 minutes into the fold
+    # loop -- an unhonoured grader would otherwise emit cosine numbers under
+    # another grader's name, which nothing downstream could detect.
+    require_supported_grader(config)
+
     file_name = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
     f = open(file_name, "r").readlines()
     orig_stdout = sys.stdout
@@ -572,8 +577,8 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
             # Pre-compute diagnosis similarities for all returned predictions
             all_diag_sims = []
             for pred_diagnosis in all_diags:
-                diag_sim = util_cy.get_diagnosis_similarity_by_description_max(
-                    embendings_diagnosis, gt_diagnosis, pred_diagnosis, 'cosine'
+                diag_sim = util_cy.get_diagnosis_relevance(
+                    embendings_diagnosis, gt_diagnosis, pred_diagnosis, config
                 )
                 all_diag_sims.append(diag_sim)
 

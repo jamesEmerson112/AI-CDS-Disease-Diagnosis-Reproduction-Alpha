@@ -9,7 +9,7 @@ from aicds.utils.Constants import *
 # Imported AFTER the star import above so a future name added to Constants can
 # never silently shadow LEGACY. aicds.config imports nothing from aicds, so
 # there is no cycle.
-from aicds.config import LEGACY
+from aicds.config import LEGACY, SUPPORTED_GRADERS
 
 import nltk
 from nltk import word_tokenize
@@ -186,12 +186,20 @@ def cosine_similarity(u, v):
     return cos_theta
 
 
-def predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, embendings_symptoms, 
+def predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, embendings_symptoms,
                embendings_diagnosis, admissions, similarity_matrix,
-               confusion_matrix_mean_max, confusion_matrix_max, confusion_matrix_Top_K_mean_max_dict, 
+               confusion_matrix_mean_max, confusion_matrix_max, confusion_matrix_Top_K_mean_max_dict,
                confusion_matrix_Top_K_max_dict, directory_prediction,
-               directory_prediction_details, performance_out_file):
-    
+               directory_prediction_details, performance_out_file, config=LEGACY):
+    """Run one test admission through the baseline arm's prediction and scoring.
+
+    ``config`` is trailing and defaults to LEGACY so every existing positional
+    call is unchanged. It reaches only the two diagnosis-grading calls below;
+    retrieval is untouched. **Both** grading calls must take the same config --
+    grading MAX with one ruler and TOP-K with another would produce a result
+    belonging to neither.
+    """
+
     # OPEN PREDICTION OUTPUT FILE
     prediction_out_file = open(directory_prediction + test_admission.hadm_id + '.txt', 'w')
     detailed_out_file = open(directory_prediction_details + test_admission.hadm_id + '.txt', 'w')
@@ -254,8 +262,8 @@ def predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, emb
         most_similar_symptoms = list(x_train[max_index].values())[0]
         most_similar_admission = admissions.get(most_similar_index)
         predicted_diagnosis = most_similar_admission.diagnosis
-        diagnosis_similarity_max = get_diagnosis_similarity_by_description_max(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, 'cosine')
-        
+        diagnosis_similarity_max = get_diagnosis_relevance(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, config)
+
         # UPDATE CONFUSION MATRIX
         for b in {1, 0.9, 0.8, 0.7, 0.6}:
             values = confusion_matrix_max.get(b)
@@ -279,7 +287,7 @@ def predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, emb
             most_similar_symptoms = list(x_train[top_index].values())[0]
             most_similar_admission = admissions.get(most_similar_index)
             predicted_diagnosis = most_similar_admission.diagnosis
-            diagnosis_similarity_max = get_diagnosis_similarity_by_description_max(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, 'cosine')
+            diagnosis_similarity_max = get_diagnosis_relevance(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, config)
             top_similarities_max.append(diagnosis_similarity_max)
             index_top += 1
     
@@ -533,23 +541,107 @@ def get_diagnosis_similarity_by_description_max_model(model, gt_diagnosis, predi
     return max_similarity[0]
 
 
+def drg_descriptions(labels):
+    """Prefix-stripped, lowercased, whitespace-trimmed description set.
+
+    ``preprocess_diagnosis`` emits labels shaped ``"apr,hcfa:some description"``.
+    The leading token is a DRG *coding system* (apr / hcfa / ms), not a code --
+    there is no numeric DRG anywhere in this dataset, only description text.
+
+    Three reasons this returns a set of descriptions rather than whole labels:
+
+    1. **The prefix is wrong 19 times out of 224.** ``preprocess_diagnosis``
+       rebuilds it with a *substring* test (``if x in d``), so a short
+       description inherits the systems of any longer one containing it -- e.g.
+       ``hadm 103770`` emits ``hcfa,apr:intracranial hemorrhage`` when the truth
+       is ``{apr}``. Comparing whole labels compares that corruption.
+    2. **The prefix order is not deterministic.** It is built by iterating
+       ``list(set(...))``, so ``"apr,hcfa:x"`` and ``"hcfa,apr:x"`` both occur,
+       varying between processes *and* within one. Any whole-label equality test
+       is therefore nondeterministic. Descriptions have no such problem: the
+       *set* ``list(set(...))`` produces is content-stable even though its order
+       is not.
+    3. Slicing at the first ``':'`` is safe here -- verified that 0 of the 145
+       descriptions in this dataset contain a colon.
+
+    Dropping the prefix costs nothing: measured over both fold sets, restricting
+    matches to the same coding system yields *identical* counts (75/75 and
+    76/76), because the three systems' vocabularies are disjoint in practice.
+    """
+    descriptions = set()
+
+    for label in labels:
+        separator = label.find(':')
+        description = label[separator + 1:] if separator != -1 else label
+        description = description.strip().lower()
+        if description:
+            descriptions.add(description)
+
+    return descriptions
+
+
 def get_diagnosis_similarity_baseline(gt_diagnosis, predicted_diagnosis):
-    similarity = 0
-    
-    for c in gt_diagnosis:
-        if c in predicted_diagnosis:
-            similarity += 1
-        else:
-            similarity += 0
-    
-    return similarity / len(gt_diagnosis)
+    """Fraction of the true DRG labels that were predicted. Encoder-independent.
+
+    Live as of the P4 work -- do not delete as unused. Repaired at the same time:
+    it used to compare whole ``prefix:description`` labels with ``c in list``,
+    so ``"apr,hcfa:foo"`` failed to match ``"hcfa:foo"`` (the same DRG), and it
+    divided by ``len(gt_diagnosis)`` with no zero guard.
+    """
+    ground_truth = drg_descriptions(gt_diagnosis)
+
+    if not ground_truth:
+        return 0.0
+
+    return len(ground_truth & drg_descriptions(predicted_diagnosis)) / len(ground_truth)
 
 
 def get_diagnosis_similarity_by_drgcode(gt_diagnosis, predicted_diagnosis):
-    for c in gt_diagnosis:
-        if c in predicted_diagnosis:
-            return 1
-    return 0
+    """1.0 if any true DRG label was predicted exactly, else 0.0. This is ``drg-exact``.
+
+    The encoder-independent replacement for the cosine grader, and the point of
+    the whole exercise: it consults no embedding, so all four arms are marked
+    with one ruler and threshold 1.0 finally states something checkable --
+    *the predicted DRG label is exactly the true one*.
+
+    It has **zero free parameters**, which is the argument for it over the
+    partial-credit schemes considered and rejected in
+    ``docs/findings/12-drg-grader.md``.
+
+    Its ceiling is not 1.0. Only 76 of 129 test cases have their correct label
+    anywhere in their own fold's training pool under ``folds_grouped`` (75 under
+    ``folds``), so a *perfect* retriever scores 58.9%. Never report a number
+    from this grader without that denominator.
+    """
+    if drg_descriptions(gt_diagnosis) & drg_descriptions(predicted_diagnosis):
+        return 1.0
+    return 0.0
+
+
+def get_diagnosis_relevance(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, config=LEGACY):
+    """Score a prediction against the truth, per ``config.grader``.
+
+    The single dispatch point for every grading call in both arms. ``"cosine"``
+    delegates to the untouched published grader, so the legacy path executes the
+    same call it always did and the golden reference is unaffected -- that
+    equivalence is what ``pytest -m golden`` proves.
+
+    Raises on an unknown grader rather than falling back. A silent fallback here
+    would emit cosine numbers under a DRG label, which is indistinguishable from
+    a real result by inspection.
+    """
+    if config.grader == "cosine":
+        return get_diagnosis_similarity_by_description_max(
+            embendings_diagnosis, gt_diagnosis, predicted_diagnosis, 'cosine'
+        )
+
+    if config.grader == "drg-exact":
+        return get_diagnosis_similarity_by_drgcode(gt_diagnosis, predicted_diagnosis)
+
+    raise ValueError(
+        "no grader implements %r -- supported: %s"
+        % (config.grader, ", ".join(sorted(SUPPORTED_GRADERS)))
+    )
 
 
 # Confusion Matrix

@@ -52,9 +52,34 @@ preprocess_version
     rejoins comma fragments to their predecessor. Note the rejoin is a
     *heuristic* and still misses nine occurrences where the intra-label comma
     carries no trailing space -- see ``split_symptoms`` and TODO P27.
+grader
+    How a prediction is scored against the truth, consumed by
+    ``cython_utils.get_diagnosis_relevance``.
 
-Why there are four configs and not two
---------------------------------------
+    ``"cosine"`` is the published behaviour and the defect that motivated this
+    field: it scores predictions by cosine similarity **in the same embedding
+    space that produced the retrieval**, so every arm marks its own work with
+    its own ruler. A more compressed space grades itself more leniently, which
+    is why the most compact of the three BERT models scores highest at the
+    strictest thresholds. Any cross-encoder claim built on it is confounded.
+
+    ``"drg-exact"`` compares DRG label text instead: 1.0 if any true label
+    equals any predicted label, else 0.0. No embeddings are consulted, so all
+    four arms are graded identically and threshold 1.0 finally means something
+    checkable -- *the predicted DRG label is exactly the true one*.
+
+    ``"drg-graded"`` is ``"drg-exact"`` plus partial credit for near-miss
+    labels, since the three coding systems describe the same condition in
+    different words ("SEPTICEMIA AGE >17" vs "Septicemia & Disseminated
+    Infections"). Exact matches still return 1.0.
+
+    Note the DRG graders are deterministic even though ``preprocess_diagnosis``
+    is not: its hash-order instability lives in the reconstructed *prefix*,
+    which the grader strips before comparing, and the description *set* it
+    produces is content-stable.
+
+Why there are six configs and not two
+-------------------------------------
 ``CORRECTED`` changes **two independent things at once**: it moves to the
 grouped folds *and* to the fixed preprocessing. A ``LEGACY`` vs ``CORRECTED``
 delta therefore cannot say how much of the movement came from removing patient
@@ -62,6 +87,14 @@ leakage and how much from fixing the text handling. For a project whose entire
 point is attributing an effect to a cause, that is not good enough, so both
 one-change-at-a-time configs exist as well. They cost nothing to define; run
 them only when the attribution question is actually being asked.
+
+The last two, ``GRADER_DRG`` and ``GRADER_DRG_GRADED``, are a different kind of
+correction and are kept separate for that reason. ``CORRECTED`` fixes the
+*inputs* -- which patients land in which fold, and what text gets encoded. The
+grader configs fix the *measurement*: they stop each arm marking its own work
+with its own embedding space. Bundling them into ``CORRECTED`` would have made
+its delta uninterpretable in exactly the way described above, so the grader
+change gets its own axis and its own runs.
 """
 
 from dataclasses import dataclass
@@ -77,6 +110,7 @@ class PipelineConfig:
 
     fold_dir: str = "folds"
     preprocess_version: str = "legacy"
+    grader: str = "cosine"
 
 
 #: The published pipeline. Bit-identical to what minted the golden reference.
@@ -95,6 +129,34 @@ FOLDS_ONLY = PipelineConfig(fold_dir="folds_grouped", preprocess_version="legacy
 #: report a number from this config as a result.
 PREPROCESS_ONLY = PipelineConfig(fold_dir="folds", preprocess_version="corrected")
 
+#: CORRECTED plus an encoder-independent grader: a predicted diagnosis counts
+#: only if its DRG label matches the true one exactly. This is the first config
+#: under which the four arms are graded by the SAME ruler, which is what makes a
+#: cross-encoder comparison mean anything (TODO P4).
+#:
+#: Its ceiling is not 1.0 and cannot be. Only 76 of 129 test cases have their
+#: correct label present anywhere in their own fold's training pool under
+#: ``folds_grouped``, so a perfect retriever scores 58.9% at threshold 1.0.
+#: Always report that denominator alongside the number.
+GRADER_DRG = PipelineConfig(
+    fold_dir="folds_grouped", preprocess_version="corrected", grader="drg-exact"
+)
+
+# A partial-credit grader ("drg-graded") was designed and rejected; see
+# docs/findings/12-drg-grader.md. Three candidate similarity functions were built
+# and measured against the 72 label pairs that co-occur on a single admission --
+# pairs known to describe one episode, so a usable proxy for "should score high".
+# The best of them cleared 54 of 72 at threshold 0.6, but needed ~156 hand-written
+# lexicon strings mined from the same 146 diagnosis titles it then scores, with no
+# held-out set to show it had not simply memorised them. Its two lowest rungs ran
+# at 0.13 and 0.08 precision against non-co-occurring pairs, i.e. roughly seven of
+# every eight admits were false credit.
+#
+# The whole point of P4 is to remove an arbitrary ruler. Replacing cosine with a
+# more elaborate arbitrary ruler would concede the argument, so there is no
+# ``drg-graded`` config and ``from_name`` cannot return one. ``drg-exact`` has
+# zero free parameters, which is precisely its value.
+
 
 # Selecting a pipeline from outside the process.
 #
@@ -110,7 +172,16 @@ _BY_NAME = {
     "corrected": CORRECTED,
     "folds-only": FOLDS_ONLY,
     "preprocess-only": PREPROCESS_ONLY,
+    "drg": GRADER_DRG,
 }
+
+#: Grader values that a consumer actually honours. This exists because a config
+#: field with no reader is worse than no field at all: for a short window during
+#: development, ``--pipeline drg`` was selectable, printed a plausible banner,
+#: ran a full 10-fold pass and produced *cosine* numbers labelled as DRG ones.
+#: Nothing failed. Any new grader name must land in the same commit as its
+#: consumer, and this set is what makes forgetting that a loud error.
+SUPPORTED_GRADERS = frozenset({"cosine", "drg-exact"})
 
 
 #: Selectable pipeline names, for argparse ``choices=``. Derived from the
@@ -119,15 +190,34 @@ _BY_NAME = {
 PIPELINE_NAMES = tuple(sorted(_BY_NAME))
 
 
+def require_supported_grader(config):
+    """Raise unless ``config.grader`` has a consumer. Call this EARLY.
+
+    A grader nobody reads does not crash -- it silently produces numbers from
+    whichever grader *is* wired, under the label of the one requested. That is
+    the worst failure mode this repository has, because the output looks
+    entirely normal. Call this before a run starts rather than letting the
+    dispatch discover it 12 minutes in, after the model load and the encode.
+    """
+    if config.grader not in SUPPORTED_GRADERS:
+        raise ValueError(
+            "pipeline grader %r has no consumer -- supported: %s. A grader must "
+            "land in the same commit as the code that honours it."
+            % (config.grader, ", ".join(sorted(SUPPORTED_GRADERS)))
+        )
+    return config
+
+
 def from_name(name):
     """Resolve 'legacy' or 'corrected' to a PipelineConfig. Raises on anything else."""
     try:
-        return _BY_NAME[str(name).strip().lower()]
+        config = _BY_NAME[str(name).strip().lower()]
     except KeyError:
         raise ValueError(
             "unknown pipeline %r -- expected one of %s"
             % (name, ", ".join(sorted(_BY_NAME)))
         )
+    return require_supported_grader(config)
 
 
 def from_env(default=LEGACY):

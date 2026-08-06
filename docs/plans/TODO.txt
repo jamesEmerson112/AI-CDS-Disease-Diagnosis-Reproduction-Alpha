@@ -1,6 +1,6 @@
 AI-CDS DISEASE DIAGNOSIS - RANKED TODO
 Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
-Updated 2026-08-05 after Tier 1 landed.
+Updated 2026-08-06: Tier 1 landed, four-arm corrected results in, P4's code landed.
 
 STATUS
   DONE     P1 P2 P3 P7 P9 P28 P29 P30
@@ -9,8 +9,14 @@ STATUS
            P29  configs defined, the attribution RUNS are still to do
            P32  all four arms RAN; root README REWRITTEN (e83b5be); PDF
                 blocked by P34, docs/README.md still stale
-  NEXT     P34 (unblocks the PDF) then P4, the encoder-independent grader
-  NEW      P27 P29 P30 P31 P32 P33 P34 - all found while implementing Tier 1
+           P4   CODE LANDED, results pending. drg-exact grader + config seam +
+                30 tests, all green. Gated on `pytest -m golden` (in flight),
+                then the four-arm rerun on the pod. See P4 detail and
+                docs/findings/12-drg-grader.md.
+  NEXT     finish P4's four-arm rerun, then P5 (rank-aware, needs P4's label)
+           P34 in parallel -- it blocks every comparison PDF, cosine or DRG
+  NEW      P27 P29 P30 P31 P32 P33 P34 - found while implementing Tier 1
+           P35 P36 P37 - found while implementing P4
 
 THE RESULT SO FAR - all four arms, corrected pipeline, 2026-08-06
 Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
@@ -111,8 +117,8 @@ TIER 1 - BLOCKS ANY VALID COMPARISON. Nothing downstream means anything until th
            One line. embending_diagnosis embeds the PREPROCESSED text but keys
            the dict by the RAW description, so the BERT arm's keys were already
            right -- only the encode input was wrong.
-  [ ] P4   A2. Encoder-independent grader         (days)   <- NOW THE TOP ITEM
-  [ ] P5   B1. Rank-aware metrics (Option C)      (days)
+  [~] P4   A2. Encoder-independent grader   CODE LANDED 2026-08-06, runs pending
+  [ ] P5   B1. Rank-aware metrics (Option C)      (days)   <- NEXT after P4's runs
 
 TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
 
@@ -159,6 +165,12 @@ TIER 5 - NICE TO HAVE.
   [ ] P24  C12. Per-case output files are all empty (decide: implement or delete)
   [ ] P25  C13. Fold parallelisation via multiprocessing
   [ ] P26  Retrieval interface -> local decoder (the RAG endgame)
+
+TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
+
+  [ ] P35  No config axis may be unannounced      (minutes) <- NEW, partly done
+  [ ] P36  bert_models' private containGreaterOrEqualsValue is untested (hours)
+  [ ] P37  analyze_score_distributions.py re-implements the grader   (hours)
 
 WHY THIS ORDER
   P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
@@ -292,8 +304,81 @@ TIER 1 DETAIL
         This broke the project's central design constraint - both arms are supposed
         to share everything EXCEPT the embedding model.
 
-[ ] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
+[~] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
         Effort: days.  Impact: makes cross-encoder comparison valid AT ALL.
+
+        *** CODE LANDED 2026-08-06. Full writeup: docs/findings/12-drg-grader.md ***
+
+        WHAT SHIPPED
+          - PipelineConfig gains `grader` (default "cosine", so LEGACY is
+            bit-identical and the golden is untouched). New preset GRADER_DRG,
+            selectable as `--pipeline drg` / AICDS_PIPELINE=drg.
+          - cython_utils.get_diagnosis_relevance() is the single dispatch point.
+            "cosine" delegates to the untouched published grader; "drg-exact"
+            returns 1.0 iff any true DRG description equals a predicted one.
+          - The two uncalled graders are REPAIRED and live: they now strip the
+            prefix before comparing (they used to miss "apr,hcfa:foo" vs
+            "hcfa:foo", the same DRG) and no longer divide by zero on empty
+            ground truth. Do NOT delete them as dead in P17.
+          - All THREE grading call sites wired in one commit: cython_utils :257
+            (MAX) and :282 (TOP-K), plus bert_models :575. predictS2V gained a
+            trailing config=LEGACY. Splitting this would have graded MAX with one
+            ruler and TOP-K with another.
+          - 30 new tests in tests/test_drg_grader.py, including a SUBPROCESS
+            determinism check across PYTHONHASHSEED 0/1/12345/99991, and the
+            exact-match ceiling pinned at 75/129 and 76/129.
+          - Both run banners now print the grader. Omitting it is how a run ends
+            up filed under the wrong ruler; see P35.
+
+        STILL TO DO
+          - `pytest -m golden` must come back byte-exact (in flight).
+          - Four-arm rerun under `drg`; the baseline arm needs the pod.
+          - Re-run the paired t-test on the results. THE question P4 exists to
+            answer: once every arm is graded by the same ruler, do they separate?
+
+        MEASURED, and it settles two open questions elsewhere
+          - Grouped-fold exact-match ceiling is 76/129 = 58.9% (was never
+            measured; closes a P32 item). Legacy is 75/129 = 58.1%, reproduced.
+            THE LEAKAGE FIX MOVED RETRIEVABILITY BY ONE CASE - leakage and
+            sparsity are independent defects.
+          - Per-fold ceiling on the grouped split ranges 3/12 (25%) to 13/15
+            (87%), which is itself a source of the per-fold variance.
+          - Verified by stub run, both predicted in advance: SATURATION IS GONE
+            (a binary grader makes the threshold knob inert, so all five
+            threshold rows become identical, which also kills the
+            threshold-inversion artifact), and DEGENERACY SURVIVES (P==R==F,
+            PR=1.0) because it comes from the upstream symptom-pruning gate.
+
+        THE "105 of 145" CORRECTION WAS ABANDONED - IT WAS ALREADY RIGHT.
+          An earlier draft of this plan proposed changing it to 85. Both numbers
+          are real: 85 is occurrence-level over the 297 raw entries, 105 is
+          document frequency over the 224 entries surviving preprocess_diagnosis's
+          per-admission dedup, and the 85 are a strict subset. 105 is correct for
+          the sentence it appears in, because that sentence bounds exact-match
+          RETRIEVAL and a label written twice inside one admission gives a
+          retriever no second admission to find it in. Root cause of the gap: 71
+          of 129 admissions list their APR label twice byte-identically, an
+          upstream DRGCODES artifact. CLAUDE.md and findings/07 now carry an
+          explicit "do not correct this to 85" note.
+
+        A PARTIAL-CREDIT GRADER WAS DESIGNED AND REJECTED. Three candidate
+          similarity functions were built and measured against the 72 label pairs
+          that co-occur on one admission (same episode, so a usable proxy for
+          "should score high"). The best cleared 54/72 at threshold 0.6 versus 33
+          and 25. It was still rejected: ~156 hand-written lexicon strings mined
+          from the same 146 titles it scores, no held-out set, precision 0.13 and
+          0.08 on its two lowest rungs, the LOWEST AUC of the three (0.868 vs
+          0.902/0.893, differences not significant), structural blindness to
+          numbers (ventilator "96+ hours" vs "<96 hours" stuck at 0.900), and it
+          graded "discharged alive" against "expired" at 0.900. P4 exists to
+          remove an arbitrary ruler; a more elaborate arbitrary ruler concedes the
+          argument. There is deliberately NO drg-graded config and from_name
+          refuses the name. If revisited, use an EXTERNAL DRG hierarchy, not a
+          lexicon derived from these 146 strings.
+
+        ------------------------------------------------------------------
+        Original analysis, kept because its warnings were mostly right:
+        ------------------------------------------------------------------
 
         Why: the same encoder both RETRIEVES and JUDGES. The grader is
         get_diagnosis_similarity_by_description_max (cython_utils.py:315), which reads
@@ -708,3 +793,61 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         defensible as an encoder ranking. Say so explicitly rather than letting a
         reader infer otherwise - the README already made one overclaim of exactly
         this kind and it had to be corrected.
+
+[ ] P35. NO CONFIG AXIS MAY BE UNANNOUNCED, AND NONE MAY LACK A READER
+        Effort: minutes for the remaining part. Found 2026-08-06 while doing P4,
+        by making the mistake this item now guards against.
+
+        For a window during development, `--pipeline drg` was selectable and
+        NOTHING read config.grader. The run succeeded, the banner looked right,
+        it produced a full 10-fold result set, and every number in it came from
+        the COSINE grader while being labelled DRG. Nothing failed, and nothing
+        downstream could have detected it.
+
+        DONE: config.SUPPORTED_GRADERS + require_supported_grader() raise at
+        startup, before the model load, on any grader value with no consumer.
+        Both arms call it. Both run banners now print the grader, and the
+        baseline prints its pipeline at all for the first time -- it writes to a
+        timestamp-only directory, so the run log is the ONLY record of config.
+
+        STILL TO DO:
+          - run_metadata.json (P14) is the real fix: no output directory
+            currently records which config produced it. Fold this in.
+          - The same audit for any FUTURE field. The rule: a config field and
+            its consumer land in the SAME commit, and the field appears in the
+            banner in that commit too.
+
+[ ] P36. bert_models KEEPS A PRIVATE containGreaterOrEqualsValue AND NO TEST
+        TOUCHES IT
+        Effort: hours. Found 2026-08-06 during P4's call-site sweep.
+
+        bert_models.py:198 defines its own copy. cython_utils.py:573 has the
+        original. tests/test_characterize_similarity.py imports the cython_utils
+        one; tests/test_bert_symptom_pairwise.py defines a THIRD and injects it.
+        So the copy the BERT arm actually calls in production is exercised by
+        nothing.
+
+        Why it matters now: P5 (rank-aware metrics) must change this function's
+        semantics -- it currently answers "did anything in the top K clear the
+        bar", and rank-awareness needs "at what rank". Change cython_utils and
+        the baseline gets the new rule while the BERT arm keeps the old one. The
+        golden would catch the numeric fallout without naming the cause.
+
+        Fix: delete the copy, import the shared one, add a test that pins the
+        production path. Do this BEFORE P5, not during.
+
+[ ] P37. analyze_score_distributions.py RE-IMPLEMENTS THE GRADER
+        Effort: hours. Found 2026-08-06 during P4's call-site sweep.
+
+        :152-187 simulates get_diagnosis_similarity_by_description_max against
+        its own numpy cosine -- a fourth cosine implementation in this repo --
+        and imports no PipelineConfig. It feeds build_dashboard_data.py and
+        build_readme_plots.py, so it will keep generating SATURATION EVIDENCE
+        FOR A RETIRED RULER: under drg-exact there is no saturation to show.
+
+        Its spot_check_against_cython guards only the cosine kernel, not the
+        aggregator or the prefix stripping, so it passes while being wrong.
+
+        Fix: have it call get_diagnosis_relevance with an explicit config, and
+        label its output with which grader produced it. The README already had
+        to mark its statistics "legacy-measured" as a stopgap.
