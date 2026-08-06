@@ -1,5 +1,18 @@
 AI-CDS DISEASE DIAGNOSIS - RANKED TODO
 Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
+Updated 2026-08-05 after Tier 1 landed.
+
+STATUS
+  DONE     P1 P2 P3 P7 P9      (commits c2115ba, 31bea66)
+  PARTIAL  P8                  (80 of 89 fragments; see P27)
+  IN FLIGHT P32                (four-arm corrected run on RunPod)
+  NEXT     P28 (guard, minutes) then P4 (the encoder-independent grader)
+  NEW      P27 P28 P29 P30 P31 P32 - all discovered while implementing Tier 1
+
+  Tier 1 removed two of the four documented confounds: PATIENT LEAKAGE (41 leaked
+  test cases -> 0) and DIVERGENT CROSS-ARM PREPROCESSING (26/145 matching -> 145/145).
+  The other two - SELF-GRADING (P4) and RANK-BLINDNESS (P5) - are untouched, so a
+  corrected-pipeline number is a better reproduction but still NOT an encoder ranking.
 
 Three plan files, three different jobs:
   correctness-fixes.md  what is scientifically wrong, and in what order to fix it
@@ -23,27 +36,54 @@ RANKED MASTER LIST
 
 TIER 1 - BLOCKS ANY VALID COMPARISON. Nothing downstream means anything until these land.
 
-  [ ] P1   Decide the re-baselining strategy      (decision, ~1 hour)  <- BLOCKS P2
-  [ ] P2   A1. GroupKFold on SUBJECT_ID           (hours)
-  [ ] P3   A4c. Unify cross-arm diagnosis preprocessing  (hours)
-  [ ] P4   A2. Encoder-independent grader         (days)
+  [x] P1   Decide the re-baselining strategy      DONE 2026-08-05 (c2115ba)
+           Chose ADDITIVE. src/aicds/config.py holds PipelineConfig(fold_dir,
+           preprocess_version) with LEGACY and CORRECTED. LEGACY is the default
+           everywhere and stays bit-identical forever, so the golden is NEVER
+           re-minted. Verified: pytest -m golden passed TWICE, 43:50 on the
+           default seed and 44:32 under PYTHONHASHSEED=12345.
+  [x] P2   A1. GroupKFold on SUBJECT_ID           DONE 2026-08-05 (c2115ba)
+           scripts/make_folds.py -> data/folds_grouped/. Leakage 41/129 -> ZERO,
+           recounted independently rather than trusting the script's --verify.
+           Folds are now uneven (114/15 .. 117/12) because subject 41976's 15
+           admissions must land together. Output is GITIGNORED, not committed:
+           deterministic regeneration beats adding 1290 more lines of
+           DUA-covered text to a public repo.
+  [x] P3   A4c. Unify cross-arm diagnosis preprocessing  DONE 2026-08-05 (c2115ba)
+           One line. embending_diagnosis embeds the PREPROCESSED text but keys
+           the dict by the RAW description, so the BERT arm's keys were already
+           right -- only the encode input was wrong.
+  [ ] P4   A2. Encoder-independent grader         (days)   <- NOW THE TOP ITEM
   [ ] P5   B1. Rank-aware metrics (Option C)      (days)
 
 TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
 
   [ ] P6   B2. Set-level soft P/R/F1 (Option B)   (days)
-  [ ] P7   A4a. Fix "w/o" -> "w" negation loss    (hours)
-  [ ] P8   A4b. Fix comma-split fragments         (hours)
-  [ ] P9   B5. Keep the legacy number, labelled   (trivial)
+  [x] P7   A4a. Fix "w/o" -> "w" negation loss    DONE 2026-08-05 (c2115ba)
+           Under CORRECTED, "w/o" now survives as "without". LEGACY still
+           collapses it to "w", as pinned.
+  [~] P8   A4b. Fix comma-split fragments         PARTIAL 2026-08-05 (c2115ba)
+           Recovers 80 of 89 (1805->1725 tokens, 573->564 unique). NINE
+           OCCURRENCES REMAIN -- see P27, which is now the highest-value
+           unfinished item in this file.
+  [x] P9   B5. Keep the legacy number, labelled   SATISFIED BY P1's SEAM
+           LEGACY is a permanent, selectable, byte-reproducible path rather than
+           a number copied into a report. Nothing further needed here.
   [ ] P10  A5. Centre the embeddings              (ONE LINE)
   [ ] P11  B4. Per-model threshold calibration    (hours)
   [ ] P12  B3. MEAN aggregator alongside MAX      (hours)
+  [ ] P27  Finish the comma rejoin - 9 residual   (hours)  <- NEW, fix measured
+  [ ] P29  Third arm: folds-only, to attribute    (trivial) <- NEW
 
 TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared code.
 
+  [ ] P28  Guard make_folds.py --out              (minutes) <- NEW, do this FIRST
+  [ ] P30  Widen the pre-commit hook to cover     (minutes) <- NEW
+           data/folds_grouped/ and any future fold set
   [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
   [ ] P14  C10. Result provenance (run_metadata.json)  (hours)
   [ ] P15  C2.  Unify output paths + the five globs    (hours)
+  [ ] P31  Correct the golden's stated runtime    (minutes) <- NEW
 
 TIER 4 - FINISH THE REFACTOR. Phase 3 is the ship point.
 
@@ -63,37 +103,82 @@ TIER 5 - NICE TO HAVE.
   [ ] P26  Retrieval interface -> local decoder (the RAG endgame)
 
 WHY THIS ORDER
-  P1 first because it is an undocumented decision that P2 forces and nobody has made.
-  P2 next because the leakage is ~10x the effect under study - every other number is
-    noise until it is fixed, and it affects BOTH arms.
-  P3 third because it is cheap and it targets YOUR specific question: today the two
-    arms preprocess diagnoses differently, so any baseline-vs-BERT delta is partly
-    measuring text handling rather than the encoder.
-  P4/P5 next because they are what make a cross-ENCODER claim defensible at all.
+  P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
+  P4 is now the top item: with leakage gone and preprocessing unified, SELF-GRADING
+    is the largest remaining threat to a cross-encoder claim - all four arms still
+    use the same embedding space to retrieve AND to judge, so a more compressed
+    space grades itself more leniently.
+  P5 follows P4 because it needs P4's encoder-independent relevance label.
+  P28 before any further fold work - one careless --out overwrites data/folds/ and
+    destroys the golden's inputs. Minutes to fix; unbounded to recover from.
+  P27 is small, measured, and lands in the same function as P8.
+  P29 is trivial and buys real explanatory power: CORRECTED currently bundles the
+    fold fix and the preprocessing fix, so their effects cannot be told apart.
   P13 sits above the rest of the refactor because the baseline arm now works and has
     zero regression protection, and cython_utils.py is SHARED between the arms.
+
+  --- why the original order was what it was ---
+  P1 first because it was an undocumented decision that P2 forced and nobody had made.
+  P2 next because the leakage is ~10x the effect under study, and it affects BOTH arms.
+  P3 third because it is cheap and targets the baseline-vs-BERT question directly.
 
 
 ===============================================================================
 TIER 1 DETAIL
 ===============================================================================
 
-[ ] P1. DECIDE THE RE-BASELINING STRATEGY          *** BLOCKS P2 ***
-        Not in any plan document. This is a real gap, not an oversight you can skip.
+[x] P1. DECIDE THE RE-BASELINING STRATEGY          RESOLVED 2026-08-05 (c2115ba)
 
-        P2 invalidates tests/golden/stub768/PerformanceIndex.txt, because the fold
-        files are INPUTS to the golden run. P7/P8/P10 invalidate it again. No document
-        says who re-mints the golden, or how the old and new baselines stay comparable.
+        DECISION: ADDITIVE, not replacement. Nothing is ever re-minted.
 
-        The only stated discipline anywhere is the Phase 5 gate: "--aggregator max
-        still byte-reproduces the stub golden", i.e. keep the legacy path reproducible
-        while adding new paths beside it. That is probably the answer - decide it
-        explicitly before moving a single number.
+        src/aicds/config.py holds a frozen dataclass:
+            PipelineConfig(fold_dir="folds", preprocess_version="legacy")
+            LEGACY    = PipelineConfig()
+            CORRECTED = PipelineConfig("folds_grouped", "corrected")
+        LEGACY is the default at every call site, so tests/golden/stub768/ stays
+        valid FOREVER and the published 0.489/0.512/0.521 lineage stays reproducible.
+        CORRECTED is the scientifically defensible path. Both live side by side,
+        which also satisfies P9 for free.
 
-[ ] P2. A1 - REGROUP THE FOLDS BY PATIENT (GroupKFold on SUBJECT_ID)
-        Effort: hours.  Impact: largest single correction available.
-        "None of this is worth measuring until the fold leakage is fixed."
+        Reachable from a shell as of 31bea66 - before that the seam existed but no
+        CLI could select it, which made it decorative:
+            python scripts/run_bert_analysis.py --model all --pipeline corrected
+            AICDS_PIPELINE=corrected python scripts/run_baseline.py
+        (The baseline needs the env var because baseline_sent2vec.py still executes
+        at import time and takes no arguments - see P17.)
 
+        EVIDENCE THE SEAM HOLDS: pytest -m golden passed TWICE after all of
+        P2/P3/P7/P8 landed - 43:50 on the default seed, 44:32 under
+        PYTHONHASHSEED=12345. Fast suite 122 passed, 2 deselected.
+
+        NOTE FOR ANY DOC EDIT: four places claim the golden takes 20-26 minutes.
+        Measured twice at ~44 MINUTES on an M-series Mac. See P31.
+
+[x] P2. A1 - REGROUP THE FOLDS BY PATIENT (GroupKFold on SUBJECT_ID)
+        DONE 2026-08-05 (c2115ba). scripts/make_folds.py -> data/folds_grouped/.
+
+        RESULT: 41 leaked test cases -> ZERO. Recounted independently from the
+        generated files rather than trusting the script's own --verify:
+            leaked test cases (all folds) : 0
+            total test cases across folds : 129
+            duplicate test HADM_IDs       : 0
+        Folds are uneven as predicted (114/15 through 117/12) because subject
+        41976's 15 admissions must land in one test set together.
+
+        THE GENERATED FOLDS ARE GITIGNORED (.gitignore:129), NOT COMMITTED.
+        GroupKFold(n_splits=10) with the default shuffle=False is deterministic,
+        so the folds are a pure function of committed data plus a committed
+        script. Regenerate with:  python scripts/make_folds.py
+        This keeps 1290 more lines of DUA-covered MIMIC text out of a public repo.
+
+        STILL OPEN, CARRIED TO P28: make_folds.py --out has no guard against
+        pointing at data/folds/ and destroying the golden's inputs.
+        STILL OPEN, CARRIED TO P30: .githooks/pre-commit does NOT cover
+        data/folds_grouped/ - the gitignore is the only thing stopping a commit.
+        STILL OPEN: the 58.1% ceiling was measured on the LEAKY folds and has
+        not been re-measured on the grouped ones.
+
+        --- original notes, kept for reference ---
         Why: folds split on HADM_ID, but 129 admissions come from only 100 patients
         (one patient has 15). 41 of 129 test cases (31.8%) have another admission from
         the same SUBJECT_ID sitting in their own retrieval pool. Per-fold contamination
@@ -129,16 +214,25 @@ TIER 1 DETAIL
         Grouped folds will be uneven in size. That is correct - report the per-fold n.
         Re-measure the 58.1% ceiling afterwards; it was computed on the leaky folds.
 
-[ ] P3. A4c - UNIFY CROSS-ARM DIAGNOSIS PREPROCESSING
-        Effort: hours.  Impact: highest leverage on the baseline-vs-BERT question.
+[x] P3. A4c - UNIFY CROSS-ARM DIAGNOSIS PREPROCESSING   DONE 2026-08-05 (c2115ba)
 
-        Baseline calls preprocess_sentence on diagnosis text (cython_utils.py:226);
-        the BERT path does NOT (bert_models.py:318-332).
-        119 of 145 (82.1%) unique diagnosis descriptions differ between the arms.
+        It was ONE LINE, and the reason is worth recording because it is not what
+        the original note implied. embending_diagnosis (cython_utils.py:234-252)
+        embeds preprocess_sentence(description) at :244 but keys the dict by the
+        RAW description at :245, and the consumer looks up by raw description.
+        So the BERT arm's dict KEYS were already correct - only the text handed to
+        the encoder was wrong. Fixing it meant preprocessing the encode input while
+        leaving the zip() iterating the original raw list.
 
-        This breaks the project's central design constraint - both arms are supposed
-        to share everything EXCEPT the embedding model. Until it is fixed, no
-        baseline-vs-BERT number isolates the encoder.
+        145/145 unique diagnosis descriptions now match across arms, up from 26/145.
+
+        --- original notes, kept for reference ---
+        Baseline calls preprocess_sentence on diagnosis text (cython_utils.py:244;
+        docs citing :226 are stale); the BERT path did NOT (bert_models.py:292-308,
+        cited as :318-332 in older docs).
+        119 of 145 (82.1%) unique diagnosis descriptions differed between the arms.
+        This broke the project's central design constraint - both arms are supposed
+        to share everything EXCEPT the embedding model.
 
 [ ] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
         Effort: days.  Impact: makes cross-encoder comparison valid AT ALL.
@@ -197,8 +291,9 @@ TIER 1 DETAIL
         The ONLY option that fixes all three metric defects at once.
 
         Why: rank IS computed at bert_models.py:170 and then DISCARDED. The scorer
-        (containGreaterOrEqualsValue, cython_utils.py:366-370) returns true if ANY of
-        the K candidates clears threshold, so a hit at rank 1 and a hit at rank 50
+        (containGreaterOrEqualsValue, cython_utils.py:390-394 - docs citing :366-370
+        are stale by 24 lines) returns true if ANY of the K candidates clears
+        threshold, so a hit at rank 1 and a hit at rank 50
         count identically. That makes score(TOP-50) >= score(TOP-10) true BY
         CONSTRUCTION - verified monotonic in 18/18 model x threshold combinations,
         zero violations. The TOP-K curve in the README is arithmetic, not a finding.
@@ -218,25 +313,31 @@ TIER 2 DETAIL
             soft_recall    = mean over true g      of ( max over predicted p of cos(g,p) )
             soft_f1        = harmonic mean of the two
 
-[ ] P7. A4a - "w/o" COLLAPSES TO "w"; NEGATION IS DESTROYED
-        preprocess_sentence (cython_utils.py:251-260) pads "/" so "w/o" becomes
-        ["w","/","o"]; "/" is dropped as punctuation and "o" IS AN NLTK ENGLISH
-        STOPWORD. Verified: "Tracheostomy w/o Extensive Procedure" and
-        "Tracheostomy w Extensive Procedure" BOTH become
-        "tracheostomy w extensive procedure".
-        Fix: protect "w/o" before slash-padding, or drop "o" from the stopword set.
-        MUST BE ITS OWN COMMIT - it moves every number.
+[x] P7. A4a - "w/o" COLLAPSES TO "w"; NEGATION IS DESTROYED   DONE 2026-08-05 (c2115ba)
+        Under CORRECTED, "w/o" is protected before slash-padding and survives as
+        "without", so "Tracheostomy w/o Extensive Procedure" and "Tracheostomy w
+        Extensive Procedure" are now DISTINCT strings. Under LEGACY both still
+        collapse to "tracheostomy w extensive procedure", pinned by
+        test_characterize_preprocessing.py as the legacy assertion.
 
-[ ] P8. A4b - COMMA-SPLIT FRAGMENTS
-        Symptoms are ","-split but ICD-9 short titles contain commas, so 80 of 1,805
-        tokens (4.4%) are orphan fragments. " organism NOS" appears in 26 admissions;
-        because similarity is mean-of-max, any two of those get a spurious 1.0
-        contribution from a token carrying no clinical content. Severity distinctions
-        also collapse (stage I vs stage IV).
-        Fix is deterministic, no model needed: every fragment begins with a leading
-        space (the separator is "," while intra-label commas are ", "), so if a token
-        starts with a space, rejoin it to the previous token.
-        Verified to recover all 80: 573 -> 564 unique symptom strings.
+        --- original notes, kept for reference ---
+        preprocess_sentence pads "/" so "w/o" becomes ["w","/","o"]; "/" is dropped
+        as punctuation and "o" IS AN NLTK ENGLISH STOPWORD.
+
+[~] P8. A4b - COMMA-SPLIT FRAGMENTS               PARTIAL 2026-08-05 (c2115ba)
+        The rejoin heuristic landed in split_symptoms behind CORRECTED: a token
+        beginning with a space is rejoined to its predecessor. It recovers 80 of
+        the 89 fragments - 1805 -> 1725 tokens, 573 -> 564 unique - including all
+        26 " organism NOS" occurrences, which were the ones creating spurious 1.0
+        matches under mean-of-max.
+
+        IT IS A HEURISTIC AND IT IS INCOMPLETE. See P27 for the remaining nine.
+
+        --- original notes, kept for reference ---
+        Symptoms are ","-split but ICD-9 short titles contain commas. Because
+        similarity is mean-of-max, any two admissions sharing a contentless
+        fragment get a spurious 1.0 contribution. Severity distinctions also
+        collapse (stage I vs stage IV).
 
 [ ] P9. B5 - KEEP THE LEGACY NUMBER
         Report the existing MAX-at-0.6 result alongside everything new, clearly
@@ -375,3 +476,107 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         step. A HOSTED LLM API IS RULED OUT - the repo carries MIMIC-III under a
         PhysioNet DUA, so the decoder must run locally. This is where a GPU finally
         earns its keep; for the encoder arms it buys under 0.5%.
+
+
+===============================================================================
+NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
+===============================================================================
+
+[ ] P27. FINISH THE COMMA REJOIN - NINE OCCURRENCES REMAIN
+        Effort: hours. The fix is already MEASURED; what is missing is the commit.
+
+        P8's rule ("a token starting with a space rejoins to its predecessor")
+        recovers 80 of 89 fragments. It misses the nine where the intra-label comma
+        has NO trailing space, so the fragment does not start with a space:
+            'stage NOS'      x4
+            'stage III'      x3
+            'uncomp'         x1
+            'pharyngoesoph'  x1
+        These were confirmed by an adversarial verifier AFTER an earlier version of
+        this file claimed the rule was exact. It is not. The docstring on
+        split_symptoms now says so.
+
+        A rule-2 extension (also rejoin a token that is a known continuation
+        fragment) was BUILT AND THEN REVERTED. Reverted because a naive form -
+        "rejoin any part with no leading space" - OVER-JOINS: a legitimate
+        unspaced symptom list like "fever,cough" collapses to one token, which
+        broke 3 tests. Editing those tests to accommodate an unverified change is
+        the exact antipattern to avoid.
+
+        MEASURED OUTCOME OF THE CORRECT VERSION: 1716 tokens, 561 unique, ZERO
+        residual fragments. So the target numbers are known in advance.
+        The correct form needs a bounded rule - e.g. rejoin only when the part is
+        one of the four known continuations, or when the combined string matches a
+        real ICD-9 short title - not a general no-leading-space rule.
+
+        WORTH KNOWING: CMS caps ICD-9 short titles at 24 characters, which is WHY
+        the truncated forms 'uncomp' and 'pharyngoesoph' exist at all. That cap is
+        a usable oracle for a bounded rule.
+
+[ ] P28. GUARD make_folds.py --out            *** DO THIS BEFORE ANY FOLD WORK ***
+        Effort: minutes. Consequence of not doing it: unbounded.
+
+        scripts/make_folds.py accepts --out and will happily write to data/folds/,
+        overwriting the committed fold files that are INPUTS to
+        tests/golden/stub768/. There is no confirmation and no dry-run.
+        Losing them means the byte-exact golden can never be re-verified - the
+        single safety net this whole project rests on.
+
+        Fix: refuse to write into data/folds/ unless an explicit --force-legacy
+        flag is passed, and refuse to write into any non-empty directory without
+        --overwrite.
+
+[ ] P29. ADD THE THIRD ARM - FOLDS-ONLY - SO EFFECTS CAN BE ATTRIBUTED
+        Effort: trivial. Impact: real explanatory power for the writeup.
+
+        CORRECTED bundles TWO independent changes: grouped folds AND corrected
+        preprocessing. A legacy-vs-corrected delta therefore cannot say how much of
+        the movement came from removing leakage and how much from fixing "w/o" and
+        the comma fragments. For a comparison whose entire point is attribution,
+        that is a real gap.
+
+        Fix: PipelineConfig("folds_grouped", "legacy") as a third named config, and
+        a fourth if wanted - PipelineConfig("folds", "corrected"). Both fall out of
+        the existing dataclass; no new machinery. Register in config._BY_NAME so
+        --pipeline and $AICDS_PIPELINE pick them up automatically.
+
+[ ] P30. WIDEN .githooks/pre-commit - IT DOES NOT COVER data/folds_grouped/
+        Effort: minutes.
+
+        The hook has two rules and BOTH miss the new fold set:
+          rule 1 greps ^data/(raw|folds)/ - "folds_grouped" does not match
+          rule 2 looks for 20+ distinct HADM_ID tokens, but fold files carry bare
+                 numeric IDs with no "HADM_ID" header anywhere
+        So 1290 lines of DUA-covered MIMIC text are one `git add -f` away from a
+        public repo. .gitignore:129 is the only thing stopping it today, and a
+        gitignore is a convenience, not a guard.
+
+        Fix: widen rule 1 to ^data/(raw|folds) - dropping the trailing slash covers
+        folds/, folds_grouped/, and any future fold set in one change.
+
+[ ] P31. THE GOLDEN TAKES ~44 MINUTES, NOT 20-26. FOUR DOCS SAY OTHERWISE.
+        Effort: minutes. Measured twice on an M-series Mac: 43:50 and 44:32.
+        CLAUDE.md and three plan/test docs claim "~20 min" or "20-26 min". Anyone
+        budgeting a refactor gate off that number will assume it hung.
+        While in there: tests/stubs.py records StubEncoder(dim=64) at 128s versus
+        1245s at 768 - worth stating as the DEVELOPMENT loop, with 768 reserved for
+        minting anything committed.
+
+[ ] P32. COLLECT THE CORRECTED-PIPELINE RESULTS AND REPUBLISH   *** IN FLIGHT ***
+        A four-arm corrected run was launched on the RunPod box on 2026-08-05
+        (AICDS_PIPELINE=corrected, all four arms, ~1 hour).
+
+        When it lands:
+          - place each run under results/<model>/<timestamp>/
+          - regenerate results/model_comparison.pdf via scripts/compare_models.py
+          - update README.md and docs/README.md with the FIRST UNCONTAMINATED
+            numbers this project has ever produced
+          - re-measure the 58.1% ceiling on the grouped folds (see P2)
+          - keep the legacy numbers alongside, labelled (P9)
+
+        REMEMBER when writing them up: these numbers are leakage-free and
+        preprocessing-unified, but they are STILL SELF-GRADED (P4) and still
+        rank-blind (P5). They are defensible as a reproduction; they are NOT yet
+        defensible as an encoder ranking. Say so explicitly rather than letting a
+        reader infer otherwise - the README already made one overclaim of exactly
+        this kind and it had to be corrected.
