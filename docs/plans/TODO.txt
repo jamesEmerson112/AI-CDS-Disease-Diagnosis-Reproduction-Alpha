@@ -21,7 +21,30 @@ STATUS
                UNPREDICTED: abstention treatment is a THIRD knob and it
                inverts every sign. See docs/findings/13-rank-aware-metrics.md.
   PARTIAL  P8   80 of 89 fragments; see P27
-           P29  configs defined, the attribution RUNS are still to do
+           P29  configs defined; runs STAGED AND READY, deferred 2026-08-06.
+                /workspace/repo/attribution_runs.sh on the pod is written,
+                pre-flighted and unlaunched. Resume is ONE command:
+                  cd /workspace/repo && setsid nohup ./attribution_runs.sh \
+                      > attribution_driver.log 2>&1 < /dev/null &
+                ~95 min for all 8 runs (4 arms x 2 configs), ~$1.80.
+                Pre-flight PASSED 2026-08-06: both configs resolve
+                (folds-only = folds_grouped+legacy, preprocess-only =
+                folds+corrected, grader cosine for both), nltk+torch+sent2vec
+                all import, both fold dirs present at 10 each, 32 vCPU,
+                128 GB cgroup vs ~22 GB peak. Repo at 5fbdb2f. The drg-run
+                output was moved to _done_drg/ so the harvest globs cannot
+                pick it up -- it is already downloaded as results_p5/ locally.
+
+                THE SCRIPT HARVESTS PER BATCH, NOT AT THE END, and that is
+                load-bearing: P14 (run_metadata.json) is unimplemented, so
+                NOTHING in a run's output records which pipeline produced it.
+                Both batches emit identically-named
+                Prediction_Output_<Model>_<timestamp> dirs into one cwd, so
+                sorting them afterwards means inferring the config from
+                timestamp order alone -- in the one experiment whose entire
+                purpose is attribution. Mis-filing a folds-only number as
+                preprocess-only would invert the conclusion. Fix P14 and this
+                whole hazard goes away.
            P32  all four arms RAN; root README REWRITTEN (e83b5be) and again
                 for P4+P5; comparison PDF BUILDS for all pipelines (P34 fixed);
                 docs/README.md refreshed (2e5c6f3)
