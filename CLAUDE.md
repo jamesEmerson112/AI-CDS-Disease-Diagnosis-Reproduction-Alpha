@@ -9,34 +9,57 @@ A reproduction and extension of Comito et al. (2022), *"AI-Driven Clinical Decis
 1. **Baseline** — BioSentVec (sent2vec, 700D). **Scaffolded from the original authors' code, not this repo owner's contribution.** Published F1 0.489/0.512/0.521 at threshold 0.6. **It runs, as of 2026-08-05** — first successful execution in this checkout, on rented Linux, reproducing the published TOP-10 F1 to within 0.007 (0.482 vs 0.489). See `docs/findings/09-baseline-first-run.md`. It **cannot** run on Windows: `sent2vec` will not build under MSVC (`-Wno-cpp` is the first of several GCC-only flags), so the baseline arm is Linux-only.
 2. **BERT extension (the original contribution)** — Bio_ClinicalBERT, BiomedBERT, BlueBERT (768D) behind the *identical* pipeline.
 
-### Four independent problems with the headline result
+### The seven problems, and their status
 
-Do not conflate these; fixing one does not fix the others. The first two are metric design; the
-last two are plain bugs.
+Do not conflate these; fixing one does not fix the others. **Check the status marker before spending
+any effort on one:** four are fixed, one is explained rather than open, one is confined, and one
+cannot be closed by any amount of code. Three of the seven were found only *because* an earlier one
+was fixed — removing a knob keeps revealing the one it was masking, so expect the list to grow again
+rather than treating it as complete.
 
-- **Saturation.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. See `docs/findings/03-metric-saturation.md`.
-- **Degeneracy.** Across **all 12,600 rows of committed BERT results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow`, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" in the committed BERT results is accuracy.** Threshold-*independent*. **Do not extend this to the baseline** — `archive/stale-docs/Reproduce_w_transformers.md:134-143` reports P=0.621/R=0.412/F1=0.489 at TOP-10, i.e. P≠R, meaning that run abstained on cases with no candidate above `PRUNING_SIMILARITY`. **RESOLVED 2026-08-05 — it is the embedding space, not the code.** The baseline run produced the missing artifact: P ≠ R in every row, because `PR` (prediction rate) is 0.7679 throughout — **30 of 129 cases (23.3%) abstain** when nothing clears `PRUNING_SIMILARITY`. The tell is one column: `TP+FP` sums to exactly 12.9 (the mean fold test size) for all three BERT arms, forcing `tp+fp == nrow`, but to 9.9 for the baseline. **This unifies saturation and degeneracy into one root cause** — a compact embedding space disabling two different gates, the pruning gate and the scoring threshold. See `docs/findings/04-metric-degeneracy.md` and `09-baseline-first-run.md`.
+- **Saturation. OPEN, but confined.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. **It does not arise under `--pipeline drg` at all**, which has no threshold. So it bounds the cosine-graded tables below 1.0 and nothing else. See `docs/findings/03-metric-saturation.md`.
+- **Degeneracy. EXPLAINED 2026-08-06, not open.** Across **all 12,600 rows of committed BERT results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow`, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" in the committed BERT results is accuracy.** Threshold-*independent*. **Do not extend this to the baseline** — `archive/stale-docs/Reproduce_w_transformers.md:134-143` reports P=0.621/R=0.412/F1=0.489 at TOP-10, i.e. P≠R, meaning that run abstained on cases with no candidate above `PRUNING_SIMILARITY`. The baseline run supplied the missing artifact: P ≠ R in every row, because `PR` (prediction rate) is 0.7679 throughout — **30 of 129 cases (23.3%) abstain** when nothing clears `PRUNING_SIMILARITY`. The tell is one column: `TP+FP` sums to exactly 12.9 (the mean fold test size) for all three BERT arms, forcing `tp+fp == nrow`, but to 9.9 for the baseline — still the fastest diagnostic available. **What finding 13 settled is the label: `P == R` is `PR == 1.0`, i.e. the answered and all-cases populations being the *same set* because those arms never abstain. It was never the metric collapsing — the columns were unlabelled, not wrong.** `RankMetrics.txt` reproduces legacy `P`/`R`/`PR` bit-exactly from an independent code path, which is what proves it. See `docs/findings/04-metric-degeneracy.md`, `09-baseline-first-run.md` and `13-rank-aware-metrics.md`.
+- **Patient leakage. FIXED 2026-08-05 (`c2115ba`), 41 → 0.** The legacy folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15), so **41 of 129 test cases (31.8%) had another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0 was **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination was ~10× the effect under study. Tell: on leaked cases all three encoders scored *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverged. **It affected both arms**, so the published 0.489/0.512/0.521 carry it too. Fixed by `GroupKFold` on `SUBJECT_ID` (`scripts/make_folds.py` → `data/folds_grouped/`), recounted independently rather than trusting `--verify`. **`legacy` still uses the leaky folds on purpose**, so the golden never moves. See `docs/findings/05-patient-leakage.md`.
+- **Preprocessing defects. FIXED 2026-08-05 (`c2115ba`), nine of 89 fragments remain (P27).** `preprocess_sentence` padded `/` then dropped `o` as an NLTK stopword, so **`w/o` became `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both became `tracheostomy w extensive procedure`. Negation destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) were orphan fragments** (`" organism NOS"` ×26) embedded as if they were symptoms, creating spurious 1.0 matches. Under `corrected`, `w/o` survives as `without` and 80 of 89 fragments are rejoined. See `docs/findings/06-preprocessing-defects.md`.
+- **Self-grading. FIXED 2026-08-06 (`75b6530`) — and the bias turned out to be possible but never actual.** Each arm scored its own predictions by cosine *in the space that produced the retrieval*, so a compact space could mark its own work leniently. `--pipeline drg` compares DRG label strings with no cosine anywhere. **It reproduces corrected cosine at threshold 1.0 bit-exactly** — 144 numbers, 4 arms × 6 aggregators × 6 columns, not one differing digit. So P4 did not move the numbers; it removed the reason to doubt them, which is the more useful outcome and the one worth reporting. See `docs/findings/12-drg-grader.md`.
+- **Rank-blindness. FIXED 2026-08-06 (`5393cab`), additively.** A hit at rank 1 and a hit at rank 50 counted identically, so TOP-K rose with `K` by construction. MRR has no `K`; Precision@K falls with `K` for every arm, inverting the TOP-K curve. `PerformanceIndex.txt` is untouched and the golden stayed byte-exact — rank metrics go to a sibling `RankMetrics.txt`. See `docs/findings/13-rank-aware-metrics.md`.
+- **Abstention asymmetry. OPEN, and not closable.** The baseline declines to answer 24.4% of cases; all three BERT arms never do. So **how you score an abstained case reorders all four arms and inverts every sign** — baseline last when abstention scores 0, first when it is excluded. This is not a metric defect to fix: abstention is a property of the arm, not of the metric, so no convention is neutral. `RankMetrics.txt` reports all three populations and `analyze_rank_metrics.py` refuses to privilege one. See `docs/findings/13-rank-aware-metrics.md`.
 
-- **Patient leakage.** The folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15). **41 of 129 test cases (31.8%) have another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0: **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination is ~10× the effect under study. Tell: on leaked cases all three encoders score *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverge. **Affects both arms** — the folds are shared static files, so the published 0.489/0.512/0.521 carry it too. Fix: `GroupKFold` on `SUBJECT_ID`. See `docs/findings/05-patient-leakage.md`.
-- **Preprocessing defects.** `preprocess_sentence` pads `/` then drops `o` as an NLTK stopword, so **`w/o` becomes `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both become `tracheostomy w extensive procedure`. Negation is destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) are orphan fragments** (`" organism NOS"` ×26) that get embedded as if they were symptoms and create spurious 1.0 matches. See `docs/findings/06-preprocessing-defects.md`.
+A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. **That curve is an artifact, not a result — verified monotonic in 18 of 18 model × threshold combinations, zero violations.** Precision@K (P5) is the diagnostic that exposes it: it *falls* with K for every arm, and unlike Hit@K nothing forces its direction. A genuine set-level P/R/F1 over the diagnosis sets (**P6, still open**) remains the more complete fix.
 
-A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. That curve is an artifact, not a result. The real fix is a genuine set-level P/R/F1 over the diagnosis sets, which is why "pluggable metrics" is the substance of the next phase rather than a nicety.
-
-**Before designing any exact-match metric:** only **75 of 129 test cases (58.1%)** have their correct DRG present anywhere in their fold's training pool — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at 58.1% under exact matching (**58.9%, 76/129, on `folds_grouped`** — the leakage fix moved retrievability by one case, pinned in `tests/test_drg_grader.py`). Prefer graded relevance. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
+**Before designing any exact-match metric:** only **76 of 129 test cases (58.9%)** have their correct DRG present anywhere in their own fold's training pool on `folds_grouped` — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at **58.9%** under exact matching (75/129 = 58.1% on the legacy `folds`; the leakage fix moved retrievability by exactly one case, so the two defects really were independent). Both figures are pinned in `tests/test_drg_grader.py`. Per fold the ceiling ranges from **3/12 (25%) to 13/15 (87%)**, which makes it a fresh source of per-fold variance in its own right. Prefer graded relevance — **but note the partial-credit ladder was designed and rejected on measurement** (`docs/findings/12-drg-grader.md`), so do not treat it as an easy win. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
 
 **Do not "correct" that 105 to 85.** Both are real and count different things: **85** is occurrence-level singletons over the 297 raw diagnosis entries, **105** is admission-level singletons (document frequency 1) over the 224 entries surviving `preprocess_diagnosis`'s per-admission dedup, and the 85 are a strict subset. **105 is the right figure here**, because this sentence bounds exact-match *retrieval* and a label written twice inside one admission offers a retriever no second admission to find it in. It is also the pipeline-true count — the dedup happens before any label reaches the grader. The 20-label gap exists because **71 of 129 admissions list their APR label twice byte-identically**, an upstream DRGCODES artifact. This was nearly mis-"fixed" during P4; see `docs/findings/12-drg-grader.md`.
 
-**The shared-pipeline constraint is already broken.** The baseline calls `preprocess_sentence` on diagnosis text (`cython_utils.py:226`); the BERT path does not (`bert_models.py:318-332`), so 119/145 (82.1%) of descriptions differ between arms. Any baseline-vs-BERT number is confounded by preprocessing, not just encoder.
+**The shared-pipeline constraint is broken under `legacy` and fixed under `corrected`/`drg` — check which pipeline produced a number before comparing arms.** The baseline calls `preprocess_sentence` on diagnosis text (`cython_utils.py:432`, and `:547-548` at scoring time). The BERT path now does too, but **only when the config says so**: `bert_models.py:354` gates it on `use_corrected_preprocessing(config)`, so under `legacy` it still encodes raw text and 119/145 (82.1%) of descriptions reach the two encoders as different strings. Under `corrected` all 145/145 match. The gate exists because the fix moves every BERT number, and `legacy` must stay byte-exact for the golden. **So a `legacy` baseline-vs-BERT delta is still confounded by preprocessing, not just encoder; a `corrected` or `drg` one is not.** Note also that only the *encoded* text changes — the dict keys stay raw under both versions, because `get_diagnosis_similarity_by_description_max` looks up by the raw description and preprocessing the keys would break every lookup.
 
 ### What can honestly be claimed
 
-At threshold 1.0 — the only setting where the encoders separate at all, since all three BERT models saturate at 1.000 for 0.6–0.9 — the TOP-10 F-scores are **Bio_ClinicalBERT 0.285 > BioSentVec 0.280 > BiomedBERT 0.254 > BlueBERT 0.239**. The baseline sits *inside* the BERT range and the best-vs-baseline gap is **0.005**, against leakage inflation of +0.11 to +0.26 and per-fold σ of 0.071–0.124. **No encoder ranking is supported by this experiment** — that is the defensible claim, and a more interesting one than a spurious win.
+**Quote the `corrected` or `drg` numbers, never the `legacy` ones.** The legacy figures
+(0.285 / 0.280 / 0.254 / 0.239 at TOP-10, gap 0.005) carry patient leakage *and* divergent
+preprocessing and are superseded. This is the most likely place to state something wrong to the
+user, because the two sets look interchangeable and differ by ~0.04.
+
+Corrected, threshold 1.0, TOP-10 — the only cosine setting where no model sits on the ceiling:
+**Bio_ClinicalBERT 0.2491 > BioSentVec 0.2163 > BiomedBERT 0.1981 > BlueBERT 0.1821**, best-vs-baseline
+gap **0.0328**, against per-fold σ of 0.054–0.139 and per-fold F ranging 0.00–0.67 on identical data.
+
+**The knobless result is the one to lead with.** With the threshold knob gone (`drg` collapses the
+five rows to one) and the `K` knob gone (MRR has no `K`), **no pair of encoders separates on any of
+the three abstention populations** — max paired |t| = 1.718, 1.651, 1.174 against the 2.262 needed
+at 9 df. That was predicted in writing before the run and it held.
+
+**No encoder ranking is supported by this experiment** — that is the defensible claim, and a more
+interesting one than a spurious win. It now rests on four removed confounds rather than on one
+favourable setting, which makes it much harder to argue with. What is *also* supported: the three
+transformers match a ~5.6-billion-parameter n-gram table using ~1/51 the parameters and ~1/17 the
+disk, which is a hardware fact independent of the metric.
 
 ### The findings index
 
 `docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement · **13** the knobless rank-aware comparison, and the third knob it exposed.
 
-**Both metric knobs are gone as of 2026-08-06 (P4 + P5), and the null result survived both.** Under `--pipeline drg` the five threshold rows collapse to one; under MRR there is no `K`. No pair of encoders separates on any of the three abstention populations — max paired |t| = 1.718 against the 2.262 needed at 9 df. **The unpredicted result is a third knob: how you score an abstained case reorders all four arms and inverts every sign** (baseline last when abstention scores 0, first when it is excluded). That one is not closable — abstention is a property of the arm, not of the metric — so `RankMetrics.txt` reports all three populations and `analyze_rank_metrics.py` refuses to privilege one. Do not try to bound the self-selection half of it with `MRR_all-cases / coverage`: that quotient is **algebraically identical** to `MRR_answered` and carries no information. It was computed, believed, and withdrawn; the real test needs per-case relevance vectors (P40). See `docs/findings/13-rank-aware-metrics.md`.
+**One trap from finding 13 that is convincing enough to fool a careful reader, so it is repeated here deliberately.** Do not try to bound the self-selection half of the abstention problem with `MRR_all-cases / coverage`. That quotient is **algebraically identical** to `MRR_answered` — abstentions contribute 0 to the all-cases numerator and coverage is exactly the denominator ratio, so it returns ~1.0 by construction and looks like it bounds the confound at 0.5% while carrying no information at all. It was computed, believed for a minute, and withdrawn. The real test needs the BERT arms restricted to the baseline's 98 answered cases, which needs per-case relevance vectors (**P40**).
 
 **Runtime, measured:** encoding is 0.17–0.45% of wall-clock; over 93% is the single-threaded pure-Python cosine loop, and total fold time varies only 1.7% across the three transformers. **A GPU buys nothing for the encoder arms** — that is why the rented box is CPU-optimised. See `docs/findings/08-runtime-and-cost.md`.
 
@@ -65,25 +88,43 @@ Python 3.9 is pinned only by `sent2vec` (baseline-only). HuggingFace models cach
 
 Always run from the repository root — output paths derive from `os.getcwd()`. (The `sys.path.insert(0, project_root)` hacks are **gone** as of `2a0b77d`; the package is a real src-layout install, so `pip install -e .` is now required.)
 
+**Every run takes `--pipeline legacy|corrected|folds-only|preprocess-only|drg`** (the baseline reads
+`$AICDS_PIPELINE` instead, because it executes at import time and there is no post-import moment at
+which a caller could rebind). `legacy` is the default everywhere, so a command with no pipeline
+argument is bit-identical to the original and the golden is unaffected.
+
 ```bash
+python scripts/make_folds.py --verify            # regenerate data/folds_grouped/ (gitignored, so
+                                                 # required before any grouped-fold run)
 python scripts/run_bert_analysis.py --model 2    # 1=Bio_ClinicalBERT 2=BiomedBERT 3=BlueBERT
-python scripts/run_bert_analysis.py --model all  # ~21 min/model on an M-series Mac; ~14 on a Threadripper 7960X
-python scripts/run_baseline.py                   # BioSentVec arm — Linux only, needs the 21 GB model, ~13 min
-python scripts/compare_models.py                 # 4-model comparison PDF from results/
+python scripts/run_bert_analysis.py --model all --pipeline drg   # ~11.5 min/model on the RunPod
+                                                 # 32-vCPU box; ~21 on an M-series Mac; ~14 on a
+                                                 # Threadripper 7960X
+AICDS_PIPELINE=drg python scripts/run_baseline.py  # BioSentVec — Linux only, 21 GB model, ~13 min
+python scripts/analyze_rank_metrics.py results_drg  # parses RankMetrics.txt, paired t-test on
+                                                 # per-fold MRR across all three populations
+python scripts/compare_models.py --results-dir results_drg   # 4-model comparison PDF
 python scripts/analyze_score_distributions.py    # regenerates docs/score_distribution_analysis/
 python scripts/build_dashboard_data.py           # rebuilds dashboard JSON from docs/Prediction_Output_*/
 python scripts/analyze_performance.py [dir]      # PDF report from a PerformanceIndex.txt
 python scripts/verify_setup.py                   # smoke test (reports one spurious output/ failure)
 ```
 
+`compare_models.py` **refuses rather than guesses.** Its ~16 sanity assertions are the only thing
+verifying the parser reads the columns correctly, so they are keyed by pipeline; an unknown results
+directory, a pipeline mismatch, or a run in which zero checks executed are all hard exits. Pass
+`--pipeline` explicitly for a directory whose name is not in `_PIPELINE_BY_DIRNAME`.
+
 Tests:
 
 ```bash
-pytest                    # 93 passed, 2 deselected, ~4s — this is the green baseline
+pytest                    # 264 passed, 3 deselected, ~21-52s — this is the green baseline
 pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
-                          # byte-exact reference. ~20 min. Run it before and after
-                          # any refactor commit; it is the only thing that catches
-                          # the numbers moving while every other test stays green.
+                          # byte-exact reference. ~43-53 min (measured 43:28 and
+                          # 53:10, NOT the ~20 min this file used to claim). Run it
+                          # before and after any refactor commit; it is the only
+                          # thing that catches the numbers moving while every other
+                          # test stays green.
 pytest -m network         # opt in to the HuggingFace download test
 pytest tests/test_bert_symptom_pairwise.py::TestComputePatientSimilarityPairwise -v
 ```
@@ -151,14 +192,20 @@ Reference: `docs/reference/architecture.md`.
 
 The central design constraint: **both arms share everything except the embedding model.** `src/aicds/utils/cython_utils.py` owns preprocessing (`preprocess_sentence`, `preprocess_diagnosis`), fold loading (`load_dataset`), diagnosis scoring (`get_diagnosis_similarity_by_description_max`), and all confusion/performance-matrix math. The model modules supply only embeddings and their prediction loop. Any change to preprocessing or evaluation must land in `cython_utils.py` so both arms stay comparable — that comparability is the entire point.
 
-Data flow: 129 admissions from `data/raw/Symptoms-Diagnosis.txt` (`wc -l` says 128 — no trailing newline; `;`-delimited, diagnoses joined by `--` with `apr:`/`hcfa:`/`ms:` prefixes) → embed unique symptom and diagnosis strings → score every training patient by mean-of-max symptom similarity → prune below `PRUNING_SIMILARITY` (0.5) → take MAX and TOP-K (10–50) → score predictions against ground truth by MAX cosine over the Cartesian product → threshold at 0.6–1.0 → aggregate over 10 folds.
+**`src/aicds/config.py` is the seam every correctness fix goes behind.** `PipelineConfig` is a frozen dataclass with three fields — `fold_dir`, `preprocess_version`, `grader` — and **defaults that reproduce the published pipeline exactly**. Named configs: `LEGACY`, `CORRECTED`, `FOLDS_ONLY`, `PREPROCESS_ONLY`, `GRADER_DRG`, selectable by name from `_BY_NAME` (which also feeds argparse `choices=`, so a config cannot exist-but-be-unselectable — that was a real bug). **Add new fields with legacy-preserving defaults; never change an existing default.** That is what lets the golden stay byte-exact forever while the corrected numbers get their own run.
+
+**Read `require_supported_grader` before adding any config field, and understand why it exists.** For a window during P4, `--pipeline drg` was selectable, printed a plausible banner, ran a full 10-fold pass, and produced **cosine** numbers filed as DRG ones. Nothing crashed; nothing failed a test; the output looked entirely normal. A config field with no reader is worse than no field at all. **Any new grader name must land in the same commit as its consumer**, and `SUPPORTED_GRADERS` is what makes forgetting that a loud error instead of a silent wrong answer.
+
+**`src/aicds/analysis/`** holds the rank-aware metrics, deliberately layered: `rank_metrics.py` is pure (no I/O, no config) and carries the N1–N4 constraints in its docstring; `populations.py` computes the winnable-case sets; `rank_report.py` does the accumulation and writes `RankMetrics.txt`. Keep `rank_metrics.py` pure — its contract depends on it, and it was differentially validated against three independent implementations over ~1.1M comparisons.
+
+Data flow: 129 admissions from `data/raw/Symptoms-Diagnosis.txt` (`wc -l` says 128 — no trailing newline; `;`-delimited, diagnoses joined by `--` with `apr:`/`hcfa:`/`ms:` prefixes) → embed unique symptom and diagnosis strings → score every training patient by mean-of-max symptom similarity → prune below `PRUNING_SIMILARITY` (0.5) → take MAX and TOP-K (10–50) → score predictions against ground truth by MAX cosine over the Cartesian product → threshold at 0.6–1.0 → aggregate over 10 folds. **Under `grader="drg-exact"` the last two steps change**: relevance is an exact DRG label match, so the five threshold rows collapse to a single value.
 
 Things that will bite you:
 
 - **`cython_utils.py` is pure Python** despite the name — a hand-translation of the original Cython, archived at `archive/cython_source/util_cy.c`. No build step.
 - **`sent2vec` is no longer imported at module scope** (as of `c8e4ffd`) — it moved inside `load_model()`, its only consumer, so `cython_utils` now imports with base dependencies alone. `tests/test_bert_symptom_pairwise.py` still AST-loads functions out of `bert_models.py` to dodge the old imports; that workaround is now unnecessary and **new tests should import normally**.
 - **Embedding dicts are keyed by preprocessed *text*, not HADM_ID**, each value wrapped in a one-element list so callers index `emb[0]`. Diverging silently changes results rather than raising.
-- **Folds are fixed committed files**, not computed at runtime, and no generator exists anywhere in the repo or its archive — the original split was produced upstream and only its output was committed. Do not regenerate them during the refactor; regeneration is tracked in `docs/plans/correctness-fixes.md`. `load_dataset` (`cython_utils.py:184`) also drops the final character of each line assuming a trailing newline — all 20 committed fold files end in `0x0a`, but a hand-written one without it silently loses its last symptom. `tests/test_characterize_dataset.py` pins this.
+- **The `legacy` folds under `data/folds/` are fixed committed files**, not computed at runtime, and no generator for them exists anywhere in the repo or its archive — the original split was produced upstream and only its output was committed. **Never regenerate or overwrite `data/folds/`**: it is the golden's input, and one careless `--out` destroys the only reference. `scripts/make_folds.py` writes `data/folds_grouped/` instead, which is gitignored and regenerated deterministically. `load_dataset` (`cython_utils.py:346`) drops the final character of each line assuming a trailing newline — all 20 committed fold files end in `0x0a`, but a hand-written one without it silently loses its last symptom. `tests/test_characterize_dataset.py` pins this.
 - **`baseline_sent2vec.py` runs at import time**; `bert_models.py` exposes `run_analysis(model_id)` and is the better pattern to follow.
 - `src/aicds/evaluation/bert_eval.py` is orphaned (zero callers, 545 lines) but contains a raw `AutoModel` + mean-pooling path distinct from sentence-transformers pooling, plus the only GPU-aware line in the repo (`:74`). Salvage before deleting — but do **not** carry its three known defects across: `:106` the wrong data path, `:121` the same unbound `entity` NameError fixed in `c2fee6e`, `:367` an `os.getcwd()` output root.
 - `src/aicds/entity/{Admission,Symptom,Drgcodes}.py` have no live callers — **but `tests/test_reorganization.py:17-19` imports them**, so deletion needs a same-commit test edit.
@@ -167,13 +214,16 @@ Things that will bite you:
 
 BERT runs write `Prediction_Output_{Model}_{DDMMYYYY_HH-MM-SS}/` into the **current working directory**; the baseline writes `Prediction Output_{DDMMYYYY HH-MM-SS}/` — space, no model name (see Known defects). The three committed result sets under `docs/` are the project's **regression oracle** — the only record of a working pipeline's exact output. Treat them as read-only.
 
-**`results/` is the working area for new runs and is gitignored** (`.gitignore:59`), which is what keeps DUA-covered output out of git automatically. It is organised by model, then timestamp:
+**Every run directory is gitignored by the glob `results*/` (`.gitignore:146`)**, which is what keeps DUA-covered output out of git automatically. **It is a glob on purpose, not a hand-listed set:** the previous version enumerated `results/` and `results_corrected/` by hand, and on 2026-08-06 a third pipeline was about to write `results_drg/` — per-case output keyed by `HADM_ID`, into a public repo. That is the one failure here that cannot be taken back. `.githooks/pre-commit` is the second line of defence, not the first. Layout is pipeline root, then model, then timestamp:
 
 ```
-results/<model>/<DDMMYYYY_HH-MM-SS>/   # model ∈ baseline, bio_clinical_bert, biomedbert, bluebert
+results/          <model>/<DDMMYYYY_HH-MM-SS>/   # legacy
+results_corrected/<model>/<DDMMYYYY_HH-MM-SS>/
+results_drg/      <model>/<DDMMYYYY_HH-MM-SS>/
+                  # model ∈ baseline, bio_clinical_bert, biomedbert, bluebert
 ```
 
-`scripts/compare_models.py` reads that layout and emits `results/model_comparison.pdf` across all four arms.
+**There is still no `--out` flag** (a Phase 2 leftover), so runs write `Prediction_Output_*` into the cwd and are moved into the layout above by hand. `scripts/compare_models.py --results-dir <root>` reads it and emits `<root>/model_comparison.pdf` across all four arms.
 
 `PerformanceIndex.txt` columns are `threshold TP FP P R FS PR`. The meaningful numbers are the per-fold blocks and the final `10-FOLD` block. Bear the degeneracy finding in mind when reading any of them.
 
@@ -181,11 +231,14 @@ Constants in `src/aicds/utils/Constants.py` (note `CH_DIR` walks **four** parent
 
 ## Known defects
 
-Verified, unfixed, documented:
+Verified, unfixed, documented. **Line numbers were re-resolved by reading them on 2026-08-06** —
+several had drifted by 100+ lines as `cython_utils.py` and `bert_models.py` grew, so re-check before
+trusting any reference here.
 
-- ~~**`scripts/run_baseline.py` crashes.**~~ **Fixed in `c2fee6e`** (data path, the unbound `entity` NameError, the discarded `line.replace`) and **verified by a full 10-fold run on 2026-08-05**. Two of the five original baseline defects remain: everything from `baseline_sent2vec.py:186` to EOF still executes **at import time** (no `run_analysis()`, no `__main__` guard), and there are still two conflicting `PerformanceIndex` handles (`:279` opened `'w'` and never closed, `:420` a second handle `'a'` to the same path).
+- **Every per-case output file is empty — this is now P40, the highest-value open item.** The baseline emits 258 zero-byte files; `cython_utils.py:205` opens the detail handle and `:309-310` closes both with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:538-539`). Neither arm has ever produced per-case output. **It was a cosmetic wart until finding 13 turned it into the binding constraint**: measuring whether the baseline's 98 self-selected answered cases are simply the easy ones needs per-case relevance vectors, and nothing else in the repo carries them. **Scope rule: write a new sibling file, do not repair the dead handles** — that keeps the golden covering exactly what it covered before, the same reasoning that made P5 additive.
+- **Nothing records which pipeline produced a run (P14, `run_metadata.json`).** Attribution rests entirely on the results-directory name (`compare_models.py:165` says so in a comment). This is why the P29 attribution script harvests into a config-named root *after each batch* rather than at the end: both batches emit identically-named `Prediction_Output_<Model>_<timestamp>` dirs into one cwd, so sorting them afterwards would mean inferring the config from timestamp order alone — in the one experiment whose entire purpose is attribution.
+- ~~**`scripts/run_baseline.py` crashes.**~~ **Fixed in `c2fee6e`** (data path, the unbound `entity` NameError, the discarded `line.replace`) and **verified by a full 10-fold run on 2026-08-05**. Two of the five original baseline defects remain: everything from `baseline_sent2vec.py:186` to EOF still executes **at import time** (no `run_analysis()`, no `__main__` guard — which is *why* the baseline reads `$AICDS_PIPELINE` rather than taking a `--pipeline` flag), and there are still two conflicting `PerformanceIndex` handles (`:279` opened `'w'` and never closed, `:420` a second handle `'a'` to the same path).
 - **Output discovery is broken five ways, not three.** All five sites spell the glob `Prediction_Output_*` — but the **baseline writes `Prediction Output_` with a space** (`baseline_sent2vec.py:272-274`, because `current_time()` returns `"%d/%m/%Y %H:%M:%S"` and only `/` and `:` get scrubbed), so **no glob in the repo matches baseline output at all**. The five sites also disagree four ways about the base directory: `build_dashboard_data.py:172` uses `docs/`, `build_readme_plots.py:30` the repo root (hence its `FileNotFoundError`), `analyze_performance.py:27` the cwd, `test_reorganization.py:75` a recursive `**`, `test_golden.py:259` a pytest tmp dir. **Fix direction is forced**: `test_golden.py:115` hard-codes `\d{8}_\d{2}-\d{2}-\d{2}`, so writers must unify onto the *underscore* spelling. See `docs/findings/10-output-path-fragmentation.md`.
-- **Every per-case output file is empty.** The baseline emits 258 zero-byte files; `cython_utils.py:65-66` opens the two handles and `:170-171` closes them with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:451-456`). Neither arm has ever produced per-case output.
 - **The dashboard 404s.** The tracked JSON sits at `dashboard/dashboard/public/data/` (a stray nested dir), while the builder writes `dashboard/public/data/` and `useData.ts` fetches `./data/dashboard-data.json`.
 - The baseline model loads from cwd (`os.getcwd() + '/BioSentVec_...bin'`) despite `data/models/README.md` saying `data/models/`.
 - `scripts/verify_setup.py` checks for an `output/` directory that no longer exists.
@@ -198,9 +251,20 @@ The repo is **public** and contains committed MIMIC-III records under a PhysioNe
 
 ## Where the work is
 
-`docs/plans/revival-roadmap.md` is the sequenced plan and carries current status.
+**`docs/plans/TODO.txt` carries live status and is the file to read first** — its `STATUS` block is
+kept current. `docs/plans/revival-roadmap.md` is the sequenced *refactor* plan;
+`correctness-fixes.md` and `metric-redesign.md` are the science.
+
+**The correctness work is no longer "deferred to a dedicated session" — most of it has landed.**
+P1–P5, P7 and P9 are done, which means both metric knobs are gone and four of the seven problems
+above are fixed. Still open: **P6** (set-level soft P/R/F1), **P27** (the last nine comma
+fragments), **P29** (the folds-only / preprocess-only attribution runs — staged and ready on the
+pod, unlaunched), **P39** (the two arms break score ties differently), **P40** (per-case output).
+**P38 — a clean public repo — is the hard blocker on publication.**
+
+Refactor status:
 
 - **Phases 0, 1, 4 — done.** Environment repaired, data-use guard, docs reorganised, and the Phase 1 safety net (characterization tests + `StubEncoder` + byte-exact golden).
-- **Phase 2 — mostly done, merged to `main` via PR #1 (`7da5901`).** Landed: the `src/aicds` package move, real src-layout `pyproject`, `ensure_nltk_data`/`format_time` consolidated into `aicds.utils.runtime`, `stop_words` defined where it is read, three of the baseline's five crash bugs fixed. **Four items outstanding:** delete the **8** `stop_words` monkeypatches (the roadmap says 4 — it is wrong); the `--out`/`results` root plus unified globs; salvage `hf_automodel` before deleting `bert_eval.py`; the remaining dead code and the last two baseline defects.
-- **Phase 3 — not started.** `SentenceEncoder` Protocol + encoder registry, a `main.py` CLI (`bert_models.py:80` still calls `input()` interactively), one `PerformanceIndex` parser replacing three, one run-discovery rule replacing five, the dashboard fix. Phase 3 is the ship point.
-- **Deferred to a dedicated session** — everything in `docs/plans/correctness-fixes.md` and `docs/plans/metric-redesign.md`. Those deliberately change the numbers, which is why they cannot run concurrently with a refactor whose safety mechanism is that the numbers must not change.
+- **Phase 2 — mostly done, merged to `main` via PR #1 (`7da5901`).** Landed: the `src/aicds` package move, real src-layout `pyproject`, `ensure_nltk_data`/`format_time` consolidated into `aicds.utils.runtime`, `stop_words` defined where it is read, three of the baseline's five crash bugs fixed. **Four items outstanding:** delete the **7** `stop_words` monkeypatches — counted 2026-08-06 across `test_characterize_dataset.py` (2), `test_characterize_preprocessing.py` (1), `test_characterize_similarity.py` (1, via `util_cy`), `test_symptom_splitting.py` (3); the roadmap says 4 and an earlier version of this file said 8, so **count them again rather than trusting any of the three numbers**. Then: the `--out`/`results` root plus unified globs; salvage `hf_automodel` before deleting `bert_eval.py`; the remaining dead code and the last two baseline defects.
+- **Phase 3 — not started.** `SentenceEncoder` Protocol + encoder registry, a `main.py` CLI (`bert_models.py:89` still calls `input()` interactively), one `PerformanceIndex` parser replacing three, one run-discovery rule replacing five, the dashboard fix. Phase 3 is the ship point.
+- **The scope rule still holds where it applies.** Refactor work must not move the numbers; correctness work deliberately does. They cannot run in the same commit, because the refactor's only safety mechanism is that the numbers stay put. P4 and P5 both stayed *additive* — new sibling files, `PerformanceIndex.txt` untouched — which is why they could land without re-minting the golden. Prefer that shape.
