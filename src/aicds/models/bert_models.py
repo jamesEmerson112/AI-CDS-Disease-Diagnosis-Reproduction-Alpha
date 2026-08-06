@@ -27,6 +27,7 @@ from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid
 # registers it (it does, at the _load_bert_functions namespace).
 from aicds.utils.cython_utils import use_corrected_preprocessing
 from aicds.config import LEGACY, require_supported_grader
+from aicds.analysis.rank_report import RankAccumulator
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -520,6 +521,12 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
     folds_start = time.perf_counter()
     fold_times = []
 
+    # P5: one accumulator for the whole run, written once after the fold loop.
+    # Constructed here rather than inside the loop so the per-fold blocks and the
+    # 10-FOLD aggregate come from a single object -- rebuilding it per fold would
+    # silently lose the cross-fold values the paired t-test needs.
+    rank_accumulator = RankAccumulator(config)
+
     for nFold in range(0, K_FOLD):
         fold_start = time.perf_counter()
         print(f'\n[INFO] === FOLD {nFold} ===')
@@ -556,6 +563,11 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
         ######################################################################################################
         # PROCESS EACH TEST CASE - MATCHING BASELINE PREDICTSZV LOGIC
         ######################################################################################################
+        # P5: declare the fold's true nrow BEFORE any case is added, so a skipped
+        # case cannot silently shrink the all-cases denominator relative to
+        # legacy's `recall = tp / nrow`.
+        rank_accumulator.begin_fold(nFold, len(x_test))
+
         for i in range(len(x_test)):
             # Get test case info
             index = list(x_test[i].keys())[0]
@@ -564,6 +576,10 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
 
             if not test_admission:
                 print(f"[WARNING] Skipping test case {index} - missing data")
+                # P5: a skipped case made no prediction, which is an ABSTENTION,
+                # not an absence. Legacy still counts it in nrow, so it must be
+                # recorded here or the denominators diverge.
+                rank_accumulator.add(nFold, index, [])
                 continue
 
             gt_diagnosis = test_admission.diagnosis
@@ -586,6 +602,16 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
                     embendings_diagnosis, gt_diagnosis, pred_diagnosis, config
                 )
                 all_diag_sims.append(diag_sim)
+
+            # P5: hand the rank-ordered relevance vector to the rank-metrics
+            # accumulator. all_diag_sims is already in descending symptom-similarity
+            # order and already pruned at PRUNING_SIMILARITY (see
+            # predict_topk_diagnoses_pure, which sorts, THEN prunes, THEN slices),
+            # so it is exactly what MRR needs -- no re-sorting here, which would
+            # risk diverging from what the confusion matrices below score.
+            # Accumulating only; nothing is written until after the fold loop, and
+            # nothing touches PerformanceIndex.txt.
+            rank_accumulator.add(nFold, index, all_diag_sims)
 
             ##################################################################################################
             # STRATEGY 1: MAX SIMILARITY (single most similar patient)
@@ -756,6 +782,18 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
     for line in timing_report:
         performance_out_file.write(line + "\n")
     performance_out_file.close()
+
+    ################################################################################################################
+    # P5: RANK METRICS -- a SIBLING file, never a column in PerformanceIndex.txt
+    ################################################################################################################
+    # Deliberately AFTER performance_out_file.close(). PerformanceIndex.txt must be
+    # complete and closed before anything optional runs: test_golden.strip_trailer
+    # raises "No timing trailer found" if the file lacks its trailer, so an
+    # exception raised while writing rank metrics would surface as a GOLDEN FAILURE
+    # THAT LOOKS LIKE THE PIPELINE CHANGED. Fail-safe ordering keeps the regression
+    # net readable.
+    rank_metrics_path = rank_accumulator.write(directory_prediction_root)
+    print(f"[SUCCESS] Rank metrics written to {os.path.basename(rank_metrics_path)}")
 
     # Close debug log file if it was opened
     if debug_log_file:

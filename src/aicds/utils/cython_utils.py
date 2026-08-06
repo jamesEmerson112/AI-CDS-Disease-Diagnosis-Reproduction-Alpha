@@ -320,6 +320,19 @@ def predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, emb
     
     print("END PREDICTION " + test_admission.hadm_id + " in " + str(time_diff))
 
+    # P5: hand the rank-ordered relevance vector back to the caller.
+    #
+    # RETURNING rather than taking a 19th positional parameter, on a signature
+    # that already has eighteen. It also cannot affect the golden: nothing
+    # written changes, and every existing call ignores the return value.
+    #
+    # This is the same vector containGreaterOrEqualsValue scored above -- already
+    # in descending symptom-similarity order, already pruned at
+    # PRUNING_SIMILARITY, already capped at 50 by the argsort slice. Handing back
+    # the exact list that produced the confusion-matrix rows is what keeps
+    # RankMetrics.txt and PerformanceIndex.txt describing the same retrieval.
+    return top_similarities_max
+
 
 def current_time():
     now = datetime.now()

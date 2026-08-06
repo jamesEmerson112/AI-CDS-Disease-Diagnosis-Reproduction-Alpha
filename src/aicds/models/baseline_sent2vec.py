@@ -18,6 +18,7 @@ from aicds.utils.Constants import *
 
 from aicds.utils import cython_utils as util_cy
 from aicds.config import from_env, require_supported_grader
+from aicds.analysis.rank_report import RankAccumulator
 
 # This module runs at IMPORT time -- there is no run_analysis() to take a
 # config argument, so the seam is a module-level binding instead. Rebinding it
@@ -315,6 +316,11 @@ performance_out_file = open(directory_prediction_root + '/PerformanceIndex.txt',
 ################################################################################################################
 folds_start = time.perf_counter()
 fold_times = []
+# P5: one accumulator for the whole run, written once after the fold loop.
+# This module executes AT IMPORT TIME with no __main__ guard, so there is no
+# function scope to hang state on -- module level is the only option here, and it
+# is why the write below also sits at module level.
+rank_accumulator = RankAccumulator(PIPELINE_CONFIG)
 for nFold in range(0,K_FOLD):
     fold_start = time.perf_counter()
     directory_prediction = directory_prediction_root + 'Fold' + str(nFold) + "/"
@@ -334,6 +340,11 @@ for nFold in range(0,K_FOLD):
     # COMPUTE PREDICTION
     ##########################################################################################################
     nrow = len(x_test)
+    # P5: declare the fold's nrow so the all-cases denominator provably matches
+    # legacy's `recall = tp / nrow`. This arm has no `continue` in its per-case
+    # loop today, unlike the BERT arm -- declaring it anyway means adding one
+    # later fails loudly instead of shrinking a denominator by one case.
+    rank_accumulator.begin_fold(nFold, nrow)
     ncol = len(x_train)
     similarity_matrix = numpy.zeros(shape=(nrow, ncol))
     confusion_matrix_max = util_cy.init_confusion_matrix()
@@ -358,9 +369,13 @@ for nFold in range(0,K_FOLD):
         #######################################################
         # EXECUTE PREDICTION
         #######################################################
-        util_cy.predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, embendings_symptoms, embendings_diagnosis,
+        top_similarities_max = util_cy.predictS2V(i, index, test_admission, test_symptoms, x_train, nrow, ncol, embendings_symptoms, embendings_diagnosis,
                 admissions, similarity_matrix, None, confusion_matrix_max, None, confusion_matrix_Top_K_max_dict,
                 directory_prediction, directory_prediction_details, performance_out_file, PIPELINE_CONFIG)
+
+        # P5: the same rank-ordered, pruned vector the confusion matrices scored.
+        # predictS2V returns it rather than taking a 19th positional argument.
+        rank_accumulator.add(nFold, index, top_similarities_max)
 
         # DEBUG: Log after prediction (confusion matrix updated by C code)
         if DEBUG_MODE and i < DEBUG_CASE_LIMIT:
@@ -454,6 +469,18 @@ performance_out_file.write("\n\n")
 for line in timing_report:
     performance_out_file.write(line + "\n")
 performance_out_file.close()
+
+##########################################################################################################
+# P5: RANK METRICS -- a SIBLING file, never a column in PerformanceIndex.txt
+##########################################################################################################
+# Deliberately AFTER performance_out_file.close(). PerformanceIndex.txt must be
+# complete and closed before anything optional runs: an exception raised while
+# writing rank metrics would otherwise leave the file without its timing trailer,
+# and test_golden.strip_trailer raises "No timing trailer found" -- surfacing as a
+# GOLDEN FAILURE THAT LOOKS LIKE THE PIPELINE CHANGED rather than as the local
+# error it actually is.
+rank_metrics_path = rank_accumulator.write(directory_prediction_root)
+print("[SUCCESS] Rank metrics written to " + os.path.basename(rank_metrics_path))
 
 print(f"\n[SUCCESS] Timing report saved to: {timing_file_path}")
 print(f"[SUCCESS] Timing summary appended to: {directory_prediction_root}/PerformanceIndex.txt")
