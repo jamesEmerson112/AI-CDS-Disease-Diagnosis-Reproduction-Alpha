@@ -4,6 +4,97 @@ Author: An Thien Vo (James)
 
 Clinical Decision Support System for disease diagnosis prediction using patient symptom similarity.
 
+---
+
+## Start here — the project in plain language
+
+**The idea being tested.** If two patients arrive at a hospital with similar symptoms, they probably
+have similar diagnoses. So to guess a new patient's diagnosis, find the most similar past patients
+and look at what *they* were diagnosed with. A 2022 paper (Comito et al., IEEE Access) built exactly
+that and reported it worked reasonably well. This project rebuilds it, then asks a natural follow-up:
+**that paper used a text-understanding model from 2019 — do newer, medically-trained models do
+better?**
+
+**How the system works, in five steps.** No machine learning is *trained* here; everything is
+lookup and arithmetic.
+
+1. Take 129 hospital admissions, each with a list of symptoms and the diagnoses that were given.
+2. Turn every symptom and diagnosis phrase into a list of numbers (an *embedding*), so that phrases
+   meaning similar things get similar numbers. **This is the only step the four models differ in.**
+3. For a patient we're testing, compare their symptoms against every past patient's symptoms and
+   score how similar they are.
+4. Take the diagnoses of the top-scoring past patients as the prediction.
+5. Check the prediction against what the patient was actually diagnosed with, and score it.
+
+**What I found.** The four models cannot be told apart — but the three modern ones do it with
+**1/51 the parameters and 1/17 the disk space**, which is a genuine engineering win. More
+importantly, the *scoring method itself* turned out to be broken in four separate ways, and two of
+them make the original paper's headline number about 18% too high. Documenting that is the real
+contribution.
+
+### The project in STAR form
+
+**Situation.** A published clinical decision support result (F1 = 0.489) rested on a 2019 sentence
+encoder and a 20.93 GiB model file. The code had never successfully run in this repository: the
+baseline arm crashed on startup, and the one dependency it needed cannot be compiled on Windows at
+all. There was no test suite, so there was no way to change anything safely.
+
+**Task.** Get the original result reproducing, then swap the encoder for three modern biomedical BERT
+models behind an *identical* pipeline, so the encoder is the only variable — and establish whether
+the newer models are actually better.
+
+**Action.**
+- Fixed the crash bugs and got the baseline running end-to-end on rented Linux (the BERT extension is
+  my own contribution; the baseline was scaffolded from the original authors' code).
+- Built a safety net first: **135 tests**, including a byte-exact 10-fold regression reference. Since
+  nothing is trained, every output number is a pure function of the inputs and the arithmetic — so any
+  accidental behaviour change *is* a numerical change, and only a byte-exact comparison catches it.
+- Audited the evaluation and found **four independent defects**, each measured rather than asserted.
+- Fixed two of them behind a *selectable* switch, so the original pipeline still reproduces
+  bit-for-bit and the corrected one gets its own numbers. Re-ran all four models on one machine.
+- Tested the remaining differences for statistical significance instead of ranking them by eye.
+
+**Result.**
+- **Reproduced the published number to within 0.007** (0.4824 vs 0.489) — the first successful
+  reproduction by this codebase.
+- **~18% of that published number was contamination.** After fixing the data split and the text
+  handling, it falls to **0.3922**.
+- **No encoder is significantly better than any other.** Largest paired *t* = 1.04 against the 2.262
+  needed for p < 0.05. Dropping a single one of the 10 data splits flips first place.
+- **The modern models are ~51× smaller in parameters** (~110M vs ~5.6B) and ~17× smaller on disk
+  (416 MB vs 20.93 GiB) for statistically identical accuracy.
+- **Every "F1" in the transformer results is actually accuracy** — precision, recall and F-score are
+  the same number in all 12,600 original rows and all 90 corrected ones, with zero exceptions.
+- **The dataset caps any exact-match score at 58.1%**, because 105 of 145 diagnoses appear only once,
+  so the correct answer is often not available to be retrieved at all.
+
+### The five findings, in one list
+
+| # | Finding | Measured |
+|:-:|---|---|
+| 1 | **Patient leakage** — the data split let the same patient appear as both question and answer | 41 of 129 test cases; worth +0.11 to +0.26, ~10× the difference between encoders — **fixed** |
+| 2 | **Broken text cleanup** — `w/o` ("without") became `w` ("with"), destroying negation | 119 of 145 diagnosis labels differed between arms — **fixed**, now 145/145 identical |
+| 3 | **Saturation** — at the paper's own threshold, ~100% of patient pairs count as a match, so all three BERT models score a perfect 1.000 | still open; it is a metric-design problem |
+| 4 | **Degeneracy** — the metric labelled "F1" is arithmetically just accuracy | all 12,600 + 90 rows; still open |
+| 5 | **No statistical power** — with 129 patients and per-split scores ranging 0.00–0.67, this design cannot resolve the differences it reports | applies to the original paper equally |
+
+### Vocabulary, if any of the above was unfamiliar
+
+| Term | What it means here |
+|---|---|
+| **Embedding** | a phrase turned into a list of numbers, so a computer can measure whether two phrases mean similar things |
+| **Cosine similarity** | how closely two of those number-lists point in the same direction; 1.0 = identical, 0 = unrelated |
+| **Fold / 10-fold** | splitting the data into 10 groups and testing on each in turn, so you never test on data the system could look up |
+| **Leakage** | when the answer sneaks into the material the system is allowed to search — it inflates scores without improving the system |
+| **Precision / Recall / F1** | of what it predicted, how much was right / of what was right, how much it found / a single score combining the two |
+| **TOP-K** | how many similar past patients the system is allowed to copy diagnoses from |
+| **Threshold** | how similar two diagnosis phrases must be before we call them a match |
+| **BioSentVec / BERT** | the 2019 baseline text model, and the modern family of models replacing it |
+
+---
+
+## The formal version
+
 This project reproduces the clinical decision support system of *"AI-Driven Clinical Decision
 Support: Enhancing Disease Diagnosis Exploiting Patients Similarity"* (Comito et al., 2022) and then
 swaps its 2019 BioSentVec encoder for three modern biomedical BERT models behind the **identical**
@@ -341,8 +432,7 @@ degeneracy question ([09-baseline-first-run.md](docs/findings/09-baseline-first-
 here, unlike every BERT row: the baseline declines to predict on 23.2% of cases under `legacy` and
 24.4% under `corrected`.
 
-**Under `corrected`, TOP-10 falls to 0.3922 — about a fifth of the published number was
-contamination.** That drop is the finding, not a regression: the legacy path still reproduces 0.4824
+**Under `corrected`, TOP-10 falls to 0.3922 — 18.4% of the published number was contamination.** That drop is the finding, not a regression: the legacy path still reproduces 0.4824
 bit-for-bit on demand.
 
 Threshold 0.6 is the paper's own operating point, so this table is the correct comparison against
