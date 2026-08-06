@@ -1,5 +1,7 @@
 # AI-CDS Disease Diagnosis System
 
+Author: An Thien Vo (James)
+
 Clinical Decision Support System for disease diagnosis prediction using patient symptom similarity.
 
 This project reproduces the clinical decision support system of *"AI-Driven Clinical Decision

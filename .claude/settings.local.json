@@ -25,7 +25,9 @@
       "Bash(npm install)",
       "Bash(npm install d3 @types/d3)",
       "Bash(npm install -D tailwindcss @tailwindcss/vite)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(python -)",
+      "Bash(./venv/Scripts/python.exe /tmp/render_pages.py)"
     ]
   }
 }
