@@ -141,9 +141,10 @@ TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
 
 TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared code.
 
-  [ ] P28  Guard make_folds.py --out              (minutes) <- NEW, do this FIRST
-  [ ] P30  Widen the pre-commit hook to cover     (minutes) <- NEW
+  [x] P28  Guard make_folds.py --out              DONE 2026-08-05 (930c162)
+  [x] P30  Widen the pre-commit hook to cover     DONE 2026-08-05 (d77de02)
            data/folds_grouped/ and any future fold set
+  [ ] P38  CODE-ONLY PUBLIC REPO, data removed    (days)  <- BLOCKS PUBLICATION
   [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
   [ ] P14  C10. Result provenance (run_metadata.json)  (hours)
   [ ] P15  C2.  Unify output paths + the five globs    (hours)
@@ -851,3 +852,74 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         Fix: have it call get_diagnosis_relevance with an explicit config, and
         label its output with which grader produced it. The README already had
         to mark its statistics "legacy-measured" as a stopgap.
+
+[ ] P38. CODE-ONLY PUBLIC REPO, CLINICAL DATA REMOVED
+        Effort: days, mostly sequencing rather than code. Added 2026-08-06.
+        BLOCKS PUBLICATION. Full investigation: docs/plans/public-release.md.
+
+        Why: this repo is PUBLIC and carries committed MIMIC-III records under a
+        PhysioNet DUA that forbids redistribution. A paper citing it points
+        reviewers -- and PhysioNet -- straight at that. It is also just wrong to
+        leave in place.
+
+        DECIDED 2026-08-06: a NEW CLEAN REPO, not a history rewrite. Rewriting
+        does NOT remove data from GitHub -- pushed objects stay reachable by SHA
+        through the UI and API until Support garbage-collects them, forks hold
+        independent copies, and clones persist. A rewrite would look like
+        remediation without being it.
+
+        Exposure, measured: 29 tracked files carry identifiers. 25 substantive
+        (data/raw, the 20 fold files, 3 committed run outputs, the golden) and 4
+        incidental prose mentions. The data entered at commit 2 of 53 (b23657b)
+        and was NEVER modified since; each clinical path was touched by exactly
+        one commit.
+
+        TWO MEASUREMENTS MAKE THIS NON-LOSSY, which is why it is worth doing
+        properly rather than just deleting things:
+
+          1. THE GOLDEN SURVIVES. It carries all 129 HADM_IDs, but
+             test_golden.py:155 already has canonicalise() normalising the
+             trailer and run paths before comparing. Extend it to mask the ID
+             token and commit a masked golden: every TP/FP/P/R/FS/PR value and
+             every formatting quirk it exists to catch survives, because THE
+             IDENTIFIERS ARE LABELS, NOT MEASUREMENTS. No pipeline change, so
+             the existing golden proves the change is inert.
+          2. FOLD DEFINITIONS SHIP WITHOUT IDENTIFIERS. Measured: all 1290 fold
+             rows are EXACTLY raw_symptoms + "." -- uniform, zero exceptions
+             across both fold sets. So membership can ship as index lists into a
+             canonical ordering of data/raw and reconstruct byte-for-byte.
+             load_dataset needs a small change; the golden gates it.
+
+        THE GAP THAT CANNOT BE ENGINEERED AWAY: reconstruction needs to know
+        WHICH 129 admissions, that list is itself identifying, and the selection
+        was made upstream with no criterion recorded anywhere in this repo.
+        Preferred route is publishing the derived subset on PhysioNet as a
+        credentialed-access supplement with GitHub code-only. Fallback is to say
+        plainly that the public repo reproduces the METHOD but not the exact
+        numbers.
+
+        ORDER (1-5 are ordinary reversible work here; 6 makes a new repo; 7 is
+        irreversible and needs explicit instruction):
+          1. Mask identifiers in canonicalise(); re-mint the masked golden.
+             *** USEFUL ON ITS OWN AND SAFE TODAY *** -- removes 129 identifiers
+             from the most awkward file in the repo whatever else is decided.
+          2. data/folds -> index lists; adjust load_dataset; golden byte-exact.
+          3. Mask the three committed Prediction_Output_* files.
+          4. Write the MIMIC-III reconstruction recipe and VERIFY it against the
+             schema -- the current one is inferred from the data's shape
+             (ADMISSIONS + DIAGNOSES_ICD/D_ICD_DIAGNOSES.SHORT_TITLE + DRGCODES),
+             not from the original authors' code.
+          5. Scrub the 4 incidental mentions.
+          6. Build the new repo from the resulting tree, fresh initial commit.
+             Confirm zero identifiers with the scanner used for the audit, and
+             confirm .githooks/pre-commit passes with NO --no-verify anywhere.
+          7. Retire this repo (private, or delete). IRREVERSIBLE.
+
+        PREREQUISITE OUTSIDE THE CODE: publishing MIMIC-derived work needs a
+        credentialed PhysioNet account with the DUA signed and CITI training
+        done. If that is not in place it precedes all of the above.
+
+        RELATED, now that publication is a goal: P29's attribution runs and P5's
+        rank-aware metrics both move from "nice" to "a reviewer will ask", and
+        P14 (run provenance) is how you answer "which pipeline produced this
+        table".
