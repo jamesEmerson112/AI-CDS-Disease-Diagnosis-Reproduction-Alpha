@@ -142,9 +142,24 @@ SANITY_CHECKS_BY_PIPELINE = {
         ("biomedbert", "TOP-10", 1.0, {"P": 0.1981, "R": 0.1981, "FS": 0.1981}),
         ("bluebert", "TOP-10", 1.0, {"P": 0.1821, "R": 0.1821, "FS": 0.1821}),
     ],
-    # "drg" is deliberately ABSENT until that run lands. An empty list here would
-    # read as "checked, passed"; a missing key makes resolve_pipeline refuse to
-    # build, which is the correct behaviour for an unverified parse.
+    # RunPod Linux, 2026-08-06: folds_grouped + corrected preprocessing + the
+    # encoder-independent DRG grader. These are BIT-IDENTICAL to the corrected
+    # entries above at threshold 1.0 -- all 144 numbers, 4 arms x 6 aggregators x
+    # 6 columns. That is not a copy-paste error, it is the finding: cosine reaches
+    # exactly 1.0 only when two diagnosis embeddings are parallel, which (the
+    # dicts being keyed by text) means identical text -- exactly what an exact DRG
+    # match tests. See docs/findings/12-drg-grader.md.
+    #
+    # The DIFFERENCE is that here all five threshold rows carry these values,
+    # not just the 1.0 row: a binary grader returns only 0.0 or 1.0, so the
+    # threshold sweep collapses. Keyed at 1.0 anyway, so a regression that
+    # un-collapsed the sweep would still be caught by this table.
+    "drg": [
+        ("baseline", "TOP-10", 1.0, {"P": 0.2512, "R": 0.1923, "FS": 0.2163, "PR": 0.7558}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2491, "R": 0.2491, "FS": 0.2491, "PR": 1.0000}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.1981, "R": 0.1981, "FS": 0.1981, "PR": 1.0000}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.1821, "R": 0.1821, "FS": 0.1821, "PR": 1.0000}),
+    ],
 }
 
 # Which pipeline a results tree came from is not recorded in the output (that is

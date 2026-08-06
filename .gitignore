@@ -130,4 +130,17 @@ BioSentVec_PubMed_MIMICIII-bigram_d700.bin
 
 # Results kept locally, not committed -- same rule as results/ above.
 # Regenerate on a Linux box with the 21 GB BioSentVec model; see docs/findings/11.
-results_corrected/
+#
+# GLOB, not a list. This was `results/` plus `results_corrected/` enumerated by
+# hand, and on 2026-08-06 a third pipeline (`results_drg/`) was about to be
+# downloaded into a directory nothing ignored -- caught only because the
+# download was checked with `git check-ignore` first. Every one of these trees
+# is per-case output keyed by HADM_ID, i.e. DUA-covered clinical data in a
+# PUBLIC repo, so the failure mode of forgetting a line here is the one failure
+# this project cannot take back. A pattern cannot be forgotten.
+#
+# .githooks/pre-commit is the second line of defence (it blocks any new file
+# carrying 20+ distinct HADM_IDs wherever it lives). Do not rely on it as the
+# first -- it was added precisely because a path-only rule had already proved
+# insufficient once.
+results*/
