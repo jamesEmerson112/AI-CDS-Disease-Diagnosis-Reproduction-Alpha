@@ -340,11 +340,14 @@ accordingly.
 > TOP-K rises with K by construction. That curve is an artifact of the metric, not evidence that
 > larger K retrieves better (TODO P5).
 
-**A fifth constraint bounds every exact-match number above.** Only **75 of 129 test cases (58.1%)**
+**A fifth constraint bounds every exact-match number above.** Only **76 of 129 test cases (58.9%)**
 have their correct DRG present anywhere in their own fold's training pool — 105 of the 145 unique
-diagnoses occur exactly once in the dataset. A *perfect* retriever therefore caps at 58.1% under
+diagnoses occur exactly once in the dataset. A *perfect* retriever therefore caps at 58.9% under
 exact matching, which is the context in which the threshold-1.0 scores of 0.18–0.25 should be read.
-**This figure was measured on the old folds and has not been re-measured on the grouped ones.**
+Re-measured on the grouped folds 2026-08-06 and pinned in `tests/test_drg_grader.py`: fixing the
+leakage moved retrievability by exactly **one case** (75/129 → 76/129), so the two defects really
+were independent. Per fold the ceiling ranges from **3/12 (25%)** to **13/15 (87%)**, which makes it
+a fresh source of per-fold variance in its own right.
 
 **Every remaining defect biases in the same direction.** This is the most important sentence in the
 README, and it is why "the transformers look slightly better" cannot be reported as a result:
