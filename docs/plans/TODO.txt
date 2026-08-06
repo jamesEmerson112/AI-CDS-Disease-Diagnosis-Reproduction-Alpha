@@ -7,7 +7,8 @@ STATUS
            (c2115ba, 31bea66, 930c162, 45f36fc, d77de02)
   PARTIAL  P8   80 of 89 fragments; see P27
            P29  configs defined, the attribution RUNS are still to do
-           P32  all four arms RAN; PDF and READMEs still to do
+           P32  all four arms RAN; root README REWRITTEN (e83b5be); PDF
+                blocked by P34, docs/README.md still stale
   NEXT     P34 (unblocks the PDF) then P4, the encoder-independent grader
   NEW      P27 P29 P30 P31 P32 P33 P34 - all found while implementing Tier 1
 
@@ -22,11 +23,39 @@ Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
     BlueBERT           0.1776     0.0785    -0.0991
     SPREAD             0.0381     0.0092
 
-  The between-encoder spread collapses FOUR-FOLD, to what is effectively a
-  four-way tie with the 700D sent2vec baseline nominally on top. The single
-  most defensible statement this project can make is therefore NOT that some
-  encoder wins - it is that MOST OF THE MEASURED DIFFERENCE BETWEEN ENCODERS
-  WAS CONTAMINATION. Finding 05 predicted this before the runs existed.
+  CORRECTED 2026-08-06: the spread collapse above is MAX-ONLY. Do not
+  generalise it - that error was committed once already, in finding 11's
+  original headline, and had to be walked back. Under every TOP-K the spread
+  WIDENS:
+
+    aggregator @ 1.0    legacy   corrected   direction
+    MAX                 0.0381     0.0092    down 4.1x
+    TOP-10              0.0462     0.0671    UP 1.45x
+    TOP-20              0.0506     0.0819    UP 1.62x
+    TOP-30              0.0744     0.1383    UP 1.86x
+
+  Normalising by the leading value does not rescue it (MAX 20.7 -> 10.5%,
+  TOP-10 16.2 -> 26.9%). So "the encoders converged" is a statement about
+  choosing MAX, not a finding.
+
+  WHAT REPLACES IT - the ordering inverts on an arbitrary knob. Corrected,
+  threshold 1.0 held fixed, changing only K:
+
+                        MAX      TOP-10   TOP-20   TOP-30
+    BioSentVec        0.0877/1  0.2163/2 0.2229/4 0.2296/4
+    Bio_ClinicalBERT  0.0862/2  0.2491/1 0.3049/1 0.3513/2
+    BiomedBERT        0.0855/3  0.1981/3 0.2888/3 0.3353/3
+    BlueBERT          0.0785/4  0.1821/4 0.3038/2 0.3679/1
+
+  BioSentVec 1st -> 4th; BlueBERT 4th -> 1st, same data, same threshold. The
+  MECHANISM: the baseline abstains on 24.4% of cases (PR 0.7558) while every
+  BERT arm predicts on 100%, so widening K cannot help the baseline where it
+  declined to predict but gives each BERT arm another free guess, and one hit
+  inside K suffices with no penalty for the other K-1. TOP-K STRUCTURALLY
+  REWARDS NOT ABSTAINING. The defensible claim is that the ranking is decided
+  by two arbitrary knobs - aggregator and threshold - so NO ENCODER RANKING IS
+  SUPPORTED. Finding 05 still predicted the drop correctly; what it did not
+  predict is that the residual gap depends on the aggregator.
 
   Baseline TOP-10 @ 0.6:  0.4824 -> 0.3922  (published 0.489)
   i.e. roughly a fifth of the headline number was leakage + preprocessing.
@@ -623,21 +652,37 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         hook blocks them. Aggregates written up in docs/findings/11, which
         carries no identifiers.
 
-        HEADLINE: at MAX threshold 1.0 - the only setting where nothing
-        saturates - the spread across the four encoders COLLAPSES from 0.038 to
-        0.009. Effectively a four-way tie, with the 700D sent2vec baseline
-        nominally on top. Most of the measured "difference between encoders"
-        was leakage, exactly as finding 05 predicted before these runs existed.
-        Baseline TOP-10 @ 0.6 drops 0.4824 -> 0.3922, so about a fifth of the
-        published 0.489 was contamination.
-        Saturation and degeneracy BOTH SURVIVE untouched - expected, since they
+        HEADLINE AS FIRST WRITTEN -- SUPERSEDED, DO NOT QUOTE. Kept only so
+        the correction below has something to point at:
+        | at MAX threshold 1.0 - the only setting where nothing saturates -
+        | the spread across the four encoders COLLAPSES from 0.038 to 0.009.
+        | Effectively a four-way tie, with the 700D sent2vec baseline
+        | nominally on top. Most of the measured "difference between encoders"
+        | was leakage, exactly as finding 05 predicted before these runs
+        | existed.
+
+        STILL TRUE from that block: baseline TOP-10 @ 0.6 drops 0.4824 ->
+        0.3922, so about a fifth of the published 0.489 was contamination; and
+        saturation and degeneracy BOTH SURVIVE untouched, expected since they
         are metric design rather than data splitting.
+
+        CORRECTED 2026-08-06 (e83b5be + this commit): the "spread collapses,
+        four-way tie" headline above was MAX-only and has been walked back in
+        finding 11 and in the STATUS block at the top of this file. See there
+        for the replacement claim (ordering inverts with K; TOP-K rewards not
+        abstaining). Do not re-quote the four-way-tie framing from anywhere.
 
         STILL TO DO:
           - regenerate the comparison PDF -- BLOCKED by P34 below
-          - update README.md and docs/README.md with these numbers
+          - update docs/README.md: it still lists leakage as UNFIXED, never
+            mentions finding 11, and says "Phase 1 is next". The root
+            README.md is DONE (e83b5be) and docs/README.md now contradicts it
           - re-measure the 58.1% ceiling on the grouped folds (see P2)
           - run folds-only and preprocess-only to attribute the drop (P29)
+          - re-run analyze_score_distributions.py under corrected: the
+            saturation statistics (mean pairwise cosine 0.72-0.93, the >=0.6
+            percentages) are LEGACY-measured and now labelled as such in the
+            README, which is a stopgap rather than a fix
 
 [ ] P34. compare_models.py SANITY CHECKS ARE PINNED TO LEGACY VALUES
         Effort: ~an hour. Found 2026-08-06. BLOCKS the corrected comparison PDF.

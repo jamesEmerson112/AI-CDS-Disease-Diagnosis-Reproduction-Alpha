@@ -15,10 +15,9 @@ Runs live in `results_corrected/<model>/<timestamp>/`, gitignored under the same
 
 ---
 
-## The headline: the encoder gap was mostly leakage
+## The headline: every arm drops, and the ranking stops meaning anything
 
-`MAX` aggregator at threshold 1.0 — the only setting where **no** model saturates, and
-therefore the only one where the four arms can be compared at all.
+`MAX` aggregator at threshold 1.0 — one of the settings where **no** model saturates.
 
 | Encoder | Legacy | Corrected | Δ |
 |---|---|---|---|
@@ -27,18 +26,52 @@ therefore the only one where the four arms can be compared at all.
 | BiomedBERT | 0.1692 | **0.0855** | −0.0837 |
 | BlueBERT | 0.1776 | **0.0785** | −0.0991 |
 
-**Spread across the four encoders collapses from 0.038 to 0.009.** Removing patient leakage
-cut the apparent between-encoder difference by roughly four times, leaving what is
-effectively a four-way tie. The single most defensible statement available from this project
-is therefore not that one encoder wins — it is that **most of the measured difference between
-encoders was contamination, not capability.**
+Every arm loses ground, which is the expected direction: the leaked cases were free wins.
+That much is exactly what `docs/findings/05-patient-leakage.md` predicted — inflation of
++0.11 to +0.26 against encoder differences of 0.015–0.046, i.e. contamination ~10× the effect
+under study — and the prediction was made before these runs existed.
 
-That is exactly what `docs/findings/05-patient-leakage.md` predicted: inflation of +0.11 to
-+0.26 against encoder differences of 0.015–0.046, i.e. contamination ~10× the effect under
-study. The prediction was made before these runs existed.
+### CORRECTION 2026-08-06: the spread does not collapse in general
 
-Note also that BioSentVec, the 700-dimensional baseline, now sits at the *top* of a
-statistically meaningless ordering. Nothing here supports "transformers beat sent2vec."
+**This section originally read "spread collapses from 0.038 to 0.009 … effectively a four-way
+tie" and generalised it. That was wrong, and it is corrected here rather than quietly edited
+away, because the error is instructive: it came from reading one aggregator and assuming the
+others agreed.** They do not. Under `MAX` the spread shrinks; under every `TOP-K` it *widens*:
+
+| Aggregator @ threshold 1.0 | Legacy spread | Corrected spread | Direction |
+|---|---:|---:|---|
+| MAX | 0.0381 | 0.0092 | ↓ 4.1× |
+| TOP-10 | 0.0462 | 0.0671 | ↑ 1.45× |
+| TOP-20 | 0.0506 | 0.0819 | ↑ 1.62× |
+| TOP-30 | 0.0744 | 0.1383 | ↑ 1.86× |
+
+Normalising by the leading value does not rescue the original claim either (MAX 20.7% →
+10.5%, TOP-10 16.2% → 26.9%): the *direction* differs by aggregator. So "the encoders
+converged once leakage was removed" is not a finding — it is an artifact of picking `MAX`.
+
+### What actually replaces it: the ranking inverts on an arbitrary knob
+
+Corrected pipeline, threshold 1.0 fixed, changing only `K`:
+
+| Encoder | MAX | TOP-10 | TOP-20 | TOP-30 |
+|---|---|---|---|---|
+| BioSentVec (700D) | **0.0877 — 1st** | 0.2163 — 2nd | 0.2229 — 4th | 0.2296 — **4th** |
+| Bio_ClinicalBERT | 0.0862 — 2nd | **0.2491 — 1st** | **0.3049 — 1st** | 0.3513 — 2nd |
+| BiomedBERT | 0.0855 — 3rd | 0.1981 — 3rd | 0.2888 — 3rd | 0.3353 — 3rd |
+| BlueBERT | 0.0785 — **4th** | 0.1821 — 4th | 0.3038 — 2nd | **0.3679 — 1st** |
+
+**BioSentVec goes 1st → 4th; BlueBERT goes 4th → 1st, on the same data at the same
+threshold.** And there is a mechanism rather than noise: the baseline abstains on 24.4% of
+cases (`PR` 0.7558) while every BERT arm predicts on 100% (`PR` 1.0000). Widening `K` cannot
+help the baseline on a case where it declined to predict, but it hands each BERT arm another
+free guess — and one hit inside `K` suffices with no penalty for the other `K−1`. **TOP-K
+structurally rewards not abstaining**, which is a property of the metric, not of the encoders.
+
+The defensible statement is therefore not "the encoders converged" and certainly not that one
+wins. It is that **the ranking is decided by two arbitrary knobs — aggregator and threshold —
+so this experiment does not support any encoder ranking.** Note in particular that BioSentVec,
+the 700-dimensional 2019 baseline, can be made to finish first or last at will. Nothing here
+supports "transformers beat sent2vec," and nothing supports the reverse either.
 
 ## Every arm drops, and the baseline drops most
 
