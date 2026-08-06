@@ -63,7 +63,6 @@ MODEL_REGISTRY = OrderedDict(
             {
                 "label": "BioSentVec (baseline)",
                 "arm": "baseline",
-                "host": "RunPod Linux",
                 "color": "#2a78d6",
                 "marker": "o",
                 "dash": (0, ()),  # solid -- the reference arm
@@ -74,7 +73,6 @@ MODEL_REGISTRY = OrderedDict(
             {
                 "label": "Bio_ClinicalBERT",
                 "arm": "bert",
-                "host": "M-series Mac",
                 "color": "#eb6834",
                 "marker": "s",
                 "dash": (0, (6, 3)),
@@ -85,7 +83,6 @@ MODEL_REGISTRY = OrderedDict(
             {
                 "label": "BiomedBERT",
                 "arm": "bert",
-                "host": "M-series Mac",
                 "color": "#1baf7a",
                 "marker": "^",
                 "dash": (0, (2, 2)),
@@ -96,7 +93,6 @@ MODEL_REGISTRY = OrderedDict(
             {
                 "label": "BlueBERT",
                 "arm": "bert",
-                "host": "M-series Mac",
                 "color": "#4a3aa7",
                 "marker": "D",
                 "dash": (0, (7, 2, 1, 2)),
@@ -120,13 +116,83 @@ TABLE_HEADER = "#e8e7e2"
 
 # Known-correct values, used as a build-time guard on the parser. If the parse
 # ever disagrees with these the parser is wrong -- do not edit the expectations.
-SANITY_CHECKS = [
-    ("baseline", "TOP-10", 0.6, {"P": 0.5624, "R": 0.4256, "FS": 0.4824, "PR": 0.7679}),
-    ("baseline", "TOP-10", 1.0, {"P": 0.3254, "R": 0.2474, "FS": 0.2801}),
-    ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2853, "R": 0.2853, "FS": 0.2853}),
-    ("biomedbert", "TOP-10", 1.0, {"P": 0.2545, "R": 0.2545, "FS": 0.2545}),
-    ("bluebert", "TOP-10", 1.0, {"P": 0.2391, "R": 0.2391, "FS": 0.2391}),
-]
+#
+# These are PIPELINE-SPECIFIC, and that is the whole point of keying them. The
+# checks verify the parser lines up columns with headers; they cannot do that
+# against a number from a different pipeline, so a single flat list made
+# --results-dir results_corrected fail all 16 checks and exit before writing the
+# PDF. The checks were right to fire. Deleting them to unblock the PDF would
+# have removed the only thing verifying the parse.
+SANITY_CHECKS_BY_PIPELINE = {
+    # Committed docs/Prediction_Output_* -- data/folds, legacy preprocessing,
+    # cosine self-grading. Frozen forever; the golden pins the same path.
+    "legacy": [
+        ("baseline", "TOP-10", 0.6, {"P": 0.5624, "R": 0.4256, "FS": 0.4824, "PR": 0.7679}),
+        ("baseline", "TOP-10", 1.0, {"P": 0.3254, "R": 0.2474, "FS": 0.2801}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2853, "R": 0.2853, "FS": 0.2853}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.2545, "R": 0.2545, "FS": 0.2545}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.2391, "R": 0.2391, "FS": 0.2391}),
+    ],
+    # RunPod Linux, 2026-08-06: folds_grouped + corrected preprocessing, still
+    # cosine self-graded. Source of the README's headline table.
+    "corrected": [
+        ("baseline", "TOP-10", 0.6, {"P": 0.4692, "R": 0.3410, "FS": 0.3922, "PR": 0.7558}),
+        ("baseline", "TOP-10", 1.0, {"P": 0.2512, "R": 0.1923, "FS": 0.2163}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2491, "R": 0.2491, "FS": 0.2491}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.1981, "R": 0.1981, "FS": 0.1981}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.1821, "R": 0.1821, "FS": 0.1821}),
+    ],
+    # "drg" is deliberately ABSENT until that run lands. An empty list here would
+    # read as "checked, passed"; a missing key makes resolve_pipeline refuse to
+    # build, which is the correct behaviour for an unverified parse.
+}
+
+# Which pipeline a results tree came from is not recorded in the output (that is
+# P14, run_metadata.json). Until it is, infer from the directory name and let
+# --pipeline override. Inference is a convenience, never a guess that proceeds
+# silently: an unrecognised tree fails loudly below.
+_PIPELINE_BY_DIRNAME = {
+    "results": "legacy",
+    "results_corrected": "corrected",
+    "results_drg": "drg",
+}
+
+# What each pipeline changed, for the cover page. This exists because the cover
+# used to state the preprocessing confound ("119 of 145 descriptions differ")
+# unconditionally -- which P3 retired. A corrected-pipeline PDF asserting a
+# confound that was fixed is worse than no PDF: it reads as a caveat the author
+# checked.
+PIPELINE_NOTES = {
+    "legacy": {
+        "label": "legacy",
+        "detail": "data/folds + original preprocessing + cosine self-grading",
+        "confound": (
+            "One confound remains: the arms preprocess diagnosis text differently. The baseline calls\n"
+            "preprocess_sentence on diagnosis strings and the BERT path does not, so 119 of 145 (82.1%) differ.\n"
+            "The folds also split on HADM_ID, so 41 of 129 test cases share a patient with their own retrieval pool."
+        ),
+    },
+    "corrected": {
+        "label": "corrected",
+        "detail": "data/folds_grouped + fixed preprocessing + cosine self-grading",
+        "confound": (
+            "Two of the four documented confounds are GONE here: patient leakage (41 leaked cases -> 0, GroupKFold on\n"
+            "SUBJECT_ID) and divergent cross-arm preprocessing (26/145 matching -> 145/145). Two remain untouched:\n"
+            "every arm still grades its own predictions by cosine in its own embedding space (self-grading), and the\n"
+            "metric is rank-blind, so a hit at rank 1 and a hit at rank 50 count the same. Still not an encoder ranking."
+        ),
+    },
+    "drg": {
+        "label": "drg",
+        "detail": "data/folds_grouped + fixed preprocessing + exact DRG-label grading",
+        "confound": (
+            "Leakage, preprocessing divergence AND self-grading are all removed here: a prediction counts only on an\n"
+            "exact DRG label match, so all four arms are scored by one ruler rather than each by its own embedding\n"
+            "space. Two caveats stay. The ceiling is 76/129 = 58.9% -- only that many test cases have their correct\n"
+            "label anywhere in their training pool -- and the metric is still rank-blind, so TOP-K remains a free win."
+        ),
+    },
+}
 
 
 # --------------------------------------------------------------------------
@@ -275,9 +341,17 @@ def discover_runs(results_dir):
     # directory's DDMMYYYY prefix is what keeps the provenance box honest; the old
     # per-model constant silently mislabelled the 2026-08-05 Linux runs as "Mac"
     # the first time all four arms came off one box.
+    #
+    # An unmapped date now resolves to "unknown host" rather than falling through
+    # to MODEL_REGISTRY's per-model constant. That constant says "M-series Mac"
+    # for every arm, so the fallback did not degrade gracefully -- it asserted a
+    # specific wrong machine. The 2026-08-06 runs hit exactly that: they came off
+    # RunPod and the box would have labelled them Mac. An honest blank beats a
+    # confident error in a provenance box.
     hosts_by_date = {
         "15022026": "M-series Mac",
         "05082026": "RunPod Linux",
+        "06082026": "RunPod Linux",
     }
 
     runs = []
@@ -292,7 +366,7 @@ def discover_runs(results_dir):
                 "label": style["label"],
                 "arm": style["arm"],
                 "host": hosts_by_date.get(
-                    str(run.get("timestamp", ""))[:8], style["host"]
+                    str(run.get("timestamp", ""))[:8], "unknown host"
                 ),
                 "color": style["color"],
                 "marker": style["marker"],
@@ -330,11 +404,51 @@ def describe_run(run):
     return run
 
 
-def run_sanity_checks(runs_by_key):
-    """Compare the parse against known-correct published values."""
+def resolve_pipeline(results_dir, requested):
+    """Decide which pipeline's expectations to check the parse against.
+
+    Refuses rather than guesses. A results tree whose pipeline cannot be
+    established, or one whose pipeline has no recorded expectations, exits with
+    instructions -- because the alternative is a PDF built from an unverified
+    parse, which looks exactly like a verified one.
+    """
+    known = ", ".join(sorted(SANITY_CHECKS_BY_PIPELINE))
+
+    if requested is None:
+        basename = os.path.basename(os.path.normpath(results_dir))
+        requested = _PIPELINE_BY_DIRNAME.get(basename)
+        if requested is None:
+            raise SystemExit(
+                "[ERROR] cannot tell which pipeline produced '%s'.\n"
+                "        Pass --pipeline explicitly. Known: %s." % (results_dir, known)
+            )
+        print("[INFO] pipeline inferred from directory name: %s" % requested)
+    else:
+        print("[INFO] pipeline: %s (explicit)" % requested)
+
+    if requested not in SANITY_CHECKS_BY_PIPELINE:
+        raise SystemExit(
+            "[ERROR] no parser expectations recorded for pipeline '%s'.\n"
+            "        Recorded: %s.\n"
+            "        Add a SANITY_CHECKS_BY_PIPELINE entry from that run's own\n"
+            "        10-FOLD TOP-10 rows. Do NOT add an empty list -- zero checks\n"
+            "        reports as success and the parse goes unverified."
+            % (requested, known)
+        )
+    if requested not in PIPELINE_NOTES:
+        # Caught here rather than as a KeyError three pages into rendering.
+        raise SystemExit(
+            "[ERROR] pipeline '%s' has parser expectations but no PIPELINE_NOTES\n"
+            "        entry, so the cover page cannot say what it changed." % requested
+        )
+    return requested
+
+
+def run_sanity_checks(runs_by_key, pipeline):
+    """Compare the parse against known-correct values for one pipeline."""
     failures = []
     checked = 0
-    for model_key, strategy, threshold, expected in SANITY_CHECKS:
+    for model_key, strategy, threshold, expected in SANITY_CHECKS_BY_PIPELINE[pipeline]:
         run = runs_by_key.get(model_key)
         if run is None:
             print("[WARN] sanity check skipped, no run for '%s'" % model_key)
@@ -444,11 +558,13 @@ def _draw_table(ax, col_labels, cell_text, col_widths, cell_colors=None, fontsiz
 # Pages
 # --------------------------------------------------------------------------
 
-def page_cover(pdf, runs):
+def page_cover(pdf, runs, pipeline):
+    notes = PIPELINE_NOTES[pipeline]
     fig = _new_page(
         "Four-model comparison: BioSentVec baseline vs three BERT encoders",
         "Reproduction of Comito et al. (2022) -- 10-fold aggregate results, "
-        "generated by scripts/compare_models.py",
+        "pipeline '%s' (%s), generated by scripts/compare_models.py"
+        % (notes["label"], notes["detail"]),
     )
 
     # ---- Provenance warning, first thing on the page ----------------------
@@ -483,20 +599,17 @@ def page_cover(pdf, runs):
         fontsize=8.6, color=INK, va="top", family="monospace",
     )
 
+    hardware = (
+        "All four arms ran on the SAME machine, so hardware is not a confound here -- and re-running the three\n"
+        "BERT encoders on a second platform reproduced their numbers bit-for-bit, to all 17 significant figures."
+        if one_host else
+        "The arms ran on DIFFERENT hardware, so any baseline-vs-BERT gap below mixes encoder with machine. Treat\n"
+        "the three BERT models as comparable to each other and the baseline as a separate reference point."
+    )
     warn.text(
         0.022, 0.36,
-        (
-            "All four arms ran on the SAME machine, so hardware is not a confound here -- and re-running the three\n"
-            "BERT encoders on a second platform reproduced their numbers bit-for-bit, to all 17 significant figures.\n"
-            "One confound remains: the arms preprocess diagnosis text differently. The baseline calls\n"
-            "preprocess_sentence on diagnosis strings and the BERT path does not, so 119 of 145 (82.1%) differ."
-        ) if one_host else (
-            "The two arms were run on different hardware AND they preprocess diagnosis text differently: the baseline\n"
-            "calls preprocess_sentence on diagnosis strings, the BERT path does not, so 119 of 145 (82.1%) descriptions\n"
-            "differ between arms. Any baseline-vs-BERT gap below therefore mixes encoder, preprocessing and machine.\n"
-            "Treat the three BERT models as comparable to each other, and the baseline as a separate reference point."
-        ),
-        fontsize=8.6, color=INK, va="top", linespacing=1.5,
+        hardware + "\n" + notes["confound"],
+        fontsize=8.0, color=INK, va="top", linespacing=1.45,
     )
 
     # ---- How to read ------------------------------------------------------
@@ -867,24 +980,32 @@ def page_full_grid(pdf, runs):
 # Main
 # --------------------------------------------------------------------------
 
-def build_report(runs, out_path):
+def build_report(runs, out_path, pipeline):
     out_dir = os.path.dirname(os.path.abspath(out_path))
     if out_dir and not os.path.isdir(out_dir):
         os.makedirs(out_dir)
 
+    notes = PIPELINE_NOTES[pipeline]
+
     with PdfPages(out_path) as pdf:
-        page_cover(pdf, runs)
+        page_cover(pdf, runs, pipeline)
         page_summary_table(pdf, runs)
         page_threshold_curves(pdf, runs)
         page_topk_curves(pdf, runs)
         page_prediction_rate(pdf, runs)
         page_full_grid(pdf, runs)
 
+        # The pipeline goes in the metadata as well as on the cover. Two PDFs from
+        # different pipelines are otherwise indistinguishable once the filename is
+        # lost, and these get emailed around.
         info = pdf.infodict()
-        info["Title"] = "AI-CDS four-model comparison (10-fold aggregate)"
+        info["Title"] = (
+            "AI-CDS four-model comparison, pipeline '%s' (10-fold aggregate)"
+            % notes["label"]
+        )
         info["Subject"] = (
             "BioSentVec baseline vs Bio_ClinicalBERT / BiomedBERT / BlueBERT. "
-            "Cross-arm deltas are confounded by hardware and preprocessing."
+            "Pipeline: %s. Not an encoder ranking -- see the cover page." % notes["detail"]
         )
 
 
@@ -900,9 +1021,17 @@ def main(argv=None):
         "--out", default=None,
         help="output PDF path (default: <results-dir>/model_comparison.pdf)",
     )
+    parser.add_argument(
+        "--pipeline", default=None,
+        help="which pipeline's parser expectations to check against: %s. "
+        "Default: inferred from the results directory name. The expectations are "
+        "pipeline-specific, so a mismatch fails every check rather than a few."
+        % ", ".join(sorted(SANITY_CHECKS_BY_PIPELINE)),
+    )
     args = parser.parse_args(argv)
 
     out_path = args.out or os.path.join(args.results_dir, "model_comparison.pdf")
+    pipeline = resolve_pipeline(args.results_dir, args.pipeline)
 
     print("[INFO] discovering runs under %s/" % args.results_dir)
     runs = discover_runs(args.results_dir)
@@ -920,15 +1049,30 @@ def main(argv=None):
         )
 
     runs_by_key = {run["key"]: run for run in runs}
-    checked, failures = run_sanity_checks(runs_by_key)
+    checked, failures = run_sanity_checks(runs_by_key, pipeline)
     if failures:
         print("[ERROR] parser sanity checks FAILED:")
         for failure in failures:
             print("          " + failure)
+        print(
+            "        If this results tree is NOT pipeline '%s', pass the right\n"
+            "        --pipeline. A mismatch fails every check at once, which is\n"
+            "        what a wrong pipeline looks like." % pipeline
+        )
         return 1
-    print("[SUCCESS] %d parser sanity checks passed" % checked)
+    if not checked:
+        # Every arm was missing, so the loop skipped everything and reported
+        # zero failures. "0 checks passed" is indistinguishable from a verified
+        # parse in the output, so refuse instead.
+        print(
+            "[ERROR] zero parser sanity checks ran -- none of pipeline '%s'"
+            % pipeline
+        )
+        print("        expected arms were found under %s/." % args.results_dir)
+        return 1
+    print("[SUCCESS] %d parser sanity checks passed (pipeline: %s)" % (checked, pipeline))
 
-    build_report(runs, out_path)
+    build_report(runs, out_path, pipeline)
     print("[SUCCESS] wrote %s" % out_path)
     return 0
 
