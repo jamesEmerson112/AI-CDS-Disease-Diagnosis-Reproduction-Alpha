@@ -3,11 +3,20 @@ Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain a
 Updated 2026-08-05 after Tier 1 landed.
 
 STATUS
-  DONE     P1 P2 P3 P7 P9      (commits c2115ba, 31bea66)
+  DONE     P1 P2 P3 P7 P9 P28  (commits c2115ba, 31bea66, 930c162)
   PARTIAL  P8                  (80 of 89 fragments; see P27)
   IN FLIGHT P32                (four-arm corrected run on RunPod)
-  NEXT     P28 (guard, minutes) then P4 (the encoder-independent grader)
-  NEW      P27 P28 P29 P30 P31 P32 - all discovered while implementing Tier 1
+  NEXT     P4 - the encoder-independent grader
+  NEW      P27 P29 P30 P31 P32 P33 - all found while implementing Tier 1
+
+FIRST CORRECTED NUMBER (baseline arm, 2026-08-06 02-18-41, TOP-10 @ 0.6)
+  legacy    P 0.5624  R 0.4256  F 0.4824   (published: 0.489)
+  corrected P 0.4692  R 0.3410  F 0.3922
+  The correction COSTS 0.090 F1 - i.e. removing patient leakage and fixing
+  preprocessing wipes out roughly a fifth of the headline number. That is the
+  right direction and the right rough magnitude (predicted +0.11 to +0.26
+  inflation), and it is the strongest single piece of evidence in the project
+  that the published result was materially inflated. BERT arms pending.
 
   Tier 1 removed two of the four documented confounds: PATIENT LEAKAGE (41 leaked
   test cases -> 0) and DIVERGENT CROSS-ARM PREPROCESSING (26/145 matching -> 145/145).
@@ -513,18 +522,18 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         the truncated forms 'uncomp' and 'pharyngoesoph' exist at all. That cap is
         a usable oracle for a bounded rule.
 
-[ ] P28. GUARD make_folds.py --out            *** DO THIS BEFORE ANY FOLD WORK ***
-        Effort: minutes. Consequence of not doing it: unbounded.
-
-        scripts/make_folds.py accepts --out and will happily write to data/folds/,
-        overwriting the committed fold files that are INPUTS to
-        tests/golden/stub768/. There is no confirmation and no dry-run.
-        Losing them means the byte-exact golden can never be re-verified - the
-        single safety net this whole project rests on.
-
-        Fix: refuse to write into data/folds/ unless an explicit --force-legacy
-        flag is passed, and refuse to write into any non-empty directory without
-        --overwrite.
+[x] P28. GUARD make_folds.py --out                    DONE 2026-08-05 (930c162)
+        check_out_dir() refuses two hazards behind two flags:
+          --force-legacy  writing into data/folds at all
+          --overwrite     writing into any dir that already holds Fold*/ dirs
+        Path comparison is realpath+normcase, so data/folds_grouped/../folds is
+        caught too. The two guards COMPOSE rather than short-circuit: data/folds
+        is both protected and populated, so replacing it takes both flags.
+        The second guard matters more than it looks - fold dirs beyond the new
+        --n-splits are NOT removed, so regenerating with a smaller --n-splits
+        silently leaves a MIXTURE of two runs on disk.
+        tests/test_make_folds_guard.py, 13 tests. Suite 122 -> 135 passed.
+        Also pins the determinism the gitignore rests on: two runs byte-identical.
 
 [ ] P29. ADD THE THIRD ARM - FOLDS-ONLY - SO EFFECTS CAN BE ATTRIBUTED
         Effort: trivial. Impact: real explanatory power for the writeup.
@@ -561,6 +570,27 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         While in there: tests/stubs.py records StubEncoder(dim=64) at 128s versus
         1245s at 768 - worth stating as the DEVELOPMENT loop, with 768 reserved for
         minting anything committed.
+
+[ ] P33. compare_models.py SILENTLY PICKS ONE RUN PER MODEL, UNLABELLED
+        Effort: hours. Found 2026-08-05 while deciding where to put the
+        corrected results. Belongs with P14 (provenance) and P15 (paths).
+
+        discover_runs() takes candidates[-1] - the LEXICALLY last timestamp per
+        model - and records nothing about which PIPELINE produced it. Two
+        consequences:
+
+          1. Dropping corrected runs into results/ alongside the legacy ones
+             makes the legacy runs VANISH from the PDF with no warning, and the
+             PDF does not say which pipeline it charted. A reader cannot tell.
+             Worked around for now by keeping the trees separate via
+             --results-dir; that is a workaround, not a fix.
+          2. Timestamps are DDMMYYYY_HH-MM-SS and sorted as STRINGS, so the
+             ordering is not chronological across months. 31012026 sorts after
+             01022026 although it is a day earlier. It happens to be correct
+             today (05 Aug < 06 Aug) which is exactly why it will go unnoticed.
+
+        Fix: parse the timestamp into a real date before sorting, record the
+        pipeline in run_metadata.json (P14), and put it on the PDF.
 
 [ ] P32. COLLECT THE CORRECTED-PIPELINE RESULTS AND REPUBLISH   *** IN FLIGHT ***
         A four-arm corrected run was launched on the RunPod box on 2026-08-05
