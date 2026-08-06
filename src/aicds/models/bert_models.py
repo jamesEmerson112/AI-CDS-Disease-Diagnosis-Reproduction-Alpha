@@ -195,15 +195,20 @@ def predict_topk_diagnoses_pure(test_admission, test_symptoms, x_train,
 
 # REMOVED: Now using util_cy.get_diagnosis_similarity_by_description_max() directly
 
-def containGreaterOrEqualsValue(topk, similarity_list, threshold):
-    """
-    Check if ANY similarity in top-k list is >= threshold
-    This matches util_cy.containGreaterOrEqualsValue()
-    """
-    for sim in similarity_list[:topk]:
-        if sim >= threshold:
-            return True
-    return False
+# A private copy of containGreaterOrEqualsValue used to live here, with a
+# docstring claiming "this matches util_cy.containGreaterOrEqualsValue()". It
+# did -- but a comment is not a guarantee, and no test ever touched the copy the
+# BERT arm actually called, so the claim was unverified for the whole life of
+# the file. Deleted in favour of the shared function; the call site below now
+# reaches util_cy directly, so the two arms cannot drift.
+#
+# The two were behaviourally identical: the copy iterated
+# ``similarity_list[:topk]`` while the shared one iterates ``range(0, topK)``
+# with an ``i < len(...)`` guard, and both therefore scan exactly
+# ``min(topK, len)`` elements in order and return on the first hit. They diverge
+# only for NEGATIVE topK -- ``range(0, -1)`` is empty, ``list[:-1]`` is not --
+# which cannot arise, since topk comes from Constants' TOP-K range (10..50).
+# The golden gates the claim regardless.
 
 # Ensure NLTK data is available before first use
 import nltk
@@ -646,7 +651,7 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
                     values = confusion_matrix_Top_K_max.get(b)
 
                     if len(top_similarities_max) > 0:
-                        if containGreaterOrEqualsValue(topk, top_similarities_max, b):
+                        if util_cy.containGreaterOrEqualsValue(topk, top_similarities_max, b):
                             values[TP] += 1
                             tp, fp = 1, 0
                         else:
