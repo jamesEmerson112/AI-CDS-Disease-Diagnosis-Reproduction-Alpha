@@ -56,22 +56,36 @@ arms** (0.2512). The next three sections are why the word "second" should not be
 
 ### None of these gaps clears the noise
 
-The single most important table in this README. Per-fold standard deviations are **0.054–0.139** —
-larger than every between-encoder gap. Expressing each gap as a multiple of the standard error of a
-10-fold mean (`SE = sd/√10`):
+The single most important table in this README. Every score above is a mean over 10 folds, and the
+folds disagree wildly: per-fold F ranges from **0.00 to 0.67 on identical data**, with per-fold
+standard deviations of **0.054–0.139**. Those sds are *larger than every gap between encoders*, so
+before reading any ranking, ask whether the gap is bigger than the fold-to-fold wobble.
 
-| Aggregator @ 1.0 | 1st | 2nd | 1st−2nd | in SE | Full spread | in SE |
-|---|---|---|:---:|:---:|:---:|:---:|
-| MAX | BioSentVec | Bio_ClinicalBERT | 0.0015 | **0.08** | 0.0092 | 0.49 |
-| TOP-10 | Bio_ClinicalBERT | BioSentVec | 0.0328 | **0.98** | 0.0671 | 2.01 |
-| TOP-20 | Bio_ClinicalBERT | BlueBERT | 0.0010 | **0.03** | 0.0819 | 2.14 |
-| TOP-30 | BlueBERT | Bio_ClinicalBERT | 0.0167 | **0.41** | 0.1383 | 3.37 |
+All four arms run on the **same** folds, so the right instrument is a **paired** *t*-test on the
+per-fold differences (`t = mean(diff) / (sd(diff)/√10)`, 9 degrees of freedom, so **|t| > 2.262** is
+needed for p < 0.05):
 
-**Not one first-vs-second gap reaches 1 SE, let alone the ~2 needed to be worth mentioning.** Per-fold
-F ranges from 0.00 to 0.67 on identical data. A leave-one-fold-out check makes it concrete: at MAX,
-dropping a single fold hands first place to **BioSentVec in 5 of 10 cases and Bio_ClinicalBERT in the
-other 5** — the baseline's "win" is a coin flip. (Bio_ClinicalBERT's TOP-10 lead is the one that does
-survive all ten leave-one-out runs, but dropping fold 0 alone shrinks it from 0.0328 to 0.0068.)
+| Aggregator @ 1.0 | 1st | 2nd | Gap | Paired *t* | p < 0.05? |
+|---|---|---|:---:|:---:|:---:|
+| MAX | BioSentVec | Bio_ClinicalBERT | 0.0015 | 0.07 | **no** |
+| TOP-10 | Bio_ClinicalBERT | BioSentVec | 0.0328 | 0.87 | **no** |
+| TOP-20 | Bio_ClinicalBERT | BlueBERT | 0.0010 | 0.10 | **no** |
+| TOP-30 | BlueBERT | Bio_ClinicalBERT | 0.0167 | 1.04 | **no** |
+
+**Not one first-place margin is statistically significant.** The largest *t* anywhere is 1.04, less
+than half the threshold. Pairing is the *generous* choice here too — fold difficulty is genuinely
+shared, with per-fold F correlating at r = 0.72–0.96 among the three BERT arms — and the gaps still
+do not survive it.
+
+A leave-one-fold-out check makes the same point without any statistics: at MAX, dropping a single
+fold hands first place to **BioSentVec in 5 of 10 cases and Bio_ClinicalBERT in the other 5.** The
+baseline's "win" is a coin flip. Bio_ClinicalBERT's TOP-10 lead is the one that survives all ten
+leave-one-out runs, but dropping fold 0 alone shrinks it from 0.0328 to 0.0068 — so it rests largely
+on one fold in which it scored 0.60 while every other encoder scored 0.33.
+
+**With n = 129 and 10 folds, this experiment does not have the statistical power to separate four
+encoders whose true differences are this small.** That is a design finding about the study, not a
+defect of the encoders, and it applies equally to the original paper.
 
 **The leakage fix did not change any encoder's rank.** BioSentVec was 1st at MAX, 2nd at TOP-10, and
 4th at TOP-20 through TOP-50 *both before and after*. What the fix changed is the magnitude — and it
@@ -152,11 +166,33 @@ compactness of biomedical embedding space combined with the MAX-over-Cartesian-p
 puts ~100% of patient pairs above the bar, so essentially everything counts as a match. 0.6 is the
 paper's threshold, which is why it appears here at all; it cannot discriminate between models.
 
-**An inversion worth noting.** Per the size column above, the 2019 baseline is ~17× larger on disk
-than all three modern models combined, needs its full 20.93 GiB resident to run, and cannot be built
-on Windows at all — and it still cannot be distinguished from them. The cost asymmetry is real even
-though the accuracy difference is not, which is the practical argument for the transformers that this
-experiment *does* support.
+### The one asymmetry that *is* real: cost
+
+The accuracy difference does not survive a significance test. The cost difference is not close.
+
+| | BioSentVec | one BERT-base arm |
+|---|---|---|
+| On disk | 20.93 GiB | 416–420 MB |
+| Parameters | **~5.6 billion** (≈8M n-gram vectors × 700 dims) | **~110 million** |
+| Where the information lives | memorised: one fixed vector per unigram/bigram | computed: contextual, from a small parameter set |
+| RAM to run | full 20.93 GiB resident | a few hundred MB |
+| Builds on Windows | **no** — MSVC rejects sent2vec's GCC-only flags | yes |
+
+*Parameter count derived from file size and dimensionality assuming float32, not read from the model.*
+
+**Three ~110M-parameter transformers match a ~5.6-billion-parameter n-gram lookup table to within
+statistical noise, using roughly 1/51 the parameters and 1/17 the disk.** Note the contrast is *not*
+neural versus non-neural — sent2vec is itself a shallow neural embedding model in the word2vec /
+fastText lineage. It is **shallow and non-contextual** (one stored vector per n-gram, hence the 21 GB
+table) versus **deep and contextual** (representations computed on demand). That efficiency result is
+the practical claim this experiment genuinely supports.
+
+**What the baseline uniquely offers, and it is not accuracy: it abstains.** It is the only arm that
+declines to predict when nothing clears the pruning gate (24.4% of cases), which gives it the highest
+precision of the four and makes it the **only arm producing an interpretable number at the paper's own
+threshold of 0.6** — all three BERT arms are pinned at a meaningless 1.000 there. For a clinical
+decision support system, "I don't know" is arguably the more useful behaviour, and the compact BERT
+embedding spaces have lost the ability to say it.
 
 ---
 
