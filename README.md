@@ -23,16 +23,20 @@ of its size.** The numbers, leakage-free:
 100 patients, grouped so no patient ever appears on both sides of a split (fixing a leakage bug
 that had inflated the original paper's published score by ~18%):
 
-| Metric | BioSentVec (21 GB) | Bio_ClinicalBERT (416 MB) |
-|---|:---:|:---:|
-| Accuracy (right answer in top 10) | 0.192 | **0.249** |
-| Hit@1 (right answer ranked first) | 0.148 | **0.175** |
-| Hit@50 (right answer in top 50) | 0.358 | **0.697** |
-| MRR@50 (rank-weighted, no knobs) | 0.203 | **0.246** |
-| Precision | **0.2512** | 0.2491 |
-| Coverage (cases it answers at all) | 75.6% | **100%** |
+| Metric | BioSentVec (21 GB) | Bio_ClinicalBERT (416 MB) | Change |
+|---|:---:|:---:|:---:|
+| Accuracy (right answer in top 10) | 0.192 | **0.249** | **+29.5%** |
+| Hit@1 (right answer ranked first) | 0.148 | **0.175** | **+17.9%** |
+| Hit@50 (right answer in top 50) | 0.358 | **0.697** | **+94.8%** |
+| MRR@50 (rank-weighted, no knobs) | 0.203 | **0.246** | **+21.3%** |
+| Precision | **0.2512** | 0.2491 | −0.8% |
+| Coverage (cases it answers at all) | 75.6% | **100%** | **+32.3%** |
 
-*Hit@1/Hit@50 and MRR are measured on the 76 winnable cases; accuracy on all 129.*
+*Hit@1/Hit@50 and MRR are measured on the 76 winnable cases; accuracy on all 129. The Change
+column is the relative gain over the baseline — nominal only, since no gap here clears the
+fold-to-fold noise (see the verdict below). The +94.8% on Hit@50 is the least meaningful of the
+six: the baseline abstains rather than offering 50 candidates, so that row partly measures
+willingness to guess.*
 
 - Answers **100% of cases where the baseline declines 24.4%**. The only metric it concedes is
   precision, by 0.002 — a gap the baseline buys by refusing to answer a quarter of the time.
