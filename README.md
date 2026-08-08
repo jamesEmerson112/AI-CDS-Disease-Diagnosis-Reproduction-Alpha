@@ -4,6 +4,57 @@ Author: An Thien Vo (James)
 
 Clinical Decision Support System for disease diagnosis prediction using patient symptom similarity.
 
+## TL;DR — a 416 MB model replaces a 21 GB one with no measurable loss
+
+**Bio_ClinicalBERT matches the 20.93 GiB BioSentVec baseline on every retrieval metric, at under 2%
+of its size.** The numbers, leakage-free:
+
+**How much smaller:**
+
+- **416 MB vs 20.93 GiB on disk** — roughly 1/50th the size for the single model. All three BERT
+  models tested *together* (1.25 GB) are still 17× smaller than the one baseline file.
+- **~110 million parameters vs ~5.6 billion** — 1/51.
+- **A few hundred MB of RAM** vs the full 21 GB resident.
+- Contextual 768-dim embeddings computed on demand, vs fixed 700-dim vectors looked up from a
+  memorised table of ~8 million n-grams.
+- **Runs on Windows**; the baseline physically cannot (sent2vec will not compile under MSVC).
+
+**How it performs** — 10-fold, patient-grouped cross-validation of 129 hospital admissions from
+100 patients, grouped so no patient ever appears on both sides of a split (fixing a leakage bug
+that had inflated the original paper's published score by ~18%):
+
+| Metric | BioSentVec (21 GB) | Bio_ClinicalBERT (416 MB) |
+|---|:---:|:---:|
+| Accuracy (right answer in top 10) | 0.192 | **0.249** |
+| Hit@1 (right answer ranked first) | 0.148 | **0.175** |
+| Hit@50 (right answer in top 50) | 0.358 | **0.697** |
+| MRR@50 (rank-weighted, no knobs) | 0.203 | **0.246** |
+| Precision | **0.2512** | 0.2491 |
+| Coverage (cases it answers at all) | 75.6% | **100%** |
+
+*Hit@1/Hit@50 and MRR are measured on the 76 winnable cases; accuracy on all 129.*
+
+- Answers **100% of cases where the baseline declines 24.4%**. The only metric it concedes is
+  precision, by 0.002 — a gap the baseline buys by refusing to answer a quarter of the time.
+- Comparable runtime: **~11.5 vs ~13 minutes** per full 10-fold run (encoding is under 0.5% of
+  wall-clock in every arm).
+- **Bit-for-bit reproducible** across Apple-silicon and x86, to all 17 significant figures.
+
+**The verdict, stated carefully:**
+
+- **No gap in either direction is statistically significant** — largest paired *t* = 1.718 across
+  the 10 folds vs the 2.262 needed for p < 0.05, against per-fold scores that swing
+  **0.00–0.67 on identical data**.
+- For a replacement, that is the *desired* outcome: **statistically indistinguishable performance
+  at 1/51 the parameters and a fraction of the memory**.
+- All scores sit against a **data-imposed ceiling of 58.9%** — for 53 of 129 patients the correct
+  diagnosis appears nowhere in the searchable pool, so a *perfect* retriever caps there. Read
+  against that ceiling, the 0.249 accuracy is **~42% of what a perfect retriever could achieve**.
+
+The claim is **"drop-in replacement with no measurable loss"** — deliberately not "better." The
+full statistics, the four evaluation defects found and fixed along the way, and why no encoder
+*ranking* is supported are below.
+
 ---
 
 ## Start here — the project in plain language
