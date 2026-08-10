@@ -1,5 +1,17 @@
 # BERT Model Comparison Report
 
+> **In plain words — read this banner, then probably read something else.** This is the
+> project's *original* February 2026 write-up, kept as the historical record of what the
+> results looked like before any defect was found. Every conclusion in it has since been
+> superseded: the perfect 1.000 scores are a broken ruler
+> ([findings/03](findings/03-metric-saturation.md)), the "F1" columns are accuracy
+> ([findings/04](findings/04-metric-degeneracy.md)), the folds leaked patients
+> ([findings/05](findings/05-patient-leakage.md)), and the leakage-free four-arm results live
+> in [findings/11](findings/11-corrected-pipeline-first-results.md). Its "Overall Pipeline:
+> 76.4 min" figure is unverified and irreconcilable with the timing reports
+> ([findings/02](findings/02-encoder-comparison.md), Runtime). Nothing below has been edited —
+> that is the point of keeping it.
+
 **Date**: 2026-02-15
 **Platform**: Apple M1, macOS, MPS acceleration
 **Dataset**: 129 admissions, 10-fold cross-validation

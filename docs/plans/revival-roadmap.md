@@ -1,16 +1,20 @@
 # Reviving AI-CDS: reorganization, `main.py`, and docs
 
-> **Status — Phases 0, 1 and 4 complete.** Phase 0 (`bb84b82`): environment repaired, data-use
-> guard installed, `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4 (docs)
-> was pulled forward and is also done. **Phase 1 (safety net) is now done**: 93 passed /
-> 2 deselected in ~4s, plus `pytest -m golden` — a byte-exact 10-fold regression against a
-> committed reference, ~20 min.
+> **Status, re-audited 2026-08-08 — Phases 0, 1 and 4 complete; Phase 2 is 2.5 of 7 items done;
+> Phase 3 not started.** Phase 0 (`bb84b82`): environment repaired, data-use guard installed,
+> `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4 (docs) was pulled forward
+> and is also done. Phase 1 (safety net) is done — the fast suite now stands at 264 passed /
+> 3 deselected in ~21–52s, plus `pytest -m golden`, a byte-exact 10-fold regression against a
+> committed reference (~43–53 min, NOT the ~20 min this file once claimed). Phase 2's landed
+> items: the `src/aicds/` package move (`d0ecaa9`+`2a0b77d`), src-layout pyproject, helper
+> consolidation (`bd6fe47`), central `stop_words` (`5ae01a0`). Still open in Phase 2: deleting
+> the **11** `stop_words` monkeypatches (7 in tests + 4 in non-test code), the `--out`/results
+> root, the `bert_eval.py` salvage, the dead code, and the baseline's two residual defects.
+> CLAUDE.md's refactor-status section carries the audited file:line details.
 >
-> **Phases 2–3 are the remaining work**: the `src/aicds/` package move and the `main.py` CLI.
-> Phase 5's metric work has been **removed from this roadmap** — the scientific correctness
-> fixes (patient leakage, the `w/o` negation bug, comma-split fragments, embedding centring,
-> rank-aware metrics) are tracked separately in [correctness-fixes.md](correctness-fixes.md)
-> and [metric-redesign.md](metric-redesign.md), to be done in a dedicated session.
+> Phase 5's metric work was **removed from this roadmap** and tracked in
+> [correctness-fixes.md](correctness-fixes.md) and [metric-redesign.md](metric-redesign.md) —
+> where, unlike the refactor, **most of it has since landed** (P1–P5, P7, P9; findings 11–13).
 >
 > The scope rule for Phases 2–3: **if a change moves the numbers it is out of scope; if it fixes
 > something that crashes, blocks, or writes to the wrong place it is in scope.**
@@ -23,8 +27,10 @@
 >    was added in `b23657b "organizing"` and never renamed from a tracked `CS2V.py` (the initial
 >    commit held only `.gitattributes` and `README.md`). Combined with `.gitignore`'s
 >    `diseaseDiagnosis/  # Downloaded original source`, it is the **original authors' scaffolded
->    code, not the owner's contribution**. It stays importable and clearly labelled broken; no
->    effort goes into verifying it.
+>    code, not the owner's contribution**. *(This decision was later reversed by events: the
+>    crash bugs were fixed in `c2fee6e` and the arm ran end-to-end on rented Linux on
+>    2026-08-05, reproducing the published figure to within 0.007 — see
+>    `docs/findings/09-baseline-first-run.md`.)*
 > 3. **Scope — continue past the Phase 3 ship point**, since the docs work was explicitly wanted.
 
 ## Context
@@ -35,7 +41,7 @@ You want to revive and extend this repo, and you want it clean first. The recon 
 
 | # | Problem | Evidence |
 |---|---|---|
-| 1 | **The baseline arm cannot run at all.** | `baseline_sent2vec.py:236` reads `CH_DIR/Symptoms-Diagnosis.txt`; the file only exists at `data/raw/`. → `FileNotFoundError` on import. Then `:244-247` calls bare `entity.SymptomsDiagnosis...` but line 16 binds `entity_module` — `entity` is never bound → `NameError`. `run_baseline.py` triggers both via import. |
+| 1 | ~~**The baseline arm cannot run at all.**~~ **FIXED in `c2fee6e`, verified by the full 10-fold run of 2026-08-05** (reproduced the published TOP-10 to within 0.007 — `docs/findings/09-baseline-first-run.md`). | Was: `baseline_sent2vec.py:236` read `CH_DIR/Symptoms-Diagnosis.txt` (file lives at `data/raw/`) → `FileNotFoundError`; then `:244-247` called bare `entity.SymptomsDiagnosis...` with only `entity_module` bound → `NameError`. |
 | 2 | ~~**`import torch` fails**, so the BERT arm can't run either.~~ **FIXED in Phase 0.** | `OMP: Error #15` — conda's `llvm-openmp` plus torch's bundled copy. Resolved by symlinking torch's to conda's; see `docs/guides/setup.md`. |
 | 3 | **`build_readme_plots.py` raises on every invocation.** | Line 30 globs `<repo_root>/Prediction_Output_*`; the three result dirs live under `docs/`. Glob matches nothing → `FileNotFoundError`. |
 

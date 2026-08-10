@@ -1,5 +1,13 @@
 # Data use and redistribution
 
+> **In plain words.** The patient data in this repo comes from MIMIC-III, a hospital database
+> you may only access after training and signing an agreement — and that agreement forbids
+> passing the data on to anyone else. A public repo *is* passing it on. The data is anonymised,
+> so this is not a patient-privacy breach; it is a licence violation, and the distinction
+> matters legally. The rules: never add new clinical data here (a pre-commit hook enforces it),
+> and the long-term exit is a fresh code-only repository
+> ([../plans/public-release.md](../plans/public-release.md), P38).
+
 ## The constraint
 
 This project's dataset is derived from **MIMIC-III v1.4**, distributed by PhysioNet under a
@@ -29,22 +37,29 @@ To be precise about the risk, because the two are often conflated:
 
 Resolving the existing committed data requires rewriting Git history. That is destructive — it
 breaks every existing clone and fork — and is a decision for the repository owner. It has
-deliberately not been done automatically.
+deliberately not been done automatically. The investigated exit is a **new, code-only public
+repository** rather than a rewrite (a rewrite does not actually purge data from GitHub);
+see [../plans/public-release.md](../plans/public-release.md), tracked as P38.
 
 ## The rule going forward
 
 **Do not commit new clinical data to this repository.**
 
-A pre-commit hook (`.githooks/pre-commit`) enforces this by rejecting any *newly added* file
-under `data/raw/` or `data/folds/`. Install it once per clone:
+A pre-commit hook (`.githooks/pre-commit`) enforces this with **two rules**: it rejects any
+*newly added* file under `data/raw/` or any `data/folds*/` directory, **and** it rejects any
+new file — wherever it lives — carrying 20 or more distinct `HADM_ID`s. The second rule exists
+because the first proved insufficient: a generated test file under `tests/` once carried all
+129 IDs and sailed past the path-only check. Install the hook once per clone:
 
 ```bash
 git config core.hooksPath .githooks
 ```
 
 The hook blocks additions only. It does not touch the already-committed files, and it can be
-bypassed with `git commit --no-verify` when you genuinely intend to (for example, replacing a
-fold file with a corrected version). It is a tripwire, not a security control.
+bypassed with `git commit --no-verify` when you genuinely intend to — any such bypass deserves
+written reasoning in the commit, as the one existing precedent has (the golden reference file,
+committed on the reasoning that its 129 IDs were already public in `docs/`). It is a tripwire,
+not a security control.
 
 ## If you are adding more clinical data
 

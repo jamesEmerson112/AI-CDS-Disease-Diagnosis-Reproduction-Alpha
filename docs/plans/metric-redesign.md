@@ -1,9 +1,20 @@
 # Metric redesign
 
-**Status:** decided in principle, not implemented. This is the substance of the "pluggable
-metrics" line in [revival-roadmap.md](revival-roadmap.md) Phase 5.
+> **In plain words.** The original scoring rule had three separate flaws: it forgave every
+> wrong guess as long as one guess was close (MAX), it let each model grade its own homework
+> (the model's similarity score decided whether the model's answer was "right"), and it ignored
+> *where* in the list the right answer appeared. This document weighed the replacement options.
+> Option C — rank-aware metrics against a model-independent answer key — was implemented
+> ([12](../findings/12-drg-grader.md), [13](../findings/13-rank-aware-metrics.md)) and its
+> measurements overturned two of this document's own assumptions along the way, both preserved
+> below with their corrections. Option B (a real precision/recall) remains open as P6.
 
-The current metric has three independent defects. Fixing one does not fix the others, so they
+**Status: option C implemented 2026-08-06** (`drg-exact` grader + `RankMetrics.txt`); **option B
+is open as P6**; options A and D remain unimplemented, with A's payoff diminished now that the
+threshold knob is gone. Originally: the substance of the "pluggable metrics" line in
+[revival-roadmap.md](revival-roadmap.md) Phase 5.
+
+The legacy metric has three independent defects. Fixing one does not fix the others, so they
 are listed separately with separate remedies.
 
 ## What is wrong now
@@ -31,8 +42,8 @@ MAX mean is 0.8586 — the MAX operator alone moves the distribution up
 The same encoder both retrieves the candidate patients and decides whether the retrieved
 diagnosis counts as a match. A model with a more compressed embedding space therefore marks its
 own work more leniently. This is why BiomedBERT — the most compressed of the three, mean
-pairwise 0.9282 — "wins" at threshold 0.9 with a perfect 1.000 while 99.71% of its patient pairs
-clear 0.9 *regardless of whether the diagnosis is right*.
+pairwise 0.9282 — "wins" at threshold 0.9 with a perfect 1.000 while 99.71% of its patient
+pairs clear 0.9 *regardless of whether the diagnosis is right*.
 
 A fixed absolute threshold cannot be fair across encoders whose similarity distributions differ
 this much:
@@ -45,19 +56,25 @@ this much:
 
 For two of the three models, *no pair of diagnoses in the dataset can score below 0.6*.
 
+*(Postscript, from [12](../findings/12-drg-grader.md): this defect was real at thresholds
+0.6–0.9 and structurally absent at 1.0 — the DRG grader reproduces the threshold-1.0 column
+bit-exactly, so the one column the README reports was never self-grading-inflated. The fix
+removed the reason to doubt it, which is worth as much as moving it.)*
+
 ### Defect 3 — rank is computed and then discarded
 
-`bert_models.py:170` sorts candidates by similarity and takes the top K. The scorer
-(`containGreaterOrEqualsValue`, `cython_utils.py:366-370`) then returns true if **any** of the K
-clears the threshold. A hit at rank 1 and a hit at rank 50 count identically.
+The pipeline sorts candidates by similarity and takes the top K. The scorer
+(`containGreaterOrEqualsValue`) then returns true if **any** of the K clears the threshold. A
+hit at rank 1 and a hit at rank 50 count identically.
 
-Consequence: score(TOP-50) >= score(TOP-10) is guaranteed by construction, because the top-50 set
-contains the top-10 set. Verified in the committed results: monotonic in 18/18 model x threshold
-combinations, zero violations. The TOP-K curve in the README is arithmetic, not a finding.
+Consequence: score(TOP-50) >= score(TOP-10) is guaranteed by construction, because the top-50
+set contains the top-10 set. Verified in the committed results: monotonic in 18/18
+model x threshold combinations, zero violations. The TOP-K curve in the README is arithmetic,
+not a finding.
 
 ## Options
 
-### A. MEAN instead of MAX
+### A. MEAN instead of MAX — not implemented
 
 Replaces the MAX aggregator with the mean over the Cartesian product.
 
@@ -66,11 +83,13 @@ Replaces the MAX aggregator with the mean over the Cartesian product.
 - **New problem:** dilution. A patient with 3 true diagnoses and 1 correct prediction averages
   the correct match against 2 irrelevant comparisons, so patients with more diagnoses are
   penalised for having more diagnoses.
+- **New problem, found later:** a mean over hash-ordered labels reintroduces last-ULP
+  nondeterminism — see the warning in [12](../findings/12-drg-grader.md) (sort before reducing).
 
 Worth implementing as a registered aggregator alongside MAX for comparison, but it is not the
 end state.
 
-### B. Set-level soft precision / recall / F1
+### B. Set-level soft precision / recall / F1 — OPEN, tracked as P6
 
 Treat ground truth and prediction as *sets* of diagnoses and match them:
 
@@ -86,14 +105,17 @@ soft_f1        = harmonic mean of the two
   same number.
 - **Does not fix:** defect 2 (still cosine-based, still model-dependent) or defect 3.
 
-### C. Rank-aware retrieval metrics — Recall@K, MRR, nDCG
+### C. Rank-aware retrieval metrics — Recall@K, MRR, nDCG — IMPLEMENTED 2026-08-06
 
-Score the ranked candidate list directly, using an *encoder-independent* relevance label
-(exact DRG-code match, or DRG family match).
+Score the ranked candidate list directly, using an *encoder-independent* relevance label.
+**Shipped as `grader="drg-exact"` + `RankMetrics.txt`**
+([12](../findings/12-drg-grader.md), [13](../findings/13-rank-aware-metrics.md)); the pure
+metric implementations live in `src/aicds/analysis/rank_metrics.py`, differentially validated
+against three independent implementations.
 
 - **Fixes:** all three defects at once. Rank-aware metrics penalise burying the right answer,
-  cannot be gamed by expanding K, and are scale-free — so they are immune to both the saturation
-  and the per-model calibration problem.
+  cannot be gamed by expanding K, and are scale-free — so they are immune to both the
+  saturation and the per-model calibration problem.
 
   > **"Cannot be gamed by expanding K" is FALSE for nDCG, measured 2026-08-06.** It holds for
   > Precision@K and MRR only. `IDCG@k` sums `min(R, k)` slots, so once `k >= R` the ideal stops
@@ -116,46 +138,57 @@ Score the ranked candidate list directly, using an *encoder-independent* relevan
 - **Cost:** requires deciding what "relevant" means without reference to the embedding. DRG
   equality is the obvious candidate and is already in the data.
 
-**Exact DRG matching has a hard ceiling of 58.1%.** Measured: for only 75 of 129 test cases does
-the correct DRG description appear *anywhere* in that fold's training pool. The other 42% are
-unwinnable regardless of retrieval quality, because 105 of the 145 unique diagnosis descriptions
-occur exactly once in the entire dataset. Three ways to handle this, in order of preference:
+**Exact DRG matching has a hard ceiling of 58.1% on the legacy folds, 58.9% (76/129) on the
+grouped ones** — the leakage fix moved retrievability by exactly one case. For the other ~41%
+of cases the correct DRG description appears nowhere in that fold's training pool, because 105
+of the 145 unique diagnosis descriptions occur exactly once in the entire dataset. Those cases
+are unwinnable regardless of retrieval quality. Three ways to handle it were listed here, and
+**the outcome inverted the original preference order**:
 
-1. **Graded relevance** — partial credit for a same-family DRG rather than exact string equality.
-   Raises the ceiling and is more clinically sensible than all-or-nothing.
-2. **Report against the ceiling** — "X of a possible 58.1%." Honest and standard, but invites the
-   question every time.
-3. **Restrict evaluation to the 75 winnable cases** and say so. Cleanest signal, smallest n.
+1. ~~**Graded relevance** — partial credit for a same-family DRG. *(Was ranked first.)*~~
+   **Tried and REJECTED on measurement** ([12](../findings/12-drg-grader.md)): the ladder
+   needed ~156 hand-tuned strings fitted to the evaluation set with no held-out data, its low
+   rungs were 87% false credit, and it scored "discharged alive" vs "expired" at 0.900.
+   Replacing an arbitrary cosine ruler with an arbitrary lexicon ruler would concede the
+   argument P4 exists to win. If ever revisited: an external DRG hierarchy, not a lexicon.
+2. **Report against the ceiling** — "X of a possible 58.9%." **Adopted.**
+3. **Restrict evaluation to the winnable cases** and say so. **Adopted as well** — this is
+   `RankMetrics.txt`'s *winnable* population (n=76), reported alongside all-cases and answered.
 
-### D. Per-model threshold calibration
+### D. Per-model threshold calibration — not implemented, likely moot
 
-If absolute thresholds are kept at all, set each model's threshold at a fixed *percentile* of
-its own similarity distribution rather than hardcoding 0.6 for everyone. Roughly equal-selectivity
-thresholds from the measured medians: BiomedBERT ~0.93, Bio_ClinicalBERT ~0.84, BlueBERT ~0.72.
+If absolute thresholds were kept at all, set each model's threshold at a fixed *percentile* of
+its own similarity distribution rather than hardcoding 0.6 for everyone. Roughly
+equal-selectivity thresholds from the measured medians: BiomedBERT ~0.93, Bio_ClinicalBERT
+~0.84, BlueBERT ~0.72.
 
-This is a patch, not a fix — it makes cross-model comparison meaningful without addressing
-defects 1 or 3.
+This was always a patch, not a fix — and with the `drg` grader collapsing the threshold sweep
+entirely, there is no longer a threshold to calibrate on the headline path.
 
-## Recommendation
+## Recommendation — and what actually happened
 
-Implement in this order, keeping every metric side by side rather than replacing:
+The original order was: C first, then B, then A/D as cheap continuity options, keeping every
+metric side by side rather than replacing. That order held:
 
-1. **C (rank-aware)** — highest value, and the only option that makes the encoder comparison
-   defensible. Report Recall@K and MRR against DRG-code relevance.
-2. **B (set-level soft F1)** — makes precision and recall independent, killing the degeneracy.
-3. **A (MEAN)** and **D (calibrated thresholds)** — cheap, useful for continuity with the
-   published numbers, but neither is sufficient alone.
+1. **C (rank-aware)** — **done.** MRR and Precision@K against DRG relevance, all three
+   populations, additively (new `RankMetrics.txt`, golden untouched). The result: no pair of
+   encoders separates, max paired |t| = 1.718 vs the 2.262 needed.
+2. **B (set-level soft F1)** — **next; open as P6.** Still the only fix that makes P, R, and F1
+   three genuinely different numbers.
+3. **A (MEAN)** and **D (calibrated thresholds)** — unimplemented; D is likely moot post-`drg`.
 
-Keep the existing MAX-at-0.6 number reported alongside, clearly labelled as the legacy metric, so
-the new results remain comparable to Comito et al. and to this project's own history.
+The existing MAX-at-0.6 number is still reported alongside, clearly labelled as the legacy
+metric, so the new results remain comparable to Comito et al. and to this project's own
+history.
 
 ## The population question, and why it outranks the choice of metric
 
-*Added 2026-08-06, from measurement. This is the part that will decide whether the rank-aware
-numbers mean anything, and it is not about which metric you pick.*
+*Added 2026-08-06, from measurement. This turned out to be exactly right — it became the
+abstention-asymmetry finding, the third knob, and the one that cannot be closed
+([13](../findings/13-rank-aware-metrics.md)).*
 
-The baseline **abstains** on ~24% of cases; every BERT arm answers all of them. So every metric has
-to declare which denominator it uses, and there are three honest choices:
+The baseline **abstains** on ~24% of cases; every BERT arm answers all of them. So every metric
+has to declare which denominator it uses, and there are three honest choices:
 
 | Population | Question it answers |
 |---|---|
@@ -174,26 +207,30 @@ arbitrary knob alongside threshold and K, and it was about to be introduced sile
 
 **The trap that was nearly built.** The natural design — `precision_at_k` returns `None` on an
 empty candidate list, everything else returns `0.0` — puts the P column on the answered-only
-population and the Hit / nDCG / MRR columns on all-cases, **in the same row, unlabelled**. A reader
-comparing across that row is comparing two different denominators.
+population and the Hit / nDCG / MRR columns on all-cases, **in the same row, unlabelled**. A
+reader comparing across that row is comparing two different denominators.
 
-**Two further measurements that killed the `min(K, len)` denominator as a *protection* argument:**
+**Two further measurements that killed the `min(K, len)` denominator as a *protection*
+argument:**
 
-- It buys almost nothing here: on the measured Bio_ClinicalBERT list lengths only 3 of 129 lists
-  are shorter than 10, so at K=10 `min(k,len)` gives 0.026689 against plain `k`'s 0.026357 — a
-  **1.26%** difference. It is the `None` channel, not the denominator, that handles abstention.
-- It is an *unbounded* gaming lever. A retriever that simply truncates its own output — identical
-  ranking, fewer candidates reported — delivers strictly less (hit@10 0.2636 → 0.0930) while its
-  reported P@10 **rises 3.53×**. An oracle-gated abstainer reaches **37.9×** inflation at 9.3%
-  coverage while hitting on 12 of 129 cases against the guesser's 34. Even a *non-oracle* noisy
-  confidence gate buys +134% to +237% reported precision while true hit@10 falls up to 29.4%.
+- It buys almost nothing here: on the measured Bio_ClinicalBERT list lengths only 3 of 129
+  lists are shorter than 10, so at K=10 `min(k,len)` gives 0.026689 against plain `k`'s
+  0.026357 — a **1.26%** difference. It is the `None` channel, not the denominator, that
+  handles abstention.
+- It is an *unbounded* gaming lever. A retriever that simply truncates its own output —
+  identical ranking, fewer candidates reported — delivers strictly less (hit@10
+  0.2636 → 0.0930) while its reported P@10 **rises 3.53×**. An oracle-gated abstainer reaches
+  **37.9×** inflation at 9.3% coverage while hitting on 12 of 129 cases against the guesser's
+  34. Even a *non-oracle* noisy confidence gate buys +134% to +237% reported precision while
+  true hit@10 falls up to 29.4%.
 
 **So: report all three populations for every metric, always, in labelled columns. Never one
-population per column.**
+population per column.** *(This is what `RankMetrics.txt` shipped with, and
+[13](../findings/13-rank-aware-metrics.md) validated the shape bit-exactly against legacy.)*
 
 ### The legacy pipeline already does this, and nobody noticed
 
-`cython_utils.py:299-303` — an empty candidate list increments **neither** TP nor FP:
+`cython_utils.py` — an empty candidate list increments **neither** TP nor FP:
 
 ```python
 if containGreaterOrEqualsValue(topk, top_similarities_max, b):
@@ -203,8 +240,8 @@ else:
         values[FP] += 1
 ```
 
-`bert_models.py` does the same. So `compute_performance_index`'s three columns already *are* the
-three populations:
+`bert_models.py` does the same. So `compute_performance_index`'s three columns already *are*
+the three populations:
 
 | Legacy column | Formula | What it actually is |
 |---|---|---|
@@ -212,28 +249,28 @@ three populations:
 | `R` | `tp/nrow` | **all-cases** hit rate |
 | `PR` | `(tp+fp)/nrow` | **coverage** |
 
-Verified numerically on a 129/31/25 population: mean Hit@K over all 129 cases (abstention = 0.0)
-equals legacy `R` **exactly** (0.193798), and over the 98 answered cases equals legacy `P`
-**exactly** (0.255102).
+Verified numerically on a 129/31/25 population: mean Hit@K over all 129 cases
+(abstention = 0.0) equals legacy `R` **exactly** (0.193798), and over the 98 answered cases
+equals legacy `P` **exactly** (0.255102). *(Finding 13 later reproduced all three columns
+bit-exactly from the real run — the prediction written here held to the last digit.)*
 
 Two consequences worth stating plainly:
 
-1. **`RankMetrics.txt` should keep this three-column shape** rather than inventing one. It is
-   already the right answer, and matching it makes the two artifacts directly comparable.
-2. **The "degeneracy" framing needs a footnote.** `P == R` for the BERT arms is not the metric
-   collapsing — it is `PR == 1.0`, i.e. the answered-only and all-cases populations being *the same
-   set* because those arms never abstain. The baseline's `P != R` is the same formula on a
+1. **`RankMetrics.txt` kept this three-column shape** rather than inventing one. It was already
+   the right answer, and matching it makes the two artifacts directly comparable.
+2. **The "degeneracy" framing got its footnote.** `P == R` for the BERT arms is not the metric
+   collapsing — it is `PR == 1.0`, i.e. the answered-only and all-cases populations being *the
+   same set* because those arms never abstain. The baseline's `P != R` is the same formula on a
    genuinely smaller answered population. The columns were never wrong; they were unlabelled.
 
-## Prerequisite
+## Prerequisite — satisfied 2026-08-05
 
-None of this is worth measuring until the fold leakage is fixed — 41 of 129 test cases currently
-have another admission from the same patient in their own retrieval pool, worth **+0.11 to +0.26**
-at threshold 1.0. Compare that to the spread *between* encoders at the same threshold
-(0.015-0.046) and the per-fold standard deviation (0.071-0.124): the contamination is roughly an
-order of magnitude larger than the effect being studied, and the encoder differences do not clear
-the noise floor at all.
+None of this was worth measuring until the fold leakage was fixed — 41 of 129 test cases had
+another admission from the same patient in their own retrieval pool, worth **+0.11 to +0.26**
+at threshold 1.0, against a between-encoder spread of 0.015–0.046 and per-fold standard
+deviation of 0.071–0.124: contamination roughly an order of magnitude larger than the effect
+being studied.
 
-The fix is to regroup the folds by `SUBJECT_ID` rather than `HADM_ID` (`GroupKFold`). The folds
-are static committed files, so this is a data regeneration, not a code change. *(A dedicated
-`findings/05-patient-leakage.md` write-up is not yet written.)*
+The fix — regrouping the folds by `SUBJECT_ID` with `GroupKFold` — landed in `c2115ba` before
+any rank-aware number was produced, exactly as this prerequisite demanded. The write-up is
+[../findings/05-patient-leakage.md](../findings/05-patient-leakage.md).

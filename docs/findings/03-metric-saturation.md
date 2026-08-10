@@ -1,5 +1,16 @@
 # Metric saturation: why every BERT model scores F1 = 1.000 at threshold 0.6
 
+> **In plain words.** The paper's scoring rule says a predicted diagnosis counts as correct if
+> its similarity to the true diagnosis is at least 0.6, on a 0-to-1 scale. The problem: to a
+> biomedical BERT model, *all* medical phrases look alike. In this dataset, even completely
+> unrelated diagnoses score above 0.64 for two of the three models — meaning the 0.6 bar sits
+> **below the lowest score any pair can produce**. Everything passes. Every model gets a perfect
+> 1.000, and the perfect score means nothing: it is a limbo contest with the bar lying on the
+> ground. Two things stack to cause it: the models crowd every diagnosis into a small corner of
+> their embedding space, and the scorer then takes the single *best*-matching pair of (true,
+> predicted) diagnoses, which pushes scores higher still. The threshold knob this finding
+> complains about was later removed entirely — see [12](12-drg-grader.md).
+
 ## Conclusion
 
 All three BERT arms — Bio_ClinicalBERT, BiomedBERT, BlueBERT — report **F1 = 1.000 at the
@@ -20,8 +31,8 @@ evaluation pipeline:
 1. **Embedding-space compactness** — biomedical BERT models map diagnosis text into a narrow
    region of the embedding space, so even *unrelated* diagnoses score a high cosine similarity.
 2. **MAX-operator amplification** — the scoring function takes the single best-matching pair out
-   of the full Cartesian product of ground-truth × predicted diagnosis descriptions, which pushes
-   the effective score higher still.
+   of the full Cartesian product of ground-truth × predicted diagnosis descriptions (every true
+   diagnosis crossed with every predicted one), which pushes the effective score higher still.
 
 Together, these put essentially 100% of patient pairs above 0.6 regardless of whether the
 predicted diagnoses have anything to do with the true ones. The number the pipeline reports is
@@ -31,22 +42,23 @@ All figures below come from `scripts/analyze_score_distributions.py`, whose full
 [`docs/score_distribution_analysis/score_distribution_summary.txt`](../score_distribution_analysis/score_distribution_summary.txt).
 The script re-implements the scoring path in numpy and spot-checks it against the pipeline's own
 `cython_utils.cosine_similarity()`; the two agree to within 2e-7–9e-7 (float32 rounding), so the
-numbers below describe the actual production scoring function, not an approximation of it.
+numbers below describe the actual production scoring function, not an approximation of it. The
+statistics were measured under `legacy` preprocessing and have not been recomputed since the
+text handling was unified; the mechanism is unaffected — saturation persists identically under
+`corrected`, as the README's tables show.
 
-**This is a different problem from the one in [04-metric-degeneracy.md](04-metric-degeneracy.md).**
-Saturation means the 0.6 threshold is too lenient for these embeddings — almost every score clears
-it. Degeneracy means precision, recall, and F1 collapse to the same value (`TP/n`) **at every
-threshold**, because each test case can only ever be scored as a single TP-or-FP, leaving one
-degree of freedom no matter where the threshold sits. Every fix described below removes
-saturation without touching degeneracy: raise the threshold, change the aggregator, do whatever
-you like, and P, R, and F1 will still be forced equal, and the `PR` column will still read 1.0.
-Fixing saturation makes the number at a given threshold discriminate between models; fixing
-degeneracy is what is required before that number can honestly be called an F1 score at all. They
-have to be fixed together, and fixing one is not a substitute for the other.
+**This is a different problem from the one in [04-metric-degeneracy.md](04-metric-degeneracy.md),
+and fixing one does not fix the other.** Saturation means the 0.6 threshold is too lenient for
+these embeddings — almost every score clears it. Degeneracy means precision, recall, and F1
+collapse to the same value (`TP/n`) **at every threshold**, because each test case can only ever
+be scored as a single TP-or-FP. Raise the threshold, change the aggregator, do whatever you like:
+P, R, and F1 will still be forced equal, and the `PR` column will still read 1.0. Fixing
+saturation makes the number at a given threshold discriminate between models; fixing degeneracy
+is what would be required before that number could honestly be called an F1 score at all.
 
 ## Cause 1: embedding-space compactness
 
-Each model embeds all 145 unique diagnosis descriptions in the dataset and every pair (excluding
+Each model embeds all 145 unique diagnosis descriptions in the dataset, and every pair (excluding
 self-pairs, N = 10,440) is scored by cosine similarity. All three models push the bulk of that
 mass above 0.6 before any patient-level aggregation happens at all:
 
@@ -61,18 +73,19 @@ mass above 0.6 before any patient-level aggregation happens at all:
 Two things stand out. First, the *minimum* pairwise similarity across all 10,440 diagnosis pairs
 is 0.6454 for Bio_ClinicalBERT and 0.7246 for BiomedBERT — meaning **no two diagnoses in the
 entire dataset embed further apart than the paper's 0.6 threshold** for those models, whether or
-not they are clinically related. BlueBERT is the outlier, with a noticeably wider spread (std
-0.0652 vs. 0.0303–00450) and a minimum of 0.4810, which is why it is the only model where
-saturation is incomplete even before the MAX operator is applied. Second, BiomedBERT is the most
-compact by a wide margin: mean 0.9282, with 87.62% of all diagnosis pairs already above 0.9 before
-any patient-level aggregation.
+not they are clinically related. BlueBERT is the outlier: a noticeably wider spread (std 0.0652
+vs. 0.0303–0.0450) and a minimum of 0.4810, which is why it is the only model where saturation is
+incomplete even before the MAX operator is applied. Second, BiomedBERT is the most compact by a
+wide margin: mean 0.9282, with 87.62% of all diagnosis pairs already above 0.9 before any
+patient-level aggregation.
 
 ## Cause 2: MAX-operator amplification
 
 The scoring function actually used at inference time,
-`get_diagnosis_similarity_by_description_max()` in `src/utils/cython_utils.py` (line 291), takes
-the ground-truth diagnosis list for one patient and the predicted diagnosis list for another, and
-returns the single **maximum** cosine similarity over the full Cartesian product:
+`get_diagnosis_similarity_by_description_max()` (now in `src/aicds/utils/cython_utils.py`; this
+document predates the package move), takes the ground-truth diagnosis list for one patient and
+the predicted diagnosis list for another, and returns the single **maximum** cosine similarity
+over the full Cartesian product:
 
 ```python
 def get_diagnosis_similarity_by_description_max(embendings_diagnosis, gt_diagnosis, predicted_diagnosis, method):
@@ -90,11 +103,11 @@ def get_diagnosis_similarity_by_description_max(embendings_diagnosis, gt_diagnos
 ```
 
 Patients in this dataset average 1.74 diagnoses each (min 1, max 3, 129 patients, 145 unique
-descriptions — `score_distribution_summary.txt`, diagnosis-count block), so a typical patient pair
-contributes roughly a 1.74 × 1.74 ≈ 3-cell Cartesian product. Taking the max over even a handful
-of already-compact similarities is a one-sided operation: it can only push the score up from the
-pairwise mean, never down. Simulating this over all 129 × 128 = 16,512 ordered patient pairs shows
-exactly that shift:
+descriptions — `score_distribution_summary.txt`, diagnosis-count block), so a typical patient
+pair contributes roughly a 1.74 × 1.74 ≈ 3-cell Cartesian product. Taking the max over even a
+handful of already-compact similarities is a one-sided operation: it can only push the score up
+from the pairwise mean, never down. Simulating this over all 129 × 128 = 16,512 ordered patient
+pairs shows exactly that shift:
 
 | Model | Pairwise mean → Per-patient MAX mean | % ≥ 0.6 | % ≥ 0.7 | % ≥ 0.8 | % ≥ 0.9 | % ≥ 1.0 |
 |---|---|---|---|---|---|---|
@@ -109,18 +122,17 @@ At threshold 0.6 — the paper's own operating point — all three models are ef
 three models are still at 100.00%. Note also that 1.3–1.6% of patient pairs hit an *exact* 1.0000
 similarity even though the underlying diagnosis text differs — a direct consequence of MAX
 picking out shared or near-duplicate diagnosis strings (e.g. two patients who share one identical
-diagnosis code but differ on the other) rather than any property of the model's semantic
-resolution.
+diagnosis code but differ on the other), not any property of the model's semantic resolution.
 
 ### The pipeline's own K compounds this further
 
-`analyze_score_distributions.py` measures the single-diagnosis-list-vs-single-diagnosis-list case.
-The production pipeline's TOP-K prediction modes make the Cartesian product larger still, because
-the predicted set is drawn from the K nearest training patients' diagnoses pooled together, not
-from a single patient. The committed `PerformanceIndex.txt` files show the effect directly. The
-strictest mode the pipeline evaluates — K = 1, labeled `MAX SIMILARITY by MAX` in the output — is
-already fully saturated at 0.6–0.7 for every model, and gives the clearest look at where each
-model's saturation ceiling actually is:
+`analyze_score_distributions.py` measures the one-diagnosis-list-vs-one-diagnosis-list case. The
+production pipeline's TOP-K prediction modes make the Cartesian product larger still, because the
+predicted set is pooled from the K nearest training patients' diagnoses, not drawn from a single
+patient. The committed `PerformanceIndex.txt` files show the effect directly. The strictest mode
+the pipeline evaluates — K = 1, labeled `MAX SIMILARITY by MAX` in the output — is already fully
+saturated at 0.6–0.7 for every model, and gives the clearest look at where each model's
+saturation ceiling actually sits:
 
 | Model | 0.6 | 0.7 | 0.8 | 0.9 | 1.0 |
 |---|---|---|---|---|---|
@@ -136,50 +148,46 @@ model's saturation ceiling actually is:
 
 This ordering — BiomedBERT most saturated, BlueBERT least — exactly matches the compactness
 ranking measured offline. But once K grows to 10, saturation gets worse, not better: the TOP-10
-block in the same files shows Bio_ClinicalBERT and BiomedBERT both still at F1 = 1.000 at 0.8, and
-even BlueBERT — the one model with real headroom at K = 1 — jumps from 0.395 to 0.813 at 0.8
+block in the same files shows Bio_ClinicalBERT and BiomedBERT both still at F1 = 1.000 at 0.8,
+and even BlueBERT — the one model with real headroom at K = 1 — jumps from 0.395 to 0.813 at 0.8,
 simply because pooling ten candidate patients' diagnoses gives the MAX operator ten times as many
 chances to find a high-scoring pair. The paper's actual evaluation runs TOP-10 through TOP-50, so
-production results are evaluated at a saturation level at least as bad as the K = 1 numbers above,
-and generally worse.
+production results are evaluated at a saturation level at least as bad as the K = 1 numbers
+above, and generally worse.
 
 See also:
 [`score_distributions.png`](../score_distribution_analysis/score_distributions.png) — histograms
 and CDFs of the all-pairwise distributions in the first table above — and
 [`per_patient_max_distributions.png`](../score_distribution_analysis/per_patient_max_distributions.png)
-— histograms and a threshold-sensitivity curve for the per-patient MAX distributions in the second
-table.
+— histograms and a threshold-sensitivity curve for the per-patient MAX distributions in the
+second table.
 
 ## What "F1 = 1.000" actually reflects
 
 Put together: the embeddings are compact enough that almost no diagnosis pair in the dataset
-scores below 0.6 to begin with (Cause 1), and the MAX-over-Cartesian-product aggregator — applied
-once per predicted diagnosis list, and again implicitly by pooling K candidate patients — turns
-"almost no pair" into "effectively zero pairs" (Cause 2). The reported F1 = 1.000 therefore
-reflects the geometry of the embedding space and the leniency of the aggregator, not the model's
-ability to retrieve clinically similar patients or predict correct diagnoses. It is a ceiling
-effect, not a result.
+scores below 0.6 to begin with (Cause 1), and the MAX-over-Cartesian-product aggregator —
+applied once per predicted diagnosis list, and again implicitly by pooling K candidate patients
+— turns "almost no pair" into "effectively zero pairs" (Cause 2). The reported F1 = 1.000
+therefore reflects the geometry of the embedding space and the leniency of the aggregator, not
+the model's ability to retrieve clinically similar patients or predict correct diagnoses. It is
+a ceiling effect, not a result.
 
-## Proposed remedies
+## Proposed remedies — status as of 2026-08-08
 
-`docs/score_distribution_analysis/next_steps.md` lays out four alternative evaluation strategies,
-ranked by impact-to-complexity ratio. Summarized:
+This section was written as a menu of future options. One of them has since shipped, which
+changes how the list should be read:
 
-| # | Strategy | What changes | Complexity |
+| # | Strategy | What changes | Status |
 |---|---|---|---|
-| A | **MEAN aggregation** instead of MAX | Replace the running max in `get_diagnosis_similarity_by_description_max()` with a running sum divided by pair count; add a parallel call site in `bert_models.py` | Low — one function, no new dependencies |
-| B | **DRG-code exact match** | Parse the `HCFA:`/`APR:`/`MS:` prefixes already present in `data/raw/Symptoms-Diagnosis.txt` and score exact code equality instead of cosine similarity | Low–Medium — straightforward parsing, but needs care around multi-code patients (`APR:...--HCFA:...`) |
-| C | **Hungarian optimal matching** | Build a per-patient-pair cost matrix and use `scipy.optimize.linear_sum_assignment` for a 1-to-1 assignment instead of a single best pair | Medium — new function, unequal-set-size handling |
-| D | **Set-level Jaccard / F1** | Treat ground-truth and predicted diagnoses as multi-label sets and score set overlap directly | Medium — the metric itself is simple, but it needs a match criterion borrowed from A or B, and integration with the existing fold loop |
+| A | **MEAN aggregation** instead of MAX | Replace the running max in `get_diagnosis_similarity_by_description_max()` with a running sum divided by pair count | Not implemented. Note a mean-based aggregator would reintroduce a hash-order nondeterminism — see the ULP warning in [12](12-drg-grader.md) before attempting it |
+| B | **DRG-code exact match** | Score exact label equality instead of cosine similarity | **SHIPPED as `--pipeline drg`** (`grader="drg-exact"`, [finding 12](12-drg-grader.md)). It removes the threshold knob entirely — the five threshold rows collapse to one — so saturation does not arise under it at all |
+| C | **Hungarian optimal matching** | Build a per-patient-pair cost matrix and use `scipy.optimize.linear_sum_assignment` for a 1-to-1 assignment instead of a single best pair | Not implemented |
+| D | **Set-level Jaccard / F1** | Treat ground-truth and predicted diagnoses as multi-label sets and score set overlap directly | Not implemented — tracked as **P6** in `docs/plans/correctness-fixes.md`, still the more complete fix |
 
-Strategy A is the only one of the four that is a genuine one-line swap inside the existing scoring
-function — it directly targets Cause 2 above and needs no new data handling or dependency. B
-through D are real surgery: B requires new parsing logic against a data format that already has
-edge cases (multi-DRG patients), and C and D both require restructuring the per-patient scoring
-call site in `src/models/bert_models.py:542` rather than editing a single function in place. None
-of A–D touches the degeneracy problem in
-[04-metric-degeneracy.md](04-metric-degeneracy.md) — that requires changing what a "test case" is
-counted as, not how similarity is aggregated.
+Rank-aware metrics (MRR, Precision@K — [finding 13](13-rank-aware-metrics.md)) also landed since
+this was written; they remove the *K* knob the last section complains about. None of A–D touches
+the degeneracy problem in [04-metric-degeneracy.md](04-metric-degeneracy.md) — that would require
+changing what a "test case" is counted as, not how similarity is aggregated.
 
 ## Reproducing this analysis
 
@@ -191,4 +199,7 @@ python scripts/analyze_score_distributions.py
 This regenerates `docs/score_distribution_analysis/score_distributions.png`,
 `per_patient_max_distributions.png`, and `score_distribution_summary.txt` in place. It does not
 touch any prediction pipeline or write to `Prediction_Output_*`; it only re-embeds the 145 unique
-diagnosis descriptions and replays the scoring math offline.
+diagnosis descriptions and replays the scoring math offline. Caveat from
+[finding 12](12-drg-grader.md): this script re-implements the grader against its own cosine and
+imports no config, so it keeps generating saturation evidence for the retired cosine ruler —
+true, but describing a grader the `drg` pipeline no longer uses.

@@ -2,13 +2,24 @@
 
 **Date:** 2026-08-06 · **Host:** RunPod Linux (x86) · **Commits:** `c2115ba`, `31bea66`
 
+> **In plain words.** This is the first time all four models were scored on a playing field
+> with the two known data problems fixed: the data split no longer lets a patient's own earlier
+> hospital visit be used as an "answer" for their later one, and both sides now see identically
+> cleaned text. Two results. First, every model's score *drops* — the old scores were partly
+> free wins, and the baseline had the most free wins to lose (its headline figure fell 18%,
+> from 0.482 to 0.392). Second, the clean scores refuse to produce a winner: change one
+> arbitrary dial (how many guesses each model gets) and first place changes hands — the 2019
+> baseline can be made to finish 1st or 4th at will. The dial-turning is the finding: a ranking
+> that depends on the dial is not a ranking of the models.
+
 All four arms re-run under `AICDS_PIPELINE=corrected`: `GroupKFold` folds on `SUBJECT_ID`
 (zero patient leakage, down from 41 of 129 test cases) and unified, fixed preprocessing
 (145/145 diagnosis descriptions now identical across arms, up from 26/145).
 
-These are the first numbers this project has produced that are not contaminated by patient
-leakage. **They are still self-graded and still rank-blind** — see the limits section. They
-are defensible as a reproduction; they are *not* an encoder ranking.
+These are the first numbers this project produced that are not contaminated by patient
+leakage. **At the time they were still self-graded and still rank-blind** — both limits have
+since been closed (see the limits section). They are defensible as a reproduction; they are
+*not* an encoder ranking.
 
 Runs live in `results_corrected/<model>/<timestamp>/`, gitignored under the same rule as
 `results/`. Only aggregates appear here; they carry no `HADM_ID`s.
@@ -51,7 +62,8 @@ converged once leakage was removed" is not a finding — it is an artifact of pi
 
 ### What actually replaces it: the ranking inverts on an arbitrary knob
 
-Corrected pipeline, threshold 1.0 fixed, changing only `K`:
+Corrected pipeline, threshold 1.0 fixed, changing only `K` (how many candidate patients each
+arm may draw predictions from):
 
 | Encoder | MAX | TOP-10 | TOP-20 | TOP-30 |
 |---|---|---|---|---|
@@ -71,7 +83,9 @@ The defensible statement is therefore not "the encoders converged" and certainly
 wins. It is that **the ranking is decided by two arbitrary knobs — aggregator and threshold —
 so this experiment does not support any encoder ranking.** Note in particular that BioSentVec,
 the 700-dimensional 2019 baseline, can be made to finish first or last at will. Nothing here
-supports "transformers beat sent2vec," and nothing supports the reverse either.
+supports "transformers beat sent2vec," and nothing supports the reverse either. (Both knobs
+were subsequently removed — [12](12-drg-grader.md) killed the threshold, [13](13-rank-aware-metrics.md)
+killed the K — and the no-ranking conclusion survived that too.)
 
 ## Every arm drops, and the baseline drops most
 
@@ -86,7 +100,9 @@ supports "transformers beat sent2vec," and nothing supports the reverse either.
 
 The published figure is 0.489. This checkout reproduced it at 0.4824 under `legacy` and gets
 **0.3922** once leakage and preprocessing are fixed — about a fifth of the headline number was
-contamination. The three BERT arms cannot move because they are already pinned at 1.000.
+contamination. The three BERT arms cannot move because they are already pinned at 1.000 —
+which is also the cleanest demonstration that saturation and leakage are independent defects:
+fixing the folds cannot rescue a metric that has no headroom.
 
 ## What the correction did *not* fix
 
@@ -104,22 +120,24 @@ design, not data splitting.
   finding 04, and it survives the correction — confirming degeneracy is a consequence of
   BERT's compact space rather than a structural property of the code.
 
-## Limits — read before quoting any number here
+## Limits — read before quoting any number here (with what became of each)
 
-1. **Self-grading is untouched (TODO P4).** The same embedding space both retrieves and
-   judges, so a more compressed space grades itself more leniently. Every number above
-   inherits that.
-2. **Rank is still discarded (TODO P5).** `containGreaterOrEqualsValue` returns true if *any*
-   of the K candidates clears threshold, so a hit at rank 1 and a hit at rank 50 count
-   identically, and TOP-K rises with K by construction.
-3. **The 58.1% exact-match ceiling has not been re-measured** on the grouped folds. The old
-   figure was computed on the leaky ones.
-4. **The correction bundles two changes.** `corrected` moves folds *and* preprocessing at
-   once, so the deltas above cannot be split into a leakage part and a preprocessing part.
-   The `folds-only` and `preprocess-only` configs exist for that (TODO P29) but have not been
-   run.
-5. **Folds are uneven** (114/15 through 117/12) because subject 41976 holds 15 admissions and
-   whole patients must stay together. Per-fold *n* varies; treat per-fold σ accordingly.
+1. ~~**Self-grading is untouched (TODO P4).**~~ **Closed 2026-08-06**
+   ([12](12-drg-grader.md)): the DRG-string grader reproduces the threshold-1.0 numbers above
+   bit-exactly, so they were never self-grading-inflated — but that was only knowable after
+   the fix.
+2. ~~**Rank is still discarded (TODO P5).**~~ **Closed 2026-08-06**
+   ([13](13-rank-aware-metrics.md)): MRR removed the K knob; no pair of encoders separates.
+3. ~~**The 58.1% exact-match ceiling has not been re-measured on the grouped folds.**~~
+   **Done**: 76/129 = 58.9% on `folds_grouped`, a change of exactly one case, pinned in
+   `tests/test_drg_grader.py`.
+4. **The correction bundles two changes — still true.** `corrected` moves folds *and*
+   preprocessing at once, so the deltas above cannot be split into a leakage part and a
+   preprocessing part. The `folds-only` and `preprocess-only` configs exist for that
+   (TODO P29, staged on the pod, unlaunched as of 2026-08-08).
+5. **Folds are uneven — still true** (114/15 through 117/12) because subject 41976 holds 15
+   admissions and whole patients must stay together. Per-fold *n* varies; treat per-fold σ
+   accordingly.
 
 ## Reproducing
 

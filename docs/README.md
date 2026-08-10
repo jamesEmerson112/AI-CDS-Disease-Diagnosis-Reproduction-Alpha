@@ -4,7 +4,9 @@ Start here. Documents are grouped by *kind*, because they answer different quest
 stale at different rates.
 
 - **findings/** — the science. Why this project exists and what it actually showed. Written by
-  hand, changes rarely, and is the part worth reading carefully.
+  hand, changes rarely, and is the part worth reading carefully. **Every finding now opens with
+  an "In plain words" block** — if a document feels dense, read that block and the tables and
+  skip the rest.
 - **guides/** — how to operate it. Setup, environment, data handling. Changes when tooling changes.
 - **reference/** — what the system is. Module structure and data flow.
 - **plans/** — where it's going. Sequenced work, with what's done and what's next.
@@ -21,8 +23,9 @@ Then, if you want one document from here, read
 and it says what the comparison would need in order to mean anything. Otherwise, in order:
 
 1. [findings/01-baseline-reproduction.md](findings/01-baseline-reproduction.md) — what the
-   original paper (Comito et al., 2022) did, and the status of reproducing it. **Superseded by 09:
-   the baseline now runs.**
+   original paper (Comito et al., 2022) did, and its reproduction — **successful, TOP-10 within
+   0.007** ([09](findings/09-baseline-first-run.md) is the run record). Also the best plain
+   walkthrough of how the pipeline works.
 2. [findings/02-encoder-comparison.md](findings/02-encoder-comparison.md) — the four-encoder
    comparison (BioSentVec plus the three BERT models), which is the original contribution here.
    All four have now been measured, on one machine.
@@ -39,7 +42,9 @@ and it says what the comparison would need in order to mean anything. Otherwise,
    `w`, so negation is destroyed; and 4.4% of symptom tokens are fragments of shredded labels.
    **FIXED 2026-08-05** (`c2115ba`) except nine fragment occurrences; see P27 in the TODO.
 7. [findings/07-comparison-validity.md](findings/07-comparison-validity.md) — the synthesis of
-   01–06: five separable reasons the comparison is not valid yet, and what would fix each.
+   01–06: the five separable reasons the comparison was not valid as published. Four are now
+   fixed and the fifth fenced off; the document keeps the original diagnosis and attaches what
+   each fix showed.
 8. [findings/08-runtime-and-cost.md](findings/08-runtime-and-cost.md) — the encoder costs almost
    nothing. Embedding is 0.17–0.45% of wall-clock; 93%+ is a single-threaded pure-Python cosine
    loop. **A GPU buys nothing for these arms.** Also: results are platform-independent, verified
@@ -118,9 +123,11 @@ exactly 1.0000.
 
 **Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md), with the ranked
 digest in [plans/TODO.txt](plans/TODO.txt). Leakage went first, as planned — it was the largest
-correction and the cheapest, since the folds are data rather than code. Self-grading followed. What
-remains is rank-awareness (P5) and set-level metrics (P6): the metric still cannot tell a hit at
-rank 1 from a hit at rank 50, which is why TOP-K rises with K no matter what the encoder does.
+correction and the cheapest, since the folds are data rather than code. Self-grading followed, then
+rank-awareness (P5, done — finding 13). What remains on the science side: **P6** (set-level soft
+P/R/F1), **P27** (the last nine comma fragments), **P29** (the folds-only / preprocess-only
+attribution runs, staged but unlaunched), and **P40** (per-case output — now the highest-value
+item, because it blocks the one untestable confound in finding 13).
 
 ## Reference
 
@@ -133,13 +140,15 @@ rank 1 from a hit at rank 50, which is why TOP-K rises with K no matter what the
 [plans/revival-roadmap.md](plans/revival-roadmap.md) is the refactor sequence;
 [plans/TODO.txt](plans/TODO.txt) is the ranked digest and carries current status.
 
-**Phases 0, 1, 2 and 4 are done** — environment repair, the data-use guard, this documentation, the
-byte-exact golden regression net, and the `src/aicds/` package move. **Phase 3 is next and is the
-ship point**: a `SentenceEncoder` protocol and encoder registry, a `main.py` CLI (`bert_models.py`
-still calls `input()` interactively), one `PerformanceIndex` parser replacing three, one
-run-discovery rule replacing five, and the dashboard fix.
+**Phases 0, 1 and 4 are done; Phase 2 is about 2.5 of 7 items done** (audited 2026-08-08 against
+the full git history — the package move, src-layout `pyproject`, and helper consolidation landed;
+the `stop_words` patch deletion, `--out`/results root, `bert_eval.py` salvage, dead code, and the
+baseline's two residual defects did not). **Phase 3 has not started and is the ship point**: a
+`SentenceEncoder` protocol and encoder registry, a `main.py` CLI, one `PerformanceIndex` parser
+replacing what is now **four**, one run-discovery rule replacing what is now **six-to-seven**, and
+the dashboard fix. The details live in CLAUDE.md's refactor-status section.
 
-Running alongside it, and now ahead of it in priority: P5 (rank-aware metrics) and P38 (a
+Running alongside it, and now ahead of it in priority: P40 (per-case output) and P38 (a
 code-only public repository, which blocks publication because this one carries DUA-covered data).
 
 The roadmap also records the three decisions that shaped it and the reasoning behind the risky

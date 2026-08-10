@@ -1,5 +1,14 @@
 # Next Steps: Meaningful BERT Evaluation
 
+> **Status, 2026-08-08.** This is the one hand-written file in an otherwise generated
+> directory (do not regenerate it; do not hand-edit its siblings). Two of its proposals have
+> since shipped: **Strategy B** became the `drg-exact` grader
+> ([../findings/12-drg-grader.md](../findings/12-drg-grader.md)) and the "rank-aware metrics"
+> direction became `RankMetrics.txt`
+> ([../findings/13-rank-aware-metrics.md](../findings/13-rank-aware-metrics.md)). Strategy D
+> (set-level P/R/F1) is open as **P6** and is the priority; Strategies A and C remain
+> unimplemented — and finding 04 later showed A and C cannot fix degeneracy anyway.
+
 ## Problem Summary
 
 The current evaluation metric — **MAX cosine similarity** over the Cartesian product of ground-truth and predicted diagnosis descriptions — saturates for all three BERT models at the 0.6 threshold used in the original paper. All models achieve **F1 = 1.000**, making model comparison meaningless.

@@ -1,8 +1,16 @@
 # Making this repository publishable: a code-only public release
 
-**Status: investigation complete, NOTHING EXECUTED.** This document exists so the decision can be
-made with the facts in hand. Every destructive step below needs explicit sign-off, and one of them
-needs GitHub Support.
+> **In plain words.** This repo is public and contains hospital data that its license says must
+> not be redistributed. That blocks publishing a paper about the project — a paper points
+> reviewers straight at the violation. Deleting the data from git history doesn't actually
+> remove it from GitHub (old versions stay fetchable, forks keep copies), so the plan is to
+> build a *fresh* repository containing only the code and the aggregate results, and publish
+> that instead. Nothing has been done yet; this is the how-to, awaiting sign-off. Tracked as
+> **P38 — the hard blocker on publication.**
+
+**Status: investigation complete, NOTHING EXECUTED (still true as of 2026-08-08).** This
+document exists so the decision can be made with the facts in hand. Every destructive step
+below needs explicit sign-off, and one of them needs GitHub Support.
 
 ## Why
 
