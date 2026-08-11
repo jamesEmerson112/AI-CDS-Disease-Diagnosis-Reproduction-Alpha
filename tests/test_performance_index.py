@@ -927,11 +927,17 @@ def test_validate_is_separate_from_parse():
 
 
 def test_crlf_and_lf_parse_identically():
+    # Construct both variants explicitly. Until 2026-08-11 this test read the
+    # golden off disk and asserted it contained "\r\n" -- true only on a
+    # Windows checkout, because `* text=auto` materialises CRLF there and LF
+    # on Linux. The checkout's line endings are the platform's business; the
+    # parser's indifference to them is what this test pins.
     path = REAL_FIXTURES["golden_stub768"]
-    crlf = open(path, "rb").read().decode("utf-8")
-    assert "\r\n" in crlf
+    lf = open(path, "rb").read().decode("utf-8").replace("\r\n", "\n")
+    crlf = lf.replace("\n", "\r\n")
+    assert "\r\n" in crlf and "\r" not in lf
     assert pindex.parse(io.StringIO(crlf)).aggregate == pindex.parse(
-        io.StringIO(crlf.replace("\r\n", "\n"))
+        io.StringIO(lf)
     ).aggregate
 
 

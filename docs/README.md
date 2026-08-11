@@ -76,6 +76,13 @@ and it says what the comparison would need in order to mean anything. Otherwise,
     treat abstention reorders all four arms and inverts every sign, and it cannot be designed away
     because abstention belongs to the arm rather than the metric. Also records a vacuous test that
     was computed, believed, and withdrawn, because it is convincing enough to fool a careful reader.
+14. [findings/14-fold-split-environment-dependence.md](findings/14-fold-split-environment-dependence.md) —
+    **the grouped fold split depends on the numpy major version.** GroupKFold ties break through
+    np.argsort, so numpy 1.x and 2.x deterministically produce different splits from identical
+    inputs. The pod's numpy-2.0 split is canonical (every committed tree used it), pinned by
+    content digest in make_folds --verify and the test suite; the winnable total 76/129 is
+    split-invariant, but finding 12's per-fold range was measured on the wrong split and is
+    corrected in place.
 
 ## If you are setting up on a new machine
 

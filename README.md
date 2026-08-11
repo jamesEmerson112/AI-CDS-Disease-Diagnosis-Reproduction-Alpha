@@ -475,7 +475,7 @@ diagnoses occur exactly once in the dataset. A *perfect* retriever therefore cap
 exact matching, which is the context in which the threshold-1.0 scores of 0.18–0.25 should be read.
 Re-measured on the grouped folds 2026-08-06 and pinned in `tests/test_drg_grader.py`: fixing the
 leakage moved retrievability by exactly **one case** (75/129 → 76/129), so the two defects really
-were independent. Per fold the ceiling ranges from **3/12 (25%)** to **13/15 (87%)**, which makes it
+were independent. Per fold the ceiling ranges from **4/13 (30.8%)** to **13/15 (86.7%)** on the canonical split (finding 14), which makes it
 a fresh source of per-fold variance in its own right.
 
 **Two of the three biases have now been closed, and the third turns out to cut both ways.** An

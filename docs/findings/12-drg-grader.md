@@ -73,7 +73,7 @@ cases whose correct label appears anywhere in their own fold's training pool:
 also improved what is findable; it did not. The two defects are independent, and a test now
 pins that.
 
-Per fold the ceiling varies enormously on the grouped split — **3/12 (25%) in fold 7 up to
+[CORRECTED 2026-08-11, finding 14: the figures in this paragraph were measured on the environment-dependent numpy-1.x split no committed result used; on the canonical split the range is **4/13 (30.8%, fold 3) to 13/15 (86.7%, fold 0)**. The argument is unchanged.] Per fold the ceiling varies enormously on the grouped split — **3/12 (25%) in fold 7 up to
 13/15 (87%) in fold 0** — so it is a fresh source of per-fold variance and must be reported per
 fold.
 

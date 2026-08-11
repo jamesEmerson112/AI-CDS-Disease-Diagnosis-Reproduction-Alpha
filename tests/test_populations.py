@@ -21,6 +21,15 @@ from aicds.analysis.populations import (
 )
 from aicds.config import CORRECTED, LEGACY
 
+# The grouped split every committed results tree was produced on (finding 14).
+# Recorded as a hash, not data: the fold files themselves are DUA-covered and
+# gitignored, but their digest is not, and it is what makes "which split did
+# this run use" answerable at all. scripts/make_folds.py --verify checks the
+# same constant.
+CANONICAL_FOLDS_GROUPED_DIGEST = (
+    "b36f721638987fe0280393a28983a90c65127a04ffe21bcd2341024a6ec5084f"
+)
+
 
 class TestCeilingMatchesTheOriginalPin:
     """The promoted function must agree with ``test_drg_grader``'s numbers.
@@ -84,12 +93,34 @@ class TestPerFoldCeiling:
             seen |= tested
         assert len(seen) == 129
 
-    def test_the_range_is_as_wide_as_finding_12_reports(self):
-        """3/12 (25%) to 13/15 (87%). A per-fold sigma has to absorb that."""
+    def test_the_range_is_as_wide_as_finding_14_corrects(self):
+        """4/13 (30.8%) to 13/15 (86.7%) on the CANONICAL split.
+
+        This pin said 3/12 (25%) until 2026-08-11, quoting finding 12 -- and
+        both described a split no committed result ever used. GroupKFold's
+        tie-break among the ~85 single-admission subjects goes through
+        np.argsort, whose unstable-sort behaviour changed between numpy 1.x
+        and 2.x, so Windows/numpy-1.26 and the pod/numpy-2.0 deterministically
+        produce DIFFERENT grouped splits from identical inputs (finding 14,
+        P42). Every committed results tree was produced on the pod's split,
+        so that split is canonical; the digest guard below is what turns a
+        non-canonical local regeneration into an explanation instead of a
+        mystery failure. The winnable TOTAL (76/129) is split-invariant.
+        """
+        from aicds.runs import fold_dir_digest
+
+        digest = fold_dir_digest(CORRECTED.fold_dir)
+        assert digest == CANONICAL_FOLDS_GROUPED_DIGEST, (
+            "data/folds_grouped is not the canonical split every committed "
+            "result used (finding 14): regenerating with numpy 1.x produces a "
+            "different-but-equally-valid GroupKFold assignment. Copy the "
+            "canonical folds from the pod or regenerate under numpy 2.0.x. "
+            "Got digest %s" % digest
+        )
         rates = [
             len(w) / len(t) for w, t in winnable_by_fold(CORRECTED).values()
         ]
-        assert min(rates) == pytest.approx(3 / 12)
+        assert min(rates) == pytest.approx(4 / 13)
         assert max(rates) == pytest.approx(13 / 15)
 
     def test_grouped_folds_are_uneven_by_design(self):

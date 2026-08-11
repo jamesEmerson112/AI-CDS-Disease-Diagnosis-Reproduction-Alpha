@@ -81,9 +81,9 @@ THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, PUSHED to origin/main 2026-08-11
     9c9e251  C4  baseline run_analysis(encoder=None, config=LEGACY, out=None) +
                  __main__ guard; the two PerformanceIndex handles collapsed to
                  one with-block; run_baseline.py gains full argparse including
-                 --pipeline. Closes P17. *** [UNVERIFIED] *** -- the content
-                 byte-compare against results/baseline/05082026_18-55-32 is
-                 STILL PENDING on the pod (decision 3).
+                 --pipeline. Closes P17. *** VERIFIED 2026-08-11 *** -- the pod
+                 byte-compare against results/baseline/05082026_18-55-32
+                 PASSED, 353,418 bytes identical to the trailer cut.
     9d08c94  C5  aicds/runs.py writer side; --out on both arms and both run
                  scripts; check_out_root DUA guard; baseline directory spelling
                  unified to Prediction_Output_BioSentVec_{stamp}. Closes the
@@ -170,10 +170,11 @@ STATUS
                Its config code landed (45f36fc) and its own detail block says
                so; the RUNS are what is open. SPLIT 2026-08-11 (audit) into
                P29-configs [x] and P29-runs [ ]; see PARTIAL.
-           P17 is DONE but its BASELINE HALF IS [UNVERIFIED UNTIL THE POD
-               BYTE-COMPARE] (decision 3). The code landed in 9c9e251; the
-               baseline arm has no golden, so the only verification available
-               is one legacy baseline run on Linux byte-compared against
+           P17 is DONE, baseline half VERIFIED 2026-08-11: the pod's
+               --pipeline legacy run byte-matched the 2026-08-05 reference
+               (353,418 bytes to the trailer cut). The code landed in 9c9e251;
+               the baseline arm has no golden, so that one Linux run
+               byte-compared against
                results/baseline/05082026_18-55-32. Until that runs, "DONE"
                here means "written and reviewed", not "proved inert".
            P33 CLOSED 2026-08-11 (audit) by C7's discover(): the run choice is
@@ -318,6 +319,9 @@ STATUS
                 comparison PDF, which is P4-era work, not the 2026-08-05
                 Tier 1 window.)
            P39 P40 - found while implementing P5 (tie-breaks; per-case output)
+           P41 - found by the C1-C9 audit (the -m env hole, fixed 8965546)
+           P42 - found by D5's first-ever Linux run of the fast suite
+                 (fold-split environment dependence; finding 14)
            P41 - found 2026-08-11 by the C1-C9 audit (the `-m` entry point
                 silently ignores AICDS_PIPELINE on the BERT arm only)
 
@@ -609,9 +613,9 @@ TIER 4 - FINISH THE REFACTOR. The drift-stoppers landed here; polish moved to P3
            golden byte-exact afterwards at 52:35, on a commit containing
            nothing else.
   [x] P17  C4.  Dead code + the last 2 baseline defects  DONE 2026-08-11
-           Dead code 94b4e24; baseline 9c9e251, [UNVERIFIED] until the pod
-           byte-compare (decision 3). See the P17 detail section for what the
-           old description of the two handles got WRONG.
+           Dead code 94b4e24; baseline 9c9e251, VERIFIED 2026-08-11 by the
+           pod byte-compare (353,418 bytes identical). See the P17 detail
+           section for what the old description of the two handles got WRONG.
       P18  C3.  Salvage hf_automodel before deleting bert_eval.py
            RETIRED. Its checkbox moved to the RETIRED section below 2026-08-11
            (audit) so that every retired item sits in one place; the slot is
@@ -720,6 +724,22 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
            DONE 2026-08-11 (8965546). Found by the audit as a P35-class hole,
            asymmetric between the arms; the -m path now resolves via from_env()
            with the same explanatory comment as the baseline twin.
+  [~] P42  The grouped fold split depends on the numpy MAJOR version
+           FOUND AND MITIGATED 2026-08-11 (finding 14). GroupKFold breaks its
+           ~85 single-admission ties through np.argsort, whose unstable-sort
+           behaviour changed between numpy 1.x and 2.x: Windows/numpy-1.26 and
+           pod/numpy-2.0 deterministically build DIFFERENT leak-free splits
+           from identical inputs. The pod's split is CANONICAL (every
+           committed tree used it; the pod regenerates it bit-exactly), pinned
+           as CANONICAL_FOLDS_GROUPED_DIGEST in make_folds.py --verify (warns)
+           and test_populations.py (fails with an explanation). Finding 12's
+           per-fold range corrected in place (3/12 was the Windows split;
+           canonical is 4/13 to 13/15); winnable TOTAL 76/129 is
+           split-invariant, headline claims untouched. REMAINS [~]: pinning
+           numpy==2.0.x in environment.yml is deferred until local
+           torch/numpy-2 compatibility is tested -- the digest guards keep the
+           divergence loud meanwhile. Caught BY C8's fold_dir digest field
+           five days after P14 shipped it: the field's first live use.
 
 WHY THIS ORDER
   P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
@@ -927,7 +947,7 @@ TIER 1 DETAIL
             measured; closes a P32 item). Legacy is 75/129 = 58.1%, reproduced.
             THE LEAKAGE FIX MOVED RETRIEVABILITY BY ONE CASE - leakage and
             sparsity are independent defects.
-          - Per-fold ceiling on the grouped split ranges 3/12 (25%) to 13/15
+          - Per-fold ceiling on the grouped split ranges 4/13 (30.8%) to 13/15
             (87%), which is itself a source of the per-fold variance.
           - Verified by stub run, both predicted in advance: SATURATION IS GONE
             (a binary grader makes the threshold knob inert, so all five
@@ -1232,7 +1252,9 @@ fold's training pool ON folds_grouped; 75 of 129 (58.1%) on the legacy folds. Th
 other ~41% are unwinnable under exact matching - not because retrieval is bad, but
 because the answer is not in the library.
 A PERFECT RETRIEVER THEREFORE CAPS AT 58.9% UNDER EXACT MATCH.
-Per fold the ceiling ranges from 3/12 (25%) to 13/15 (87%), which makes it a
+Per fold the ceiling ranges from 4/13 (30.8%) to 13/15 (86.7%) on the
+canonical split (finding 14 corrected the 3/12 figure, which described the
+environment-dependent Windows split), which makes it a
 source of per-fold variance in its own right.
 
 BOTH FIGURES ARE PINNED IN tests/test_drg_grader.py. Cite the tests, not this
@@ -1363,10 +1385,11 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         own golden gate: BYTE-EXACT, 52:35.
 
 [x] P17. C4 - DEAD CODE + THE LAST 2 BASELINE DEFECTS   DONE 2026-08-11
-        Dead code 94b4e24; baseline 9c9e251. The baseline half is [UNVERIFIED]
-        until the pod byte-compare against results/baseline/05082026_18-55-32
-        (decision 3) -- the baseline arm has no golden, so a Linux run is the
-        only verification available.
+        Dead code 94b4e24; baseline 9c9e251. The baseline half was VERIFIED
+        2026-08-11: the pod's --pipeline legacy --out run byte-matched
+        results/baseline/05082026_18-55-32 exactly (353,418 bytes to the
+        trailer cut) -- C4's handle collapse and C5's --out plumbing proven
+        content-preserving in one shot.
 
         THE OLD DESCRIPTION OF THE TWO HANDLES WAS WRONG, AND INSTRUCTIVELY SO.
         This file said ":279 opened 'w' and never closed, :420 a second handle

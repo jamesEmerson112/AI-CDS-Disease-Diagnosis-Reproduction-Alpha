@@ -72,6 +72,14 @@ from aicds.utils.Constants import K_FOLD  # noqa: E402
 DEFAULT_DATA = "data/raw/Symptoms-Diagnosis.txt"
 DEFAULT_OUT = "data/folds_grouped"
 
+# The split of record (finding 14): digest of the folds_grouped every
+# committed results tree was produced on. numpy 2.0.x reproduces it;
+# numpy 1.x produces a different, equally valid split. Keep in sync with
+# tests/test_populations.py::CANONICAL_FOLDS_GROUPED_DIGEST.
+CANONICAL_FOLDS_GROUPED_DIGEST = (
+    "b36f721638987fe0280393a28983a90c65127a04ffe21bcd2341024a6ec5084f"
+)
+
 # data/folds/ holds the committed LEGACY folds.  They are inputs to
 # tests/golden/stub768/, so overwriting them makes the byte-exact golden
 # impossible to re-verify -- and the golden is the only regression protection
@@ -336,6 +344,31 @@ def verify(records, out_dir, n_splits):
         "  (the legacy HADM_ID-split folds in data/folds/ score 41 here -- that "
         "is the bug this script fixes)"
     )
+
+    # Finding 14 (P42): GroupKFold's tie-break among the ~85 single-admission
+    # subjects routes through np.argsort, whose unstable-sort behaviour changed
+    # between numpy 1.x and 2.x -- identical inputs produce a DIFFERENT (but
+    # equally valid, still leak-free) assignment per numpy major. Every
+    # committed results tree was produced on the numpy-2.0 split, so that one
+    # is canonical, recorded here as a hash (the fold files themselves are
+    # DUA-covered and gitignored; their digest is not). A mismatch is a
+    # warning, not a FAIL: the split this environment built is internally
+    # sound, it just is not the split of record, and no number computed on it
+    # is comparable with the committed trees. tests/test_populations.py pins
+    # the same constant.
+    from aicds.runs import fold_dir_digest
+
+    digest = fold_dir_digest(os.path.basename(out_dir.rstrip("/\\")))
+    print("")
+    print("fold content digest           : %s" % digest)
+    if digest != CANONICAL_FOLDS_GROUPED_DIGEST:
+        print(
+            "  WARNING: NOT the canonical split every committed result used\n"
+            "  (canonical %s,\n"
+            "   produced by numpy 2.0.x; numpy 1.x ties argsort differently --\n"
+            "   see docs/findings/14-fold-split-environment-dependence.md)"
+            % CANONICAL_FOLDS_GROUPED_DIGEST
+        )
     print("")
     print("VERIFY: %s" % ("PASS" if ok else "FAIL"))
     return ok
