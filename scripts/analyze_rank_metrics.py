@@ -40,11 +40,11 @@ relevance vectors that RankMetrics.txt does not carry.
 from __future__ import annotations
 
 import argparse
-import glob
 import math
-import os
 import re
 import sys
+
+from aicds import runs
 
 POPULATIONS = ["winnable", "all-cases", "answered"]
 ARM_ORDER = ["baseline", "bio_clinical_bert", "biomedbert", "bluebert"]
@@ -135,14 +135,24 @@ def significance(t):
 
 
 def discover(results_dir):
-    runs = {}
-    for arm in sorted(os.listdir(results_dir)):
-        hits = glob.glob(os.path.join(results_dir, arm, "*", "RankMetrics.txt"))
-        if not hits:
+    """-> {arm: path to that arm's newest run's RankMetrics.txt}.
+
+    A *run* is a directory with a ``PerformanceIndex.txt``; that is
+    ``aicds.runs.discover``'s one rule and this script does not get its own. The
+    consequence is deliberate: the arm chosen here is the newest run, not the
+    newest run that happens to carry rank metrics. If that run predates P5 it is
+    reported as missing and skipped, rather than being silently replaced by an
+    older run whose numbers came from different code -- which is exactly the
+    substitution the old private glob would have made, without saying so.
+    """
+    found = {}
+    for run in runs.discover(results_dir):
+        rank_metrics = run.file("RankMetrics.txt")
+        if rank_metrics is None:
+            print("[WARN] %s: no RankMetrics.txt (pre-P5 run?)" % run.key)
             continue
-        hits.sort(key=os.path.getmtime)
-        runs[arm] = hits[-1]
-    return runs
+        found[run.key] = rank_metrics
+    return found
 
 
 def main(argv=None):
@@ -152,12 +162,13 @@ def main(argv=None):
                         help="default: report all three")
     args = parser.parse_args(argv)
 
-    runs = discover(args.results_dir)
-    if not runs:
+    # Named `found`, not `runs`: `runs` is now the aicds.runs module.
+    found = discover(args.results_dir)
+    if not found:
         raise SystemExit("[ERROR] no <arm>/<timestamp>/RankMetrics.txt under %s"
                          % args.results_dir)
 
-    parsed = {arm: parse_rank_metrics(path) for arm, path in runs.items()}
+    parsed = {arm: parse_rank_metrics(path) for arm, path in found.items()}
     arms = [a for a in ARM_ORDER if a in parsed] + \
            [a for a in sorted(parsed) if a not in ARM_ORDER]
     print("arms found: %s\n" % ", ".join(arms))

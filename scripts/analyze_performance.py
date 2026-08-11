@@ -1,193 +1,165 @@
 """
 Performance Analysis and Visualization Script for Disease Diagnosis System
-This script parses PerformanceIndex.txt and generates comprehensive visualizations.
+
+Reads one run's PerformanceIndex.txt and writes performance_analysis.pdf beside it.
 
 Usage:
-    python analyze_performance.py                    # Auto-detect most recent output
-    python analyze_performance.py <directory_name>   # Analyze specific directory
+    python scripts/analyze_performance.py                  # most recent run in the cwd
+    python scripts/analyze_performance.py <run_directory>  # one specific run
+
+Two things used to live here that no longer do.
+
+The **parser** is now ``aicds.analysis.performance_index``. The copy that was here
+was the only one of the four that read per-fold blocks, and it read them wrongly:
+its header test was a substring check that the *per-case* header also satisfies, so
+129 single-trial rows landed on top of each fold's aggregate. On the real files the
+aggregate is written last and overwrites them, which is why nobody noticed. The
+shared parser recognises per-case blocks, counts them and drops their values.
+
+The **module-level ``fold_data`` / ``aggregate_data`` defaultdicts** are gone. They
+were created once at import, so two files parsed in one interpreter merged into each
+other -- and because they were ``defaultdict``s, a missing strategy materialised as
+an empty entry instead of raising. Everything is passed down as arguments now, which
+is also why the plot helpers take their data explicitly.
+
+``validate`` is deliberately *not* called: a run that died in fold 6 is exactly the
+file you want to plot, and this script is a diagnostic, not a gate.
 """
 
-import re
-import sys
+import argparse
 import os
-import glob
+import sys
+
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
-from collections import defaultdict
 
-# Data structures
-fold_data = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-aggregate_data = defaultdict(lambda: defaultdict(dict))
+from aicds import runs
+from aicds.analysis.performance_index import read
+
+METHODS = ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']
+THRESHOLDS = [0.6, 0.7, 0.8, 0.9, 1.0]
+
 
 def find_latest_output_directory():
-    """Find the most recent Prediction_Output_* directory."""
-    pattern = "Prediction_Output_*"
-    directories = glob.glob(pattern)
-    
-    # Filter to only directories that contain PerformanceIndex.txt
-    valid_dirs = []
-    for dir_path in directories:
-        perf_file = os.path.join(dir_path, "PerformanceIndex.txt")
-        if os.path.isdir(dir_path) and os.path.exists(perf_file):
-            valid_dirs.append(dir_path)
-    
-    if not valid_dirs:
+    """The most recently written run sitting *directly in* the cwd, or None.
+
+    ``depth=1`` -- flat ``Prediction_Output_<Model>_<stamp>/`` runs only -- is
+    load-bearing, not a leftover from the old glob. The default depth-2 walk
+    reaches subdirectories, and ``discover`` refuses rather than skips a
+    ``PerformanceIndex.txt`` in neither layout; the repository root always has
+    three of those, because the committed ``docs/Prediction_Output_*`` oracle runs
+    are flat runs at depth 2. So ``discover(os.getcwd())`` from the root -- the
+    directory CLAUDE.md tells everyone to run from -- raised every time, even with
+    a perfectly good fresh run beside them, and pointed the user at ``docs/``.
+
+    Bounding the walk is the fix rather than softening ``discover``: skipping an
+    unclassifiable run is the failure finding 10 documents, and this is the one
+    caller that genuinely wants a narrower question. Auto-detect means "whatever an
+    arm just wrote here", and an arm with no ``--out`` writes flat into the cwd
+    (``runs.run_dirs``, frozen by the golden). A ``results*/`` tree is a *nested*
+    root; name it on the command line and it is read in full.
+
+    ``discover`` already keeps one run per arm (the newest, announcing the choice
+    when there is more than one); "most recent" across arms is then the newest of
+    those. mtime, not the directory name: ``DDMMYYYY`` does not sort
+    chronologically.
+    """
+    try:
+        candidates = runs.discover(os.getcwd(), depth=1)
+    except runs.RunLayoutError as error:
+        print(f"[ERROR] {error}")
+        sys.exit(1)
+    if not candidates:
         return None
-    
-    # Sort by modification time (most recent first)
-    valid_dirs.sort(key=lambda x: os.path.getmtime(x), reverse=True)
-    return valid_dirs[0]
+    return max(candidates, key=lambda run: os.path.getmtime(run.path)).path
 
-def get_output_directory():
-    """Get the output directory from command line or auto-detect."""
-    if len(sys.argv) > 1:
-        # User specified directory
-        directory = sys.argv[1]
-        perf_file = os.path.join(directory, "PerformanceIndex.txt")
-        
-        if not os.path.exists(directory):
-            print(f"[ERROR] Directory not found: {directory}")
+
+def resolve_run_directory(run_dir):
+    """Validate an explicit run directory, or auto-detect the most recent one."""
+    if run_dir is not None:
+        perf_file = os.path.join(run_dir, "PerformanceIndex.txt")
+
+        if not os.path.exists(run_dir):
+            print(f"[ERROR] Directory not found: {run_dir}")
             sys.exit(1)
-        
+
         if not os.path.exists(perf_file):
-            print(f"[ERROR] PerformanceIndex.txt not found in: {directory}")
+            print(f"[ERROR] PerformanceIndex.txt not found in: {run_dir}")
             sys.exit(1)
-        
-        print(f"[INFO] Using specified directory: {directory}")
-        return directory
-    else:
-        # Auto-detect most recent
-        directory = find_latest_output_directory()
-        
-        if directory is None:
-            print("[ERROR] No Prediction_Output_* directories found with PerformanceIndex.txt")
-            print("[INFO] Please ensure CS2V.py has been run to generate output.")
-            sys.exit(1)
-        
-        print(f"[INFO] Auto-detected most recent output: {directory}")
-        return directory
 
-def parse_performance_index(filename):
-    """Parse the PerformanceIndex.txt file to extract all metrics."""
-    print(f"[INFO] Parsing {filename}...")
-    
-    current_fold = None
-    current_method = None
-    parsing_aggregate = False
-    
-    with open(filename, 'r') as f:
-        for line in f:
-            line = line.strip()
-            
-            # Detect fold header (but not 10-FOLD)
-            fold_match = re.match(r'^FOLD (\d+):', line)
-            if fold_match:
-                current_fold = int(fold_match.group(1))
-                parsing_aggregate = False
-                continue
-            
-            # Detect aggregate section and method type in same line
-            if '10-FOLD PERFORMANCE INDEX' in line:
-                parsing_aggregate = True
-                # Also extract method from this line
-                if 'MAX SIMILARITY by MAX' in line and 'TOP-' not in line:
-                    current_method = 'MAX'
-                elif 'TOP-' in line:
-                    match = re.search(r'TOP-(\d+)', line)
-                    if match:
-                        current_method = f'TOP-{match.group(1)}'
-                continue
-            
-            # Detect method type for non-aggregate sections
-            if not parsing_aggregate:
-                if 'PERFORMANCE INDEX of MAX SIMILARITY by MAX' in line and 'TOP-' not in line:
-                    current_method = 'MAX'
-                    continue
-                elif 'PERFORMANCE INDEX of TOP-' in line:
-                    match = re.search(r'TOP-(\d+)', line)
-                    if match:
-                        current_method = f'TOP-{match.group(1)}'
-                    continue
-            
-            # Parse data lines (threshold, TP, FP, P, R, FS, PR)
-            if line and not line.startswith('TP') and not line.startswith('*') and not line.startswith('='):
-                parts = line.split()
-                if len(parts) >= 6:
-                    try:
-                        threshold = float(parts[0])
-                        tp = float(parts[1])
-                        fp = float(parts[2])
-                        precision = float(parts[3])
-                        recall = float(parts[4])
-                        fscore = float(parts[5])
-                        
-                        if parsing_aggregate and current_method:
-                            aggregate_data[current_method][threshold] = {
-                                'TP': tp, 'FP': fp, 'P': precision,
-                                'R': recall, 'FS': fscore
-                            }
-                        elif current_fold is not None and current_method:
-                            fold_data[current_fold][current_method][threshold] = {
-                                'TP': tp, 'FP': fp, 'P': precision,
-                                'R': recall, 'FS': fscore
-                            }
-                    except (ValueError, IndexError):
-                        continue
-    
-    print(f"[SUCCESS] Parsed data for {len(fold_data)} folds")
-    print(f"[SUCCESS] Found {len(aggregate_data)} aggregate method results")
-    return fold_data, aggregate_data
+        print(f"[INFO] Using specified directory: {run_dir}")
+        return run_dir
 
-def plot_aggregate_performance(aggregate_data, ax):
+    directory = find_latest_output_directory()
+
+    if directory is None:
+        print("[ERROR] No Prediction_Output_* run directory found in the cwd")
+        print("[INFO] Run scripts/run_bert_analysis.py (or scripts/run_baseline.py) first,")
+        print("       or pass a run directory explicitly. Auto-detect only sees runs")
+        print("       written straight into the cwd; a run harvested into")
+        print("       results*/<model>/<timestamp>/ has to be named on the command line.")
+        sys.exit(1)
+
+    print(f"[INFO] Auto-detected most recent output: {directory}")
+    return directory
+
+
+def load_performance_index(path):
+    """Parse one PerformanceIndex.txt, reporting what came out of it."""
+    print(f"[INFO] Parsing {path}...")
+    index = read(path)
+    print(f"[SUCCESS] Parsed data for {len(index.folds)} folds")
+    print(f"[SUCCESS] Found {len(index.aggregate)} aggregate method results")
+    return index
+
+def plot_aggregate_performance(aggregate, ax):
     """Plot aggregate performance across different TOP-K methods."""
-    methods = ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']
-    thresholds = [0.6, 0.7, 0.8, 0.9, 1.0]
-    
     # Extract F-Score data for threshold 1.0
     fscores = []
     precisions = []
     recalls = []
-    
-    for method in methods:
-        if method in aggregate_data and 1.0 in aggregate_data[method]:
-            fscores.append(aggregate_data[method][1.0]['FS'])
-            precisions.append(aggregate_data[method][1.0]['P'])
-            recalls.append(aggregate_data[method][1.0]['R'])
+
+    for method in METHODS:
+        if method in aggregate and 1.0 in aggregate[method]:
+            row = aggregate[method][1.0]
+            fscores.append(row.f_score)
+            precisions.append(row.precision)
+            recalls.append(row.recall)
         else:
             fscores.append(0)
             precisions.append(0)
             recalls.append(0)
-    
-    x = np.arange(len(methods))
+
+    x = np.arange(len(METHODS))
     width = 0.25
-    
+
     ax.bar(x - width, precisions, width, label='Precision', color='#4472C4')
     ax.bar(x, recalls, width, label='Recall', color='#ED7D31')
     ax.bar(x + width, fscores, width, label='F-Score', color='#A5A5A5')
-    
+
     ax.set_xlabel('Similarity Method', fontsize=10)
     ax.set_ylabel('Score', fontsize=10)
     ax.set_title('Aggregate Performance Comparison (Threshold=1.0)', fontsize=11, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.set_xticklabels(METHODS, rotation=45, ha='right')
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim(0, 1)
 
-def plot_threshold_sensitivity(aggregate_data, ax):
+def plot_threshold_sensitivity(aggregate, ax):
     """Plot how performance changes with different thresholds."""
-    thresholds = [0.6, 0.7, 0.8, 0.9, 1.0]
     methods = ['MAX', 'TOP-10', 'TOP-30', 'TOP-50']
     colors = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000']
-    
+
     for method, color in zip(methods, colors):
-        if method in aggregate_data:
-            recalls = [aggregate_data[method].get(t, {}).get('R', 0) for t in thresholds]
-            ax.plot(thresholds, recalls, marker='o', label=method, color=color, linewidth=2)
-    
+        if method in aggregate:
+            rows = aggregate[method]
+            recalls = [rows[t].recall if t in rows else 0 for t in THRESHOLDS]
+            ax.plot(THRESHOLDS, recalls, marker='o', label=method, color=color, linewidth=2)
+
     ax.set_xlabel('Threshold', fontsize=10)
     ax.set_ylabel('Recall', fontsize=10)
     ax.set_title('Threshold Sensitivity Analysis', fontsize=11, fontweight='bold')
@@ -195,20 +167,19 @@ def plot_threshold_sensitivity(aggregate_data, ax):
     ax.grid(True, alpha=0.3)
     ax.set_xlim(0.55, 1.05)
 
-def plot_precision_recall_curve(aggregate_data, ax):
+def plot_precision_recall_curve(aggregate, ax):
     """Plot Precision-Recall curves for different methods."""
-    methods = ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']
     colors = ['#4472C4', '#ED7D31', '#A5A5A5', '#FFC000', '#5B9BD5', '#70AD47']
-    
-    for method, color in zip(methods, colors):
-        if method in aggregate_data:
+
+    for method, color in zip(METHODS, colors):
+        if method in aggregate:
             # Get all thresholds for this method
-            thresholds = sorted(aggregate_data[method].keys())
-            precisions = [aggregate_data[method][t]['P'] for t in thresholds]
-            recalls = [aggregate_data[method][t]['R'] for t in thresholds]
-            
+            thresholds = sorted(aggregate[method].keys())
+            precisions = [aggregate[method][t].precision for t in thresholds]
+            recalls = [aggregate[method][t].recall for t in thresholds]
+
             ax.plot(recalls, precisions, marker='o', label=method, color=color, linewidth=2)
-    
+
     ax.set_xlabel('Recall', fontsize=10)
     ax.set_ylabel('Precision', fontsize=10)
     ax.set_title('Precision-Recall Curves', fontsize=11, fontweight='bold')
@@ -217,138 +188,138 @@ def plot_precision_recall_curve(aggregate_data, ax):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-def plot_fold_variance(fold_data, ax):
+def plot_fold_variance(folds, ax):
     """Plot variance in F-Score across folds for TOP-10 method."""
     method = 'TOP-10'
     threshold = 1.0
-    
-    folds = sorted(fold_data.keys())
+
+    fold_indices = sorted(folds.keys())
     fscores = []
-    
-    for fold in folds:
-        if method in fold_data[fold] and threshold in fold_data[fold][method]:
-            fscores.append(fold_data[fold][method][threshold]['FS'])
+
+    for fold in fold_indices:
+        if method in folds[fold] and threshold in folds[fold][method]:
+            fscores.append(folds[fold][method][threshold].f_score)
         else:
             fscores.append(0)
-    
-    bars = ax.bar(folds, fscores, color='#5B9BD5', edgecolor='black', linewidth=0.5)
-    
+
+    bars = ax.bar(fold_indices, fscores, color='#5B9BD5', edgecolor='black', linewidth=0.5)
+
     # Add value labels
     for bar in bars:
         height = bar.get_height()
         ax.text(bar.get_x() + bar.get_width()/2., height,
                 f'{height:.3f}',
                 ha='center', va='bottom', fontsize=8)
-    
+
     # Add mean line
     mean_score = np.mean(fscores)
-    ax.axhline(y=mean_score, color='red', linestyle='--', linewidth=2, 
+    ax.axhline(y=mean_score, color='red', linestyle='--', linewidth=2,
                label=f'Mean: {mean_score:.3f}')
-    
+
     ax.set_xlabel('Fold', fontsize=10)
     ax.set_ylabel('F-Score', fontsize=10)
-    ax.set_title('F-Score Variance Across Folds (TOP-10, Threshold=1.0)', 
+    ax.set_title('F-Score Variance Across Folds (TOP-10, Threshold=1.0)',
                  fontsize=11, fontweight='bold')
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim(0, 1)
 
-def plot_heatmap_fscores(aggregate_data, ax):
+def plot_heatmap_fscores(aggregate, ax):
     """Create heatmap of F-Scores for different methods and thresholds."""
-    methods = ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']
-    thresholds = [0.6, 0.7, 0.8, 0.9, 1.0]
-    
     # Create matrix of F-Scores
-    matrix = np.zeros((len(methods), len(thresholds)))
-    
-    for i, method in enumerate(methods):
-        if method in aggregate_data:
-            for j, threshold in enumerate(thresholds):
-                if threshold in aggregate_data[method]:
-                    matrix[i, j] = aggregate_data[method][threshold]['FS']
-    
+    matrix = np.zeros((len(METHODS), len(THRESHOLDS)))
+
+    for i, method in enumerate(METHODS):
+        if method in aggregate:
+            for j, threshold in enumerate(THRESHOLDS):
+                if threshold in aggregate[method]:
+                    matrix[i, j] = aggregate[method][threshold].f_score
+
     im = ax.imshow(matrix, cmap='YlOrRd', aspect='auto', vmin=0, vmax=0.6)
-    
+
     # Set ticks
-    ax.set_xticks(np.arange(len(thresholds)))
-    ax.set_yticks(np.arange(len(methods)))
-    ax.set_xticklabels(thresholds)
-    ax.set_yticklabels(methods)
-    
+    ax.set_xticks(np.arange(len(THRESHOLDS)))
+    ax.set_yticks(np.arange(len(METHODS)))
+    ax.set_xticklabels(THRESHOLDS)
+    ax.set_yticklabels(METHODS)
+
     # Add colorbar
     cbar = plt.colorbar(im, ax=ax)
     cbar.set_label('F-Score', rotation=270, labelpad=20)
-    
+
     # Add text annotations
-    for i in range(len(methods)):
-        for j in range(len(thresholds)):
+    for i in range(len(METHODS)):
+        for j in range(len(THRESHOLDS)):
             text = ax.text(j, i, f'{matrix[i, j]:.3f}',
                           ha="center", va="center", color="black", fontsize=8)
-    
+
     ax.set_title('F-Score Heatmap: Methods vs Thresholds', fontsize=11, fontweight='bold')
     ax.set_xlabel('Threshold', fontsize=10)
     ax.set_ylabel('Similarity Method', fontsize=10)
 
-def plot_topk_comparison(aggregate_data, ax):
+def plot_topk_comparison(aggregate, ax):
     """Compare performance improvement from MAX to TOP-K."""
     threshold = 1.0
-    methods = ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']
-    
+
     recalls = []
     fscores = []
-    
-    for method in methods:
-        if method in aggregate_data and threshold in aggregate_data[method]:
-            recalls.append(aggregate_data[method][threshold]['R'])
-            fscores.append(aggregate_data[method][threshold]['FS'])
-    
-    x = np.arange(len(methods))
+
+    for method in METHODS:
+        if method in aggregate and threshold in aggregate[method]:
+            recalls.append(aggregate[method][threshold].recall)
+            fscores.append(aggregate[method][threshold].f_score)
+
+    x = np.arange(len(METHODS))
     width = 0.35
-    
+
     ax.bar(x - width/2, recalls, width, label='Recall', color='#ED7D31')
     ax.bar(x + width/2, fscores, width, label='F-Score', color='#5B9BD5')
-    
+
     ax.set_xlabel('Method', fontsize=10)
     ax.set_ylabel('Score', fontsize=10)
-    ax.set_title('Performance Improvement with TOP-K (Threshold=1.0)', 
+    ax.set_title('Performance Improvement with TOP-K (Threshold=1.0)',
                  fontsize=11, fontweight='bold')
     ax.set_xticks(x)
-    ax.set_xticklabels(methods, rotation=45, ha='right')
+    ax.set_xticklabels(METHODS, rotation=45, ha='right')
     ax.legend()
     ax.grid(axis='y', alpha=0.3)
     ax.set_ylim(0, 0.7)
 
-def generate_analysis_report(fold_data, aggregate_data, output_pdf):
+def generate_analysis_report(folds, aggregate, output_pdf):
     """Generate comprehensive PDF report with visualizations."""
     print(f"[INFO] Generating analysis report: {output_pdf}")
-    
+
     with PdfPages(output_pdf) as pdf:
         # Page 1: Overview and Aggregate Performance
         fig = plt.figure(figsize=(11, 8.5))
         fig.suptitle('Disease Diagnosis Performance Analysis', fontsize=16, fontweight='bold')
-        
+
         gs = fig.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
-        
+
         # Summary statistics text
         ax1 = fig.add_subplot(gs[0, :])
         ax1.axis('off')
-        
-        # Find best performing configuration
+
+        # Find best performing configuration. Ties keep the FIRST seen, so the
+        # iteration order matters: it is the file's write order (MAX then TOP-K,
+        # thresholds 0.9, 1, 0.6, 0.8, 0.7 from the writers' set literal), which
+        # the parser preserves as insertion order.
         best_fscore = 0
         best_method = ''
         best_threshold = 0
-        
-        for method in aggregate_data:
-            for threshold in aggregate_data[method]:
-                fs = aggregate_data[method][threshold]['FS']
+
+        for method in aggregate:
+            for threshold in aggregate[method]:
+                fs = aggregate[method][threshold].f_score
                 if fs > best_fscore:
                     best_fscore = fs
                     best_method = method
                     best_threshold = threshold
-        
+
+        best_row = aggregate[best_method][best_threshold]
         summary_text = [
             ['Metric', 'Value'],
-            ['Total Folds Analyzed', str(len(fold_data))],
+            ['Total Folds Analyzed', str(len(folds))],
             ['Methods Compared', '6 (MAX, TOP-10 through TOP-50)'],
             ['Thresholds Tested', '5 (0.6, 0.7, 0.8, 0.9, 1.0)'],
             ['', ''],
@@ -356,80 +327,80 @@ def generate_analysis_report(fold_data, aggregate_data, output_pdf):
             ['  Method', best_method],
             ['  Threshold', str(best_threshold)],
             ['  F-Score', f'{best_fscore:.4f}'],
-            ['  Recall', f"{aggregate_data[best_method][best_threshold]['R']:.4f}"],
-            ['  Precision', f"{aggregate_data[best_method][best_threshold]['P']:.4f}"],
+            ['  Recall', f"{best_row.recall:.4f}"],
+            ['  Precision', f"{best_row.precision:.4f}"],
         ]
-        
+
         table = ax1.table(cellText=summary_text, cellLoc='left', loc='center',
                          colWidths=[0.5, 0.5])
         table.auto_set_font_size(False)
         table.set_fontsize(10)
         table.scale(1, 2)
-        
+
         # Style header
         for i in range(2):
             table[(0, i)].set_facecolor('#4472C4')
             table[(0, i)].set_text_props(weight='bold', color='white')
-        
+
         ax1.set_title('Performance Summary', fontsize=12, fontweight='bold', pad=20)
-        
+
         # Aggregate performance bar chart
         ax2 = fig.add_subplot(gs[1, 0])
-        plot_aggregate_performance(aggregate_data, ax2)
-        
+        plot_aggregate_performance(aggregate, ax2)
+
         # Precision-Recall curve
         ax3 = fig.add_subplot(gs[1, 1])
-        plot_precision_recall_curve(aggregate_data, ax3)
-        
+        plot_precision_recall_curve(aggregate, ax3)
+
         pdf.savefig(fig, bbox_inches='tight')
         plt.close()
-        
+
         # Page 2: Detailed Analysis
         fig2 = plt.figure(figsize=(11, 8.5))
         fig2.suptitle('Detailed Performance Analysis', fontsize=16, fontweight='bold')
-        
+
         gs2 = fig2.add_gridspec(2, 2, hspace=0.4, wspace=0.3)
-        
+
         # Threshold sensitivity
         ax4 = fig2.add_subplot(gs2[0, 0])
-        plot_threshold_sensitivity(aggregate_data, ax4)
-        
+        plot_threshold_sensitivity(aggregate, ax4)
+
         # TOP-K comparison
         ax5 = fig2.add_subplot(gs2[0, 1])
-        plot_topk_comparison(aggregate_data, ax5)
-        
+        plot_topk_comparison(aggregate, ax5)
+
         # Fold variance
         ax6 = fig2.add_subplot(gs2[1, 0])
-        plot_fold_variance(fold_data, ax6)
-        
+        plot_fold_variance(folds, ax6)
+
         # Heatmap
         ax7 = fig2.add_subplot(gs2[1, 1])
-        plot_heatmap_fscores(aggregate_data, ax7)
-        
+        plot_heatmap_fscores(aggregate, ax7)
+
         pdf.savefig(fig2, bbox_inches='tight')
         plt.close()
-    
+
     print(f"[SUCCESS] Analysis report generated: {output_pdf}")
 
-def print_summary_statistics(aggregate_data):
+def print_summary_statistics(aggregate):
     """Print summary statistics to console."""
     print("\n" + "="*80)
     print("PERFORMANCE ANALYSIS SUMMARY (Threshold=1.0)")
     print("="*80)
-    
+
     # Get configurations at threshold 1.0
     threshold = 1.0
     configs = []
-    for method in ['MAX', 'TOP-10', 'TOP-20', 'TOP-30', 'TOP-40', 'TOP-50']:
-        if method in aggregate_data and threshold in aggregate_data[method]:
-            data = aggregate_data[method][threshold]
-            configs.append((method, threshold, data['FS'], data['R'], data['P']))
-    
+    for method in METHODS:
+        if method in aggregate and threshold in aggregate[method]:
+            row = aggregate[method][threshold]
+            configs.append((method, threshold, row.f_score, row.recall, row.precision))
+
     print(f"\n{'Method':<12} {'Threshold':<12} {'F-Score':<12} {'Recall':<12} {'Precision':<12}")
     print("-"*80)
     for method, thresh, fscore, recall, precision in configs:
         print(f"{method:<12} {thresh:<12.1f} {fscore:<12.4f} {recall:<12.4f} {precision:<12.4f}")
-    
+
     if len(configs) > 1:
         print("\nKey Findings:")
         if len(configs) > 1:
@@ -439,36 +410,45 @@ def print_summary_statistics(aggregate_data):
             print(f"  • TOP-50 recall: {configs[5][3]:.1%} (maximum achievable at this threshold)")
     print("="*80 + "\n")
 
-def main():
+def main(argv=None):
     """Main execution function."""
+    parser = argparse.ArgumentParser(
+        description="Plot one run's PerformanceIndex.txt into performance_analysis.pdf "
+                    "beside it."
+    )
+    parser.add_argument(
+        "run_dir", nargs="?", default=None,
+        help="a run directory containing PerformanceIndex.txt. "
+             "Default: the most recently written run found under the cwd.",
+    )
+    args = parser.parse_args(argv)
+
     print("\n" + "="*80)
     print("Performance Analysis Script - Disease Diagnosis System")
     print("="*80 + "\n")
-    
+
     try:
-        # Get the output directory
-        output_dir = get_output_directory()
-        input_file = os.path.join(output_dir, "PerformanceIndex.txt")
-        output_pdf = os.path.join(output_dir, "performance_analysis.pdf")
-        
-        # Parse the performance index file
-        fold_data, aggregate_data = parse_performance_index(input_file)
-        
-        if not aggregate_data:
+        run_dir = resolve_run_directory(args.run_dir)
+        input_file = os.path.join(run_dir, "PerformanceIndex.txt")
+        output_pdf = os.path.join(run_dir, "performance_analysis.pdf")
+
+        index = load_performance_index(input_file)
+
+        if not index.aggregate:
             print("[ERROR] No aggregate data found. Check file format.")
             sys.exit(1)
-        
+
         # Print summary statistics
-        print_summary_statistics(aggregate_data)
-        
+        print_summary_statistics(index.aggregate)
+
         # Generate visualization report
-        generate_analysis_report(fold_data, aggregate_data, output_pdf)
-        
+        generate_analysis_report(index.folds, index.aggregate, output_pdf)
+
         print("\n[SUCCESS] Analysis complete!")
         print(f"[INFO] PDF report saved to: {output_pdf}")
-        
-    except FileNotFoundError:
-        print(f"[ERROR] File not found: {input_file}")
+
+    except FileNotFoundError as e:
+        print(f"[ERROR] File not found: {e}")
         print("[INFO] Please ensure the PerformanceIndex.txt file exists in the correct location.")
         sys.exit(1)
     except Exception as e:

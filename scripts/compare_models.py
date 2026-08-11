@@ -13,26 +13,35 @@ Usage (from the repository root):
     python scripts/compare_models.py
     python scripts/compare_models.py --results-dir results --out results/model_comparison.pdf
 
-Format notes the parser has to survive (verified against the real files):
-
-* Six aggregate sections per file: ``MAX`` plus ``TOP-10/20/30/40/50``, each
-  headed ``10-FOLD PERFORMANCE INDEX of ... SIMILARITY by MAX``.
-* Columns are ``threshold TP FP P R FS PR``.
-* The five threshold rows are emitted in *set-iteration* order
-  ``0.9, 1, 0.6, 0.8, 0.7`` -- not sorted. We sort them ourselves.
-* The threshold token is a bare ``1`` in aggregate rows (it comes from a set
-  literal), not ``1.0``. ``float()`` normalises both.
-* The BioSentVec file is tab-separated throughout; the BERT files use runs of
-  spaces in their per-case blocks. A bare ``str.split()`` handles both.
+Parsing and discovery both moved out of this file. ``PerformanceIndex.txt`` is read
+by :mod:`aicds.analysis.performance_index`, which documents the seven whitespace
+traps in that format, and runs are found by :func:`aicds.runs.discover`, which owns
+the one rule for what a run directory is. What stays here is presentation plus
+:data:`SANITY_CHECKS_BY_PIPELINE` -- and the checks are the reason the swap is safe
+to make: they are keyed by pipeline and compare 16 known-correct numbers against
+whatever the parser returns, so a parser that lined the columns up differently
+would fail all 16 rather than quietly redraw the charts.
 """
 
 from __future__ import annotations
 
 import argparse
 import os
-import re
 import sys
 from collections import OrderedDict
+
+from aicds import runs
+from aicds.analysis.performance_index import (
+    PerformanceIndexError,
+    read,
+    validate,
+)
+
+# Note on the name: the page_* functions below take a parameter called `runs`
+# (the list of decorated run dicts) and so shadow this module inside their own
+# bodies. None of them needs it, and renaming eight signatures to say so would be
+# churn in the drawing code -- but do not reach for aicds.runs inside a page_*
+# function without renaming its parameter first.
 
 import matplotlib
 
@@ -211,191 +220,90 @@ PIPELINE_NOTES = {
 
 
 # --------------------------------------------------------------------------
-# Parsing
+# Parsing -- one call into the shared parser, plus this script's own guard
 # --------------------------------------------------------------------------
 
-AGGREGATE_HEADER = re.compile(r"^10-FOLD PERFORMANCE INDEX of (.+?) SIMILARITY by MAX")
-TOPK = re.compile(r"TOP-(\d+)")
+def validate_parse(model_key, index):
+    """``performance_index.validate``, with the failing arm named in the message.
 
-
-def _strategy_from_header(descriptor):
-    """Map the header descriptor ('MAX' / 'TOP-30') onto a strategy key."""
-    match = TOPK.search(descriptor)
-    if match:
-        return "TOP-%s" % match.group(1)
-    if descriptor.strip() == "MAX":
-        return "MAX"
-    return None
-
-
-def parse_performance_index(path):
-    """Return {strategy: {threshold: {TP,FP,P,R,FS,PR}}} for the aggregate blocks.
-
-    Only the six ``10-FOLD`` sections are read; the ~5900 lines of per-fold and
-    per-case blocks above them are ignored.
+    The parser reports the *path* on failure, which is right for a library and
+    not enough here: this script reads four files in one pass and the reader of
+    the traceback wants to know which arm, in the vocabulary the rest of the
+    output uses. Nothing else is added -- the completeness rule (6 strategies x
+    5 thresholds x 10 folds) lives in one place now.
     """
-    results = {}
-    current = None
-
-    with open(path, "r", encoding="utf-8", errors="replace") as handle:
-        for raw in handle:
-            line = raw.strip()
-
-            header = AGGREGATE_HEADER.match(line)
-            if header:
-                current = _strategy_from_header(header.group(1))
-                if current is not None:
-                    results.setdefault(current, {})
-                continue
-
-            if current is None:
-                continue
-
-            if not line or line.startswith("*") or line.startswith("="):
-                # Blank line or banner ends the section.
-                current = None
-                continue
-
-            parts = line.split()
-            if len(parts) != 7:
-                # The column header row ("TP FP P R FS PR") has 6 tokens.
-                continue
-
-            try:
-                threshold = float(parts[0])
-                values = [float(token) for token in parts[1:]]
-            except ValueError:
-                continue
-
-            results[current][threshold] = dict(
-                zip(("TP", "FP", "P", "R", "FS", "PR"), values)
-            )
-
-            if len(results[current]) == len(THRESHOLDS):
-                current = None
-
-    return results
-
-
-def validate_parse(model_key, data):
-    """Raise if a parsed file is not the expected 6 strategies x 5 thresholds."""
-    missing = [s for s in STRATEGIES if s not in data]
-    if missing:
-        raise ValueError(
-            "%s: missing aggregate sections %s" % (model_key, ", ".join(missing))
-        )
-    for strategy in STRATEGIES:
-        found = sorted(data[strategy])
-        if found != THRESHOLDS:
-            raise ValueError(
-                "%s / %s: expected thresholds %s, parsed %s"
-                % (model_key, strategy, THRESHOLDS, found)
-            )
+    try:
+        validate(index, strategies=STRATEGIES, thresholds=THRESHOLDS)
+    except PerformanceIndexError as error:
+        raise ValueError("%s: %s" % (model_key, error))
 
 
 # --------------------------------------------------------------------------
-# Discovery
+# Discovery -- aicds.runs finds them; this script decorates them for drawing
 # --------------------------------------------------------------------------
 
-def _format_run_date(timestamp_dir):
-    """'05082026_18-55-32' -> '2026-08-05'. Returns the raw name if unparseable."""
-    match = re.match(r"^(\d{2})(\d{2})(\d{4})_", timestamp_dir)
-    if not match:
-        return timestamp_dir
-    day, month, year = match.groups()
-    return "%s-%s-%s" % (year, month, day)
+# The host is a property of WHEN a run happened, not of which model it used --
+# the same encoder has now been run on both machines. Deriving it from the run
+# directory's DDMMYYYY prefix is what keeps the provenance box honest; the old
+# per-model constant silently mislabelled the 2026-08-05 Linux runs as "Mac"
+# the first time all four arms came off one box.
+#
+# An unmapped date resolves to "unknown host" rather than falling through to a
+# per-model constant. That constant said "M-series Mac" for every arm, so the
+# fallback did not degrade gracefully -- it asserted a specific wrong machine.
+# The 2026-08-06 runs hit exactly that: they came off RunPod and the box would
+# have labelled them Mac. An honest blank beats a confident error in a
+# provenance box.
+HOSTS_BY_DATE = {
+    "15022026": "M-series Mac",
+    "05082026": "RunPod Linux",
+    "06082026": "RunPod Linux",
+}
 
 
 def discover_runs(results_dir):
-    """Find results/<model>/<timestamp>/PerformanceIndex.txt.
+    """``aicds.runs.discover`` plus the per-arm drawing style and host.
 
-    Returns a list of run dicts in MODEL_REGISTRY order, with any unregistered
-    model directories appended alphabetically.
+    The layout rule, the mtime-latest choice and the "N runs; using the most
+    recent" notice all moved into ``aicds.runs``. What is genuinely this
+    script's own is what stays: colour, marker, dash, legend label, and the
+    provenance host. Unregistered keys are appended alphabetically by
+    ``discover`` and styled from ``FALLBACK_STYLES`` here, so a new arm's
+    directory appears in the report rather than being dropped from it.
     """
     if not os.path.isdir(results_dir):
         raise SystemExit("[ERROR] results directory not found: %s" % results_dir)
 
-    found = {}
-    for model_key in sorted(os.listdir(results_dir)):
-        model_dir = os.path.join(results_dir, model_key)
-        if not os.path.isdir(model_dir):
-            continue
+    discovered = runs.discover(results_dir)
 
-        candidates = []
-        for stamp in sorted(os.listdir(model_dir)):
-            run_dir = os.path.join(model_dir, stamp)
-            perf = os.path.join(run_dir, "PerformanceIndex.txt")
-            if os.path.isdir(run_dir) and os.path.isfile(perf):
-                candidates.append((stamp, run_dir, perf))
-        if not candidates:
-            continue
-
-        # Timestamp names are DDMMYYYY_HH-MM-SS, which does not sort
-        # chronologically, so fall back to mtime when a model has several runs.
-        candidates.sort(key=lambda item: os.path.getmtime(item[1]))
-        stamp, run_dir, perf = candidates[-1]
-        if len(candidates) > 1:
-            print(
-                "[INFO] %s has %d runs; using the most recent (%s)"
-                % (model_key, len(candidates), stamp)
-            )
-
-        found[model_key] = {
-            "key": model_key,
-            "timestamp": stamp,
-            "run_dir": run_dir,
-            "perf_file": perf,
-            "date": _format_run_date(stamp),
-        }
-
-    ordered_keys = [k for k in MODEL_REGISTRY if k in found]
-    ordered_keys += [k for k in sorted(found) if k not in MODEL_REGISTRY]
-
-    # The host is a property of WHEN a run happened, not of which model it used --
-    # the same encoder has now been run on both machines. Deriving it from the run
-    # directory's DDMMYYYY prefix is what keeps the provenance box honest; the old
-    # per-model constant silently mislabelled the 2026-08-05 Linux runs as "Mac"
-    # the first time all four arms came off one box.
-    #
-    # An unmapped date now resolves to "unknown host" rather than falling through
-    # to MODEL_REGISTRY's per-model constant. That constant says "M-series Mac"
-    # for every arm, so the fallback did not degrade gracefully -- it asserted a
-    # specific wrong machine. The 2026-08-06 runs hit exactly that: they came off
-    # RunPod and the box would have labelled them Mac. An honest blank beats a
-    # confident error in a provenance box.
-    hosts_by_date = {
-        "15022026": "M-series Mac",
-        "05082026": "RunPod Linux",
-        "06082026": "RunPod Linux",
-    }
-
-    runs = []
-    for index, key in enumerate(ordered_keys):
-        run = found[key]
-        style = MODEL_REGISTRY.get(key)
+    decorated = []
+    for index, run in enumerate(discovered):
+        style = MODEL_REGISTRY.get(run.key)
         if style is None:
             fallback = FALLBACK_STYLES[index % len(FALLBACK_STYLES)]
-            style = dict(fallback, label=key, arm="unknown", host="unknown host")
-        run.update(
+            style = dict(fallback, label=run.label, arm="unknown")
+        decorated.append(
             {
+                "key": run.key,
+                "timestamp": run.stamp,
+                "run_dir": run.path,
+                "perf_file": run.performance_index,
+                "date": run.date,
                 "label": style["label"],
                 "arm": style["arm"],
-                "host": hosts_by_date.get(
-                    str(run.get("timestamp", ""))[:8], "unknown host"
-                ),
+                "host": HOSTS_BY_DATE.get(run.stamp[:8], "unknown host"),
                 "color": style["color"],
                 "marker": style["marker"],
                 "dash": style["dash"],
             }
         )
-        runs.append(run)
 
-    if not runs:
+    if not decorated:
         raise SystemExit(
             "[ERROR] no runs found. Expected %s/<model>/<timestamp>/PerformanceIndex.txt"
             % results_dir
         )
-    return runs
+    return decorated
 
 
 # --------------------------------------------------------------------------
@@ -1049,11 +957,21 @@ def main(argv=None):
     pipeline = resolve_pipeline(args.results_dir, args.pipeline)
 
     print("[INFO] discovering runs under %s/" % args.results_dir)
-    runs = discover_runs(args.results_dir)
+    # Named `discovered`, not `runs`: `runs` is now the aicds.runs module.
+    discovered = discover_runs(args.results_dir)
 
-    for run in runs:
-        run["data"] = parse_performance_index(run["perf_file"])
-        validate_parse(run["key"], run["data"])
+    for run in discovered:
+        index = read(run["perf_file"])
+        validate_parse(run["key"], index)
+        # MetricRow.as_dict() is the bridge, not a convenience. Every page below
+        # and all 16 entries in SANITY_CHECKS_BY_PIPELINE index rows by the
+        # file's own column names ("FS", "PR"); going through as_dict() keeps
+        # those 16 expectation dicts byte-identical to what they were when they
+        # were checked by hand against the run output.
+        run["data"] = {
+            strategy: {t: row.as_dict() for t, row in rows.items()}
+            for strategy, rows in index.aggregate.items()
+        }
         describe_run(run)
         print(
             "[INFO]   %-20s %s  (%s, %s)  PR=%.4f  P==R==F: %s"
@@ -1063,7 +981,7 @@ def main(argv=None):
             )
         )
 
-    runs_by_key = {run["key"]: run for run in runs}
+    runs_by_key = {run["key"]: run for run in discovered}
     checked, failures = run_sanity_checks(runs_by_key, pipeline)
     if failures:
         print("[ERROR] parser sanity checks FAILED:")
@@ -1087,7 +1005,7 @@ def main(argv=None):
         return 1
     print("[SUCCESS] %d parser sanity checks passed (pipeline: %s)" % (checked, pipeline))
 
-    build_report(runs, out_path, pipeline)
+    build_report(discovered, out_path, pipeline)
     print("[SUCCESS] wrote %s" % out_path)
     return 0
 

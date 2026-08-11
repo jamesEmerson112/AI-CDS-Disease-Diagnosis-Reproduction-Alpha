@@ -2,20 +2,41 @@
 """
 Build README-friendly SVG plots from existing experiment outputs.
 
-No third-party dependencies required.
+    python scripts/build_readme_plots.py
+    python scripts/build_readme_plots.py --runs-dir results_drg
+
+No third-party dependencies required: the charts are hand-written SVG.
+
+This script did not run at all before. Its discovery globbed
+``<repo_root>/Prediction_Output_*/PerformanceIndex.txt`` -- the repository root,
+where no run has ever been committed; the three committed runs are one level down
+in ``docs/``. Every invocation raised ``FileNotFoundError`` from
+``find_performance_files``, which is one of the five disagreeing discovery rules in
+docs/findings/10-output-path-fragmentation.md. Discovery is
+``aicds.runs.discover`` now and the default root is ``docs/``.
 """
 
 from __future__ import annotations
 
-import glob
+import argparse
 import os
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List
+
+from aicds import runs
+from aicds.analysis.performance_index import MetricRow, read
 
 
 METHOD_ORDER = ["MAX", "TOP-10", "TOP-20", "TOP-30", "TOP-40", "TOP-50"]
 THRESHOLDS = [0.6, 0.7, 0.8, 0.9, 1.0]
+# tab10, one hue per arm, assigned by identity and never cycled. BioSentVec is
+# inert against the default ``docs/`` root, which holds only the three BERT runs --
+# it is here so that ``--runs-dir results_drg`` (four arms) draws rather than
+# raising. Unknown models now raise instead of silently defaulting to grey: an arm
+# rendered in the same anonymous colour as any other is indistinguishable in a
+# legend, and this is the file whose output goes in the README.
 MODEL_COLORS = {
+    "BioSentVec": "#d62728",
     "Bio_ClinicalBERT": "#1f77b4",
     "BiomedBERT": "#ff7f0e",
     "BlueBERT": "#2ca02c",
@@ -26,84 +47,38 @@ def project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def find_performance_files(root: str) -> List[str]:
-    pattern = os.path.join(root, "Prediction_Output_*", "PerformanceIndex.txt")
-    files = sorted(glob.glob(pattern))
-    if not files:
-        raise FileNotFoundError("No PerformanceIndex.txt files found under Prediction_Output_*/")
-    return files
-
-
-def parse_metric_row(line: str) -> Tuple[float, Dict[str, float]] | None:
-    parts = line.strip().split()
-    if len(parts) < 7:
-        return None
+def series_color(model: str) -> str:
     try:
-        threshold = float(parts[0])
-        tp = float(parts[1])
-        fp = float(parts[2])
-        precision = float(parts[3])
-        recall = float(parts[4])
-        f1 = float(parts[5])
-        pr = float(parts[6])
-    except ValueError:
-        return None
-    return threshold, {
-        "TP": tp,
-        "FP": fp,
-        "P": precision,
-        "R": recall,
-        "FS": f1,
-        "PR": pr,
+        return MODEL_COLORS[model]
+    except KeyError:
+        raise KeyError(
+            "no colour assigned to model %r. Add one to MODEL_COLORS in "
+            "scripts/build_readme_plots.py -- these SVGs go in the README and a "
+            "shared fallback hue makes two arms one curve. Known: %s."
+            % (model, ", ".join(sorted(MODEL_COLORS)))
+        )
+
+
+def load_run(run: runs.Run) -> Dict[str, object]:
+    """One run's model name, aggregate metrics (as ``MetricRow``) and timings."""
+    index = read(run.performance_index)
+    return {
+        # The MODEL: line if the run wrote a trailer, else the label discovery
+        # derived from the layout. The old fallback stripped "Prediction_Output_"
+        # off a directory name, which under the nested layout yielded a timestamp.
+        "model": index.model or run.label,
+        "path": run.performance_index,
+        "metrics": index.aggregate,
+        "timing": index.timing,
     }
 
 
-def parse_performance_file(path: str) -> Dict[str, object]:
-    with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    model_name = None
-    metrics: Dict[str, Dict[float, Dict[str, float]]] = {}
-    timing: Dict[str, float] = {}
-
-    sec_pattern = re.compile(r"^([^:]+):\s+([0-9]+(?:\.[0-9]+)?)\s+seconds")
-    model_pattern = re.compile(r"^MODEL:\s+([^(]+)")
-
-    i = 0
-    while i < len(lines):
-        line = lines[i].rstrip("\n")
-        section = re.match(r"^10-FOLD PERFORMANCE INDEX of (.+?) SIMILARITY by MAX$", line.strip())
-        if section:
-            method = section.group(1).strip()
-            metrics[method] = {}
-            i += 1
-            while i < len(lines):
-                parsed = parse_metric_row(lines[i])
-                if parsed is None:
-                    if metrics.get(method):
-                        break
-                    i += 1
-                    continue
-                threshold, row = parsed
-                metrics[method][threshold] = row
-                i += 1
-            continue
-
-        sec_match = sec_pattern.match(line.strip())
-        if sec_match:
-            key = sec_match.group(1).strip()
-            timing[key] = float(sec_match.group(2))
-
-        model_match = model_pattern.match(line.strip())
-        if model_match:
-            model_name = model_match.group(1).strip()
-
-        i += 1
-
-    if not model_name:
-        model_name = os.path.basename(os.path.dirname(path)).replace("Prediction_Output_", "")
-
-    return {"model": model_name, "path": path, "metrics": metrics, "timing": timing}
+def metric(
+    metrics: Dict[str, Dict[float, MetricRow]], method: str, threshold: float
+) -> float:
+    """F-score for one (method, threshold), or 0.0 if the run lacks that cell."""
+    row = metrics.get(method, {}).get(threshold)
+    return row.f_score if row is not None else 0.0
 
 
 def svg_header(width: int, height: int) -> List[str]:
@@ -173,7 +148,7 @@ def draw_line_chart(
     # Series lines.
     legend_y = mt + 20
     for model, ys in series.items():
-        color = MODEL_COLORS.get(model, "#444444")
+        color = series_color(model)
         pts = []
         for x, yv in zip(x_positions, ys):
             y = map_linear(yv, y_min, y_max, y0, y1)
@@ -311,12 +286,25 @@ def parse_saturation_summary(path: str) -> Dict[str, Dict[float, float]]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    parser.add_argument(
+        "--runs-dir", default=None,
+        help="directory to discover runs under. Default: docs/, which holds the "
+             "three committed runs these README plots were drawn from.",
+    )
+    args = parser.parse_args()
+
     root = project_root()
     out_dir = os.path.join(root, "docs", "readme_plots")
     os.makedirs(out_dir, exist_ok=True)
 
-    perf_files = find_performance_files(root)
-    parsed = [parse_performance_file(p) for p in perf_files]
+    runs_dir = args.runs_dir or os.path.join(root, "docs")
+    discovered = runs.discover(runs_dir)
+    if not discovered:
+        raise FileNotFoundError(
+            "No run with a PerformanceIndex.txt found under %s" % runs_dir
+        )
+    parsed = [load_run(run) for run in discovered]
     model_order = ["Bio_ClinicalBERT", "BiomedBERT", "BlueBERT"]
     parsed.sort(key=lambda r: model_order.index(r["model"]) if r["model"] in model_order else 999)  # type: ignore[index]
 
@@ -326,8 +314,8 @@ def main() -> None:
     for r in parsed:
         model = r["model"]  # type: ignore[index]
         metrics = r["metrics"]  # type: ignore[index]
-        series_top10[model] = [metrics.get("TOP-10", {}).get(t, {}).get("FS", 0.0) for t in THRESHOLDS]  # type: ignore[union-attr]
-        series_top50[model] = [metrics.get("TOP-50", {}).get(t, {}).get("FS", 0.0) for t in THRESHOLDS]  # type: ignore[union-attr]
+        series_top10[model] = [metric(metrics, "TOP-10", t) for t in THRESHOLDS]  # type: ignore[arg-type]
+        series_top50[model] = [metric(metrics, "TOP-50", t) for t in THRESHOLDS]  # type: ignore[arg-type]
 
     draw_line_chart(
         os.path.join(out_dir, "f1_vs_threshold_top10.svg"),
@@ -360,7 +348,7 @@ def main() -> None:
         for r in parsed:
             model = r["model"]  # type: ignore[index]
             metrics = r["metrics"]  # type: ignore[index]
-            series_t[model] = [metrics.get(m, {}).get(threshold, {}).get("FS", 0.0) for m in METHOD_ORDER]  # type: ignore[union-attr]
+            series_t[model] = [metric(metrics, m, threshold) for m in METHOD_ORDER]  # type: ignore[arg-type]
         draw_line_chart(
             os.path.join(out_dir, f"f1_vs_topk_t{str(threshold).replace('.', '')}.svg"),
             f"F1 vs Top-K (Threshold {threshold})",

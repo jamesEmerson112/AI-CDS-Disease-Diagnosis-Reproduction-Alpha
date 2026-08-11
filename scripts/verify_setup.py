@@ -19,11 +19,16 @@ def main():
 
     # Check 1: Directory structure
     print("\n[1] Checking directory structure...")
+    # "output" is deliberately NOT here. No code writes it -- runs go to
+    # Prediction_Output_*/ in the cwd, or to --out ROOT/<key>/<stamp>/ -- so on a
+    # clean clone this check failed for a directory nothing needs, and it passed
+    # here only because a November 2025 run happened to leave one behind. A smoke
+    # test that fails on a correct checkout teaches people to ignore it.
     required_dirs = [
         "src", "src/aicds", "src/aicds/models", "src/aicds/entity",
         "src/aicds/utils",
         "scripts", "tests", "data", "data/folds", "data/raw",
-        "output", "docs", "config", "archive"
+        "docs", "config", "archive"
     ]
     for d in required_dirs:
         path = os.path.join(project_root, d)
@@ -47,6 +52,19 @@ def main():
         print(f"    OK: src.utils.Constants (CH_DIR={CH_DIR})")
     except ImportError as e:
         print(f"    FAIL: src.utils.Constants - {e}")
+        failed = True
+
+    try:
+        # The run-directory contract, both halves: run_dirs() is what every arm
+        # writes through and discover() is what every reporting script reads
+        # through. It imports with base dependencies alone -- no torch, no
+        # sent2vec, no matplotlib -- so a failure here is a broken checkout
+        # rather than a missing optional dependency, which is what makes it worth
+        # checking in a smoke test.
+        from aicds.runs import discover, run_dirs
+        print("    OK: aicds.runs (run_dirs writer + discover reader)")
+    except ImportError as e:
+        print(f"    FAIL: aicds.runs - {e}")
         failed = True
 
     try:

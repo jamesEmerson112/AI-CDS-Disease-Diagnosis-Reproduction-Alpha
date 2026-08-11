@@ -2,20 +2,31 @@
 """
 Build dashboard-data.json from experiment outputs.
 
-Reads PerformanceIndex.txt (3 models) and score_distribution_summary.txt,
-outputs a single JSON file consumed by the React dashboard.
+Reads each run's PerformanceIndex.txt plus score_distribution_summary.txt and
+writes the single JSON file the React dashboard fetches.
 
 Usage:
     python scripts/build_dashboard_data.py
+    python scripts/build_dashboard_data.py --runs-dir results_drg
+
+Reading is delegated: ``aicds.analysis.performance_index`` parses the file and
+``aicds.runs.discover`` finds the runs. The private parser that used to live here
+was a copy of ``build_readme_plots``' one, and it "recovered" a model name by
+stripping ``Prediction_Output_`` from a directory name -- which for the nested
+``<key>/<stamp>/`` layout returned the *timestamp* as the model name, silently.
+Discovery carries the label now, so the fallback names a model instead of a clock.
 """
 
 from __future__ import annotations
 
-import glob
+import argparse
 import json
 import os
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict
+
+from aicds import runs
+from aicds.analysis.performance_index import MetricRow, read
 
 
 def project_root() -> str:
@@ -23,71 +34,43 @@ def project_root() -> str:
 
 
 # ---------------------------------------------------------------------------
-# PerformanceIndex.txt parser (adapted from build_readme_plots.py)
+# The one deliberate rename at the JSON boundary
 # ---------------------------------------------------------------------------
 
-def parse_metric_row(line: str) -> Tuple[float, Dict[str, float]] | None:
-    parts = line.strip().split()
-    if len(parts) < 7:
-        return None
-    try:
-        return float(parts[0]), {
-            "TP": float(parts[1]),
-            "FP": float(parts[2]),
-            "P": float(parts[3]),
-            "R": float(parts[4]),
-            "F1": float(parts[5]),
-            "PR": float(parts[6]),
-        }
-    except ValueError:
-        return None
+# Column order as the file writes it, and as every previously generated
+# dashboard-data.json carries it. Iterating this tuple (rather than the dict from
+# as_dict()) is what keeps the emitted key order byte-identical.
+_JSON_ROW_KEYS = ("TP", "FP", "P", "R", "FS", "PR")
 
 
-def parse_performance_file(path: str) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+def row_for_json(row: MetricRow) -> Dict[str, float]:
+    """``MetricRow`` -> the dashboard's six-key row, with ``FS`` renamed ``F1``.
 
-    model_name = None
-    metrics: Dict[str, Dict[float, Dict[str, float]]] = {}
-    timing: Dict[str, float] = {}
+    The name is wrong and stays anyway. It is not an F1: across all 12,600
+    committed BERT rows precision == recall == F-score, so the column is accuracy
+    (docs/findings/04-metric-degeneracy.md). But ``F1VsThreshold.tsx`` reads
+    ``?.F1 ?? 0``, so renaming the key here does not break a chart -- it silently
+    zeroes every one of them, which is worse. Fixing the vocabulary is a dashboard
+    decision and belongs to P38; until then the rename lives on this one line
+    where a reader can see it, instead of being spread through a private parser.
+    """
+    columns = row.as_dict()
+    return {("F1" if key == "FS" else key): columns[key] for key in _JSON_ROW_KEYS}
 
-    sec_pattern = re.compile(r"^([^:]+):\s+([0-9]+(?:\.[0-9]+)?)\s+seconds")
-    model_pattern = re.compile(r"^MODEL:\s+([^(]+)")
 
-    i = 0
-    while i < len(lines):
-        line = lines[i].rstrip("\n")
-        section = re.match(r"^10-FOLD PERFORMANCE INDEX of (.+?) SIMILARITY by MAX$", line.strip())
-        if section:
-            method = section.group(1).strip()
-            metrics[method] = {}
-            i += 1
-            while i < len(lines):
-                parsed = parse_metric_row(lines[i])
-                if parsed is None:
-                    if metrics.get(method):
-                        break
-                    i += 1
-                    continue
-                threshold, row = parsed
-                metrics[method][threshold] = row
-                i += 1
-            continue
-
-        sec_match = sec_pattern.match(line.strip())
-        if sec_match:
-            timing[sec_match.group(1).strip()] = float(sec_match.group(2))
-
-        model_match = model_pattern.match(line.strip())
-        if model_match:
-            model_name = model_match.group(1).strip()
-
-        i += 1
-
-    if not model_name:
-        model_name = os.path.basename(os.path.dirname(path)).replace("Prediction_Output_", "")
-
-    return {"model": model_name, "metrics": metrics, "timing": timing}
+def load_run(run: runs.Run) -> Dict[str, Any]:
+    """One run's model name, aggregate metrics and timing trailer."""
+    index = read(run.performance_index)
+    return {
+        # The MODEL: line when the run wrote a trailer; otherwise the label
+        # discovery derived from the layout. Both name a model.
+        "model": index.model or run.label,
+        "metrics": {
+            strategy: {t: row_for_json(row) for t, row in rows.items()}
+            for strategy, rows in index.aggregate.items()
+        },
+        "timing": index.timing,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -165,17 +148,17 @@ def parse_score_distribution(path: str) -> Dict[str, Any]:
 # Build the combined JSON
 # ---------------------------------------------------------------------------
 
-def build_dashboard_data() -> Dict[str, Any]:
+def build_dashboard_data(runs_dir: str | None = None) -> Dict[str, Any]:
     root = project_root()
+    if runs_dir is None:
+        runs_dir = os.path.join(root, "docs")
 
-    # Find performance files
-    pattern = os.path.join(root, "docs", "Prediction_Output_*", "PerformanceIndex.txt")
-    perf_files = sorted(glob.glob(pattern))
-    if not perf_files:
-        raise FileNotFoundError(f"No PerformanceIndex.txt found matching {pattern}")
+    discovered = runs.discover(runs_dir)
+    if not discovered:
+        raise FileNotFoundError(f"No run with a PerformanceIndex.txt found under {runs_dir}")
 
     model_order = ["Bio_ClinicalBERT", "BiomedBERT", "BlueBERT"]
-    parsed = [parse_performance_file(p) for p in perf_files]
+    parsed = [load_run(run) for run in discovered]
     parsed.sort(key=lambda r: model_order.index(r["model"]) if r["model"] in model_order else 999)
 
     # Parse score distributions
@@ -242,8 +225,17 @@ def build_dashboard_data() -> Dict[str, Any]:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
+    parser.add_argument(
+        "--runs-dir", default=None,
+        help="directory to discover runs under. Default: docs/, which holds the "
+             "three committed regression-oracle runs the dashboard ships with. "
+             "Point it at results_drg/ (etc.) to rebuild from a newer pipeline.",
+    )
+    args = parser.parse_args()
+
     root = project_root()
-    data = build_dashboard_data()
+    data = build_dashboard_data(args.runs_dir)
 
     out_dir = os.path.join(root, "dashboard", "public", "data")
     os.makedirs(out_dir, exist_ok=True)
