@@ -49,9 +49,10 @@ preprocess_version
     Which ``preprocess_sentence``/``preprocess_diagnosis`` behaviour to use.
     ``"legacy"`` keeps the ``w/o`` -> ``w`` negation loss and the naive
     comma split. ``"corrected"`` protects ``w/o`` before slash-padding and
-    rejoins comma fragments to their predecessor. Note the rejoin is a
-    *heuristic* and still misses nine occurrences where the intra-label comma
-    carries no trailing space -- see ``split_symptoms`` and TODO P27.
+    rejoins comma fragments to their predecessor. That rejoin is a *heuristic*
+    and misses nine occurrences where the intra-label comma carries no trailing
+    space; ``"corrected2"`` is ``"corrected"`` plus the bounded second rule that
+    closes those nine (TODO P27) -- see ``split_symptoms``.
 grader
     How a prediction is scored against the truth, consumed by
     ``cython_utils.get_diagnosis_relevance``.
@@ -121,6 +122,20 @@ LEGACY = PipelineConfig()
 #: ``LEGACY``; that difference is the finding, not a regression.
 CORRECTED = PipelineConfig(fold_dir="folds_grouped", preprocess_version="corrected")
 
+#: ``CORRECTED`` plus the bounded second rejoin rule (TODO P27), which closes
+#: the nine bare-comma fragments ``CORRECTED`` leaves shredded.
+#:
+#: Why a THIRD variant rather than an edit to ``CORRECTED``: ``corrected`` is
+#: FROZEN. Every committed ``results_corrected/`` and ``results_drg/`` tree, the
+#: finding-11 and finding-13 numbers, and the pod byte-compare all describe the
+#: ``corrected`` text handling as it shipped. Editing it in place would move
+#: those numbers with no artifact left to prove the move was intentional --
+#: exactly the failure the LEGACY freeze exists to prevent, one layer up. The
+#: ``preprocess_version`` field was deliberately written as a *variant name*
+#: rather than a boolean for this case (see "Rules of the road" above), so the
+#: third revision costs one registry entry and moves nothing that already ran.
+CORRECTED2 = PipelineConfig(fold_dir="folds_grouped", preprocess_version="corrected2")
+
 #: Grouped folds, legacy text handling. Isolates the PATIENT LEAKAGE effect.
 FOLDS_ONLY = PipelineConfig(fold_dir="folds_grouped", preprocess_version="legacy")
 
@@ -177,6 +192,7 @@ _ENV_VAR = "AICDS_PIPELINE"
 _BY_NAME = {
     "legacy": LEGACY,
     "corrected": CORRECTED,
+    "corrected2": CORRECTED2,
     "folds-only": FOLDS_ONLY,
     "preprocess-only": PREPROCESS_ONLY,
     "drg": GRADER_DRG,
@@ -227,6 +243,9 @@ PIPELINE_NAMES = tuple(sorted(_BY_NAME))
 PIPELINE_HELP = (
     "legacy (default) reproduces the committed numbers byte-for-byte; "
     "corrected uses the GroupKFold folds AND the fixed preprocessing. "
+    "corrected2 is corrected plus the bounded second comma-rejoin rule, "
+    "which recovers the last nine shredded label fragments; corrected stays "
+    "frozen so its existing runs remain reproducible. "
     "folds-only and preprocess-only change one thing each, so the two "
     "effects can be told apart -- note preprocess-only still leaks patients "
     "and is an attribution instrument, not a result. "

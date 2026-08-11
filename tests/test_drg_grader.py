@@ -31,6 +31,7 @@ from aicds.config import (
     CORRECTED,
     GRADER_DRG,
     LEGACY,
+    PIPELINE_NAMES,
     SUPPORTED_GRADERS,
     PipelineConfig,
     from_name,
@@ -178,8 +179,16 @@ class TestDispatch:
             require_supported_grader(PipelineConfig(grader="drg-graded"))
 
     def test_every_selectable_pipeline_has_a_live_grader(self):
-        """No config may be selectable-but-unhonoured. This is the footgun guard."""
-        for name in ("legacy", "corrected", "folds-only", "preprocess-only", "drg"):
+        """No config may be selectable-but-unhonoured. This is the footgun guard.
+
+        Iterates PIPELINE_NAMES rather than a hand-written list: the list form
+        silently stopped covering the registry the moment `corrected2` was
+        added (five names enumerated, six registered). No live bug then --
+        CORRECTED2.grader is 'cosine' -- but a guard that does not follow the
+        registry is not a guard.
+        """
+        assert len(PIPELINE_NAMES) >= 6, PIPELINE_NAMES
+        for name in PIPELINE_NAMES:
             assert from_name(name).grader in SUPPORTED_GRADERS, name
 
     def test_drg_graded_is_not_selectable(self):

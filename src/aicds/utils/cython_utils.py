@@ -37,32 +37,71 @@ except LookupError:  # corpus not downloaded yet
     stop_words = set(stopwords.words('english'))
 
 
-def use_corrected_preprocessing(config):
-    """Resolve ``config.preprocess_version`` to a boolean, or refuse.
+# The preprocess_version values that have a consumer. Written as an explicit
+# allow-list rather than derived from aicds.config, because the point of the two
+# predicates below is that an unrecognised value RAISES; deriving the set from
+# the registry would make a config that exists-but-is-unimplemented resolve to
+# some arm silently, which is the failure this file spends two docstrings
+# forbidding.
+_PREPROCESS_VERSIONS = ('legacy', 'corrected', 'corrected2')
 
-    Deliberately NOT written as ``version != 'legacy'`` or
-    ``version == 'corrected'``. Both of those silently pick a side when the
-    value is a typo, and in this repository a silent side-pick is the exact
-    failure mode the config seam exists to prevent: ``'correced'`` would run
-    the legacy pipeline while the operator believed they had corrected it, and
-    the resulting numbers would be filed under the wrong arm. Unknown values
-    raise instead.
 
-    Public, not ``_``-prefixed, because the BERT arm calls it too: FIX 4 in
-    ``bert_models.compute_bert_diagnosis_embeddings`` gates on this same
-    predicate. A guard against silently picking a side only works while every
-    arm asks the same question, and a second, locally-written
-    ``version == 'corrected'`` in the other module would reintroduce exactly
-    the typo-swallowing this function exists to forbid.
+def _known_preprocess_version(config):
+    """The validated ``config.preprocess_version``, or raise.
+
+    One place resolves the field so the two predicates below cannot disagree
+    about which names exist -- a version accepted by one and rejected by the
+    other would be a half-corrected run.
     """
     version = config.preprocess_version
-    if version == 'legacy':
-        return False
-    if version == 'corrected':
-        return True
-    raise ValueError(
-        "unknown preprocess_version {!r}; expected 'legacy' or 'corrected'".format(version)
-    )
+    if version not in _PREPROCESS_VERSIONS:
+        raise ValueError(
+            "unknown preprocess_version {!r}; expected one of {}".format(
+                version, ", ".join(repr(v) for v in _PREPROCESS_VERSIONS)
+            )
+        )
+    return version
+
+
+def use_corrected_preprocessing(config):
+    """True when the fixed text handling is in force. Unknown versions raise.
+
+    Deliberately NOT written as ``version != 'legacy'``. That silently picks a
+    side when the value is a typo, and in this repository a silent side-pick is
+    the exact failure mode the config seam exists to prevent: ``'correced'``
+    would run the legacy pipeline while the operator believed they had
+    corrected it, and the resulting numbers would be filed under the wrong arm.
+
+    ``'corrected2'`` is a strict SUPERSET of ``'corrected'``, so every site
+    gated on this predicate -- rule 1 in :func:`split_symptoms`, the ``w/o``
+    expansion in :func:`preprocess_sentence`, and FIX 4 in
+    ``bert_models.compute_bert_diagnosis_embeddings`` -- fires under both. P27
+    adds a rule; it removes nothing. The narrow
+    :func:`use_corrected2_rejoin` is what distinguishes them, and it is the
+    only thing that should: a second predicate that answered "is this the
+    corrected arm?" differently in a different module is precisely the drift
+    this function was made public to prevent.
+    """
+    return _known_preprocess_version(config) != 'legacy'
+
+
+def use_corrected2_rejoin(config):
+    """True ONLY for ``'corrected2'``: the bounded second comma-rejoin rule.
+
+    Narrow on purpose. ``corrected`` is frozen -- ``results_corrected/`` and
+    ``results_drg/`` were minted through it and must stay regenerable -- so
+    this rule must be unreachable under any name but ``corrected2``. Unknown
+    versions raise here too, for the same reason as above.
+    """
+    return _known_preprocess_version(config) == 'corrected2'
+
+
+#: The CMS ICD-9-CM *short title* field is 24 characters wide, which is why
+#: these labels are abbreviated ('Vascular dementia,uncomp') in the first place.
+#: Rule 2 in :func:`split_symptoms` uses it as the bound on how much text a
+#: lower-case tail may absorb: a join longer than the source field could ever
+#: have held is not a recovered label, it is two symptoms glued together.
+_SHORT_TITLE_CAP = 24
 
 
 # --------------------------------------------------------------------------
@@ -113,53 +152,127 @@ def split_symptoms(text, config=LEGACY):
     ICD-9 short titles contain commas of their own, so 'Pneumonia, organism
     NOS' arrives as 'Pneumonia' plus the orphan ' organism NOS'.
 
-    Recovery is a HEURISTIC and it is INCOMPLETE. An earlier version of this
-    docstring called it "exact rather than heuristic", on the grounds that
-    every intra-label comma is followed by a space. **That is false** --
-    adversarial verification found nine occurrences using a bare comma, and
-    the claim was independently re-confirmed as wrong. Do not restore it.
+    Recovery is a HEURISTIC and it is INCOMPLETE under CORRECTED. An earlier
+    version of this docstring called it "exact rather than heuristic", on the
+    grounds that every intra-label comma is followed by a space. **That is
+    false** -- adversarial verification found nine occurrences using a bare
+    comma, and the claim was independently re-confirmed as wrong. Do not
+    restore it.
 
-    The rule -- a part beginning with a space is the tail of the part before
-    it -- recovers 80 of the 89 shredded parts (1,805 tokens -> 1,725; 573
-    unique strings -> 564). That is what stops 26 admissions sharing a
-    meaningless ' organism NOS' token which scores a spurious 1.0 against each
-    other under mean-of-max.
+    RULE 1 (``corrected`` and ``corrected2``) -- a part beginning with a space
+    is the tail of the part before it. It recovers 80 of the 89 shredded parts
+    (1,805 tokens -> 1,725; 573 unique strings -> 564). That is what stops 26
+    admissions sharing a meaningless ' organism NOS' token which scores a
+    spurious 1.0 against each other under mean-of-max.
 
-    KNOWN RESIDUAL, 9 occurrences across 4 labels, still shredded::
+    RULE 1's KNOWN RESIDUAL, 9 occurrences across 4 labels, still shredded
+    under ``corrected``::
 
         4x 'stage NOS'   3x 'stage III'   1x 'uncomp'   1x 'pharyngoesoph'
 
     They belong to 'Pressure ulcer,stage NOS', 'Pressure ulcer,stage III',
     'Vascular dementia,uncomp' and 'Dysphagia,pharyngoesoph'. **Two are
-    severity**, so a stage III pressure ulcer is currently indistinguishable
-    from an unstaged one -- the same class of loss as the w/o negation bug.
+    severity**, so under ``corrected`` a stage III pressure ulcer is
+    indistinguishable from an unstaged one -- the same class of loss as the
+    w/o negation bug.
 
-    A second rule would close it: treat a part starting lower-case as a tail
-    when the join still fits the CMS 24-character short-title cap. Measured,
-    that yields 1,716 tokens / 561 unique and zero residual, firing on exactly
-    those four labels. It is NOT implemented because it changes the contract
-    of this function -- 'fever,cough' would stop splitting -- which breaks
-    three existing tests that pin bare-comma separation. Landing it means
-    deciding those tests are wrong and re-verifying, so it belongs in its own
-    reviewed commit rather than riding along here.
+    RULE 2 (``corrected2`` ONLY, TODO P27) closes those nine. A part rejoins
+    its predecessor when ALL THREE hold:
 
-    The check to re-run if the dataset ever changes: count parts beginning
-    lower-case. It is 9 today and should never silently grow.
+      1. the part begins with a lower-case letter (the tail of an abbreviated
+         short title: 'stage NOS', 'uncomp', 'pharyngoesoph');
+      2. the accumulated predecessor begins with an UPPER-case letter -- the
+         ICD-9 short-title tell, since every label in this field is
+         capitalised;
+      3. the join is at most _SHORT_TITLE_CAP (24) characters, the width of the
+         CMS short-title field the abbreviation came from.
+
+    Measured on data/raw/Symptoms-Diagnosis.txt (129 admissions): 1,716 tokens,
+    561 unique strings, ZERO residual parts, firing exactly 9 times across
+    exactly those 4 labels. All five are pinned in
+    tests/test_symptom_splitting.py.
+
+    WHAT PINS WHAT -- the five real-data numbers pin the DATASET, the synthetic
+    fixtures pin the PREDICATE, and an earlier version of this paragraph
+    conflated them by claiming "a silent widening of the rule fails them".
+    **That is false**, and it was measured by mutating the shipped code:
+
+      * The five numbers catch a dataset change, and they catch a NARROWING
+        (_SHORT_TITLE_CAP 24 -> 23 moves them to 1,724 / 563 / 8 residual /
+        1 firing). They are BLIND to a widening: cap 25, 27, 30, 31, 40 or no
+        cap at all, and dropping condition 2 entirely, each leave all five
+        numbers identical. The reason is structural -- the committed file holds
+        no lower-case-leading part outside those nine, and no part longer than
+        24 characters, so a looser predicate has nothing extra to absorb.
+      * The predicate is pinned only by synthetic fixtures: the cap constant is
+        asserted to equal 24 directly; a 25-character join covers caps 25-30,
+        which no real-data number sees; 'Acute respiratry failure,uncomp' (31)
+        covers caps >= 31; and 'fever,cough' covers condition 2. Widen the rule
+        without touching those and the real-data tests stay green.
+
+    Same class of unmeasured guarantee as the "exact rather than heuristic"
+    claim corrected above. Do not restore either.
+
+    RULE 2's KNOWN COST -- state it plainly, it is a heuristic and it is wrong
+    in two directions:
+
+      * FALSE JOIN. 'Fever,cough' -- two genuine, separately-listed symptoms --
+        joins to 'Fever,cough' under ``corrected2``, because a capitalised
+        predecessor, a lower-case tail and an 11-character join satisfy all
+        three conditions. Condition 2 is what saves the lower-case
+        ``'fever,cough'`` (it still splits), and the 24-char cap is what saves
+        long pairs, but neither saves this one. Accepted: no such field exists
+        in the committed data, and the real-data sentinels above are the guard
+        that would catch it if one appeared.
+      * MISSED JOIN. A genuine bare-comma label longer than 24 characters --
+        'Acute respiratry failure,uncomp' (31) -- is NOT recovered. The cap
+        buys the false-join bound at the price of this tail.
+
+    ``corrected`` is deliberately FROZEN at rule 1: results_corrected/ and
+    results_drg/ were minted through it and must stay regenerable, and the
+    three tests pinning bare-comma separation under ``corrected`` are correct,
+    not stale. Rule 2 lives behind :func:`use_corrected2_rejoin` for exactly
+    that reason.
+
+    The check to re-run if the dataset ever changes: count parts that are
+    still fragments (leading space, or leading lower-case). It is 9 under
+    ``corrected`` and 0 under ``corrected2``, and neither should silently move.
 
     A leading-space part with no predecessor cannot be a continuation, so it
-    is kept as its own symptom rather than silently dropped.
+    is kept as its own symptom rather than silently dropped. The same holds for
+    a lower-case first part under rule 2.
     """
     parts = text.split(',')
     if not use_corrected_preprocessing(config):
         return parts
 
+    rejoin_bare_comma = use_corrected2_rejoin(config)
     rejoined = list()
     for part in parts:
         if rejoined and part.startswith(' '):
+            # RULE 1.
+            rejoined[-1] = rejoined[-1] + ',' + part
+        elif rejoin_bare_comma and rejoined and _is_short_title_tail(rejoined[-1], part):
+            # RULE 2, corrected2 only.
             rejoined[-1] = rejoined[-1] + ',' + part
         else:
             rejoined.append(part)
     return rejoined
+
+
+def _is_short_title_tail(head, part):
+    """RULE 2's predicate: is ``part`` the bare-comma tail of ``head``?
+
+    Split out so the three conditions are readable and testable as one unit;
+    see :func:`split_symptoms` for what each one buys and what it costs.
+    ``head`` is the *accumulated* predecessor, so a part that already absorbed
+    a rule-1 fragment is measured at its joined length against the cap.
+    """
+    return (
+        part[:1].islower()
+        and head[:1].isupper()
+        and len(head) + 1 + len(part) <= _SHORT_TITLE_CAP
+    )
 
 
 def cosine_similarity(u, v):
