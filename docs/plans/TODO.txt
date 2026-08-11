@@ -1,6 +1,30 @@
 AI-CDS DISEASE DIAGNOSIS - RANKED TODO
 Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
 Updated 2026-08-06 (late): P4 AND P5 BOTH COMPLETE. Both metric knobs are gone.
+Updated 2026-08-10: four phase decisions recorded (below); audit corrections folded in.
+
+DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
+  1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
+     PerformanceIndex parser (drift is active -- 4 parsers and ~7 discovery
+     rules as of the 2026-08-08 audit, and P5's own analyze_rank_metrics.py
+     added the 7th) and the --out/results root (stops hand-moving DUA-covered
+     output). The polish -- main.py CLI, SentenceEncoder registry, dashboard --
+     moves to the P38 clean repo. Phase 3 "ship point" is redefined
+     accordingly: this repo ships when the drift-stoppers land.
+  2. bert_eval.py IS DELETED OUTRIGHT, no salvage. The audit proved the
+     hf_automodel salvage target never existed in any branch; the GPU-aware
+     line is worthless (finding 08); mean-pooling can be rebuilt via the P38
+     encoder registry if ever wanted. Same commit must delete its stop_words
+     monkeypatch (bert_eval.py:63) and re-count the threshold-literal sites.
+     This RETIRES P18.
+  3. BASELINE RESIDUAL DEFECTS: fix locally now, verify on the next pod
+     session. The baseline has NO golden, so verification is one legacy
+     baseline run on Linux byte-compared against the existing 2026-08-05
+     artifact in results/. Piggybacks on the pod session that P29/P40 need
+     anyway -- no dedicated pod time.
+  4. NEXT SESSION IS P40 CODE, then ONE combined pod session runs P29's
+     staged attribution runs AND the P40-instrumented run together (plus the
+     decision-3 verification run). Most value per pod-hour.
 
 STATUS
   DONE     P1 P2 P3 P7 P9 P28 P29 P30 P34 P36
