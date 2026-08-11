@@ -15,7 +15,7 @@ if __name__ == "__main__":
     # registry itself. A hand-kept list here would silently drift from
     # config._BY_NAME, and the failure mode is a config that exists but cannot
     # be selected -- which is exactly the bug 31bea66 had to fix.
-    from aicds.config import PIPELINE_NAMES, from_env, from_name
+    from aicds.config import PIPELINE_HELP, PIPELINE_NAMES, from_env, from_name
 
     parser = argparse.ArgumentParser(description="BERT Disease Diagnosis Analysis")
     parser.add_argument(
@@ -28,18 +28,7 @@ if __name__ == "__main__":
         "--pipeline",
         choices=PIPELINE_NAMES,
         default=None,
-        help="legacy (default) reproduces the committed numbers byte-for-byte; "
-        "corrected uses the GroupKFold folds AND the fixed preprocessing. "
-        "folds-only and preprocess-only change one thing each, so the two "
-        "effects can be told apart -- note preprocess-only still leaks patients "
-        "and is an attribution instrument, not a result. "
-        "drg adds the encoder-independent grader on top of corrected: a "
-        "prediction counts only on an exact DRG label match, so all four arms "
-        "are scored by one ruler instead of each by its own embedding space. "
-        # %% -- argparse runs this string through % expansion, so a bare
-        # percent sign here breaks --help with an unrelated ValueError.
-        "Its ceiling is 58.9%%, not 100%%. "
-        "Falls back to $AICDS_PIPELINE, then legacy.",
+        help=PIPELINE_HELP,
     )
     args = parser.parse_args()
 

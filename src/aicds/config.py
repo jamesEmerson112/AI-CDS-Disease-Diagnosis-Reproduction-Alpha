@@ -160,11 +160,18 @@ GRADER_DRG = PipelineConfig(
 
 # Selecting a pipeline from outside the process.
 #
-# baseline_sent2vec.py executes its whole fold loop at import time, so there is
-# no moment after import at which a caller could rebind its config -- by then
-# the run is over. An environment variable is read at import, which is the one
-# hook that arrives early enough for both arms. LEGACY stays the default, so a
-# process that sets nothing is bit-identical and the golden is unaffected.
+# HISTORICAL: this env var used to be the ONLY hook for the baseline arm, because
+# baseline_sent2vec.py executed its whole fold loop at import time and there was
+# no moment after import at which a caller could rebind its config -- by then the
+# run was over. That is no longer true: the module now exposes
+# ``run_analysis(encoder=None, config=LEGACY)``, so a caller passes the config
+# directly, exactly as the BERT arm does.
+#
+# The env var stays as the script-level fallback shared by BOTH arms: each entry
+# point resolves ``from_name(args.pipeline) if args.pipeline else from_env()``, so
+# ``--pipeline`` wins and the variable covers the case where no flag is given.
+# LEGACY remains the default of ``from_env``, so a process that sets nothing is
+# bit-identical and the golden is unaffected.
 _ENV_VAR = "AICDS_PIPELINE"
 
 _BY_NAME = {
@@ -188,6 +195,25 @@ SUPPORTED_GRADERS = frozenset({"cosine", "drg-exact"})
 #: registry so a new config cannot exist-but-be-unselectable, which is the bug
 #: this seam shipped with initially.
 PIPELINE_NAMES = tuple(sorted(_BY_NAME))
+
+#: argparse ``help=`` for ``--pipeline``, shared by every entry point. It lives
+#: here rather than in one script because BOTH arms take the flag and the text
+#: describes the registry above: two copies would drift, and the copy that
+#: drifted would be the one describing a config the reader did not run.
+PIPELINE_HELP = (
+    "legacy (default) reproduces the committed numbers byte-for-byte; "
+    "corrected uses the GroupKFold folds AND the fixed preprocessing. "
+    "folds-only and preprocess-only change one thing each, so the two "
+    "effects can be told apart -- note preprocess-only still leaks patients "
+    "and is an attribution instrument, not a result. "
+    "drg adds the encoder-independent grader on top of corrected: a "
+    "prediction counts only on an exact DRG label match, so all four arms "
+    "are scored by one ruler instead of each by its own embedding space. "
+    # %% -- argparse runs this string through % expansion, so a bare
+    # percent sign here breaks --help with an unrelated ValueError.
+    "Its ceiling is 58.9%%, not 100%%. "
+    "Falls back to $AICDS_PIPELINE, then legacy; an explicit --pipeline wins."
+)
 
 
 def require_supported_grader(config):
