@@ -31,7 +31,6 @@ never by calling the function again inside an assertion.
 import os
 
 import pytest
-from nltk.corpus import stopwords
 
 from aicds.config import CORRECTED, LEGACY, PipelineConfig
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
@@ -39,10 +38,6 @@ from aicds.utils import cython_utils
 from aicds.utils.Constants import CH_DIR
 
 RAW_DATASET_PATH = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
-
-# Same incantation the other characterization tests use; preprocess_sentence
-# reads this module-level global.
-cython_utils.stop_words = set(stopwords.words("english"))
 
 
 def _symptom_fields():
@@ -231,7 +226,6 @@ class TestLoadDatasetThreadsTheConfig:
         return fold_dir
 
     def test_legacy_shreds_and_destroys_negation(self, tmp_path, monkeypatch):
-        cython_utils.stop_words = set(stopwords.words("english"))
         self._write_fold(
             tmp_path,
             b"999_Pneumonia, organism NOS,Tracheostomy w/o Extensive Procedure\n",
@@ -243,7 +237,6 @@ class TestLoadDatasetThreadsTheConfig:
         ]
 
     def test_corrected_rejoins_and_keeps_negation(self, tmp_path, monkeypatch):
-        cython_utils.stop_words = set(stopwords.words("english"))
         self._write_fold(
             tmp_path,
             b"999_Pneumonia, organism NOS,Tracheostomy w/o Extensive Procedure\n",

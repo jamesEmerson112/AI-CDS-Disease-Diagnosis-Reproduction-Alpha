@@ -17,16 +17,16 @@ from nltk.corpus import stopwords
 from string import punctuation
 
 # preprocess_sentence reads this at module scope, but for the whole history of
-# this file it was never defined here -- eight separate call sites monkeypatched
-# it in (four in src/scripts, four in tests), every one of them with the very
+# this file it was never defined here -- eleven separate call sites monkeypatched
+# it in (four in src/scripts, seven in tests), every one of them with the very
 # same `set(stopwords.words('english'))`. Any new caller that forgot the
 # incantation got a bare NameError from inside tokenization.
 #
-# Defining it here is numerically inert precisely BECAUSE all eight used an
-# identical expression: the patches that remain still assign an equal value.
-# They are removed in the very next commit, separately, because stop_words feeds
-# tokenization -> embeddings -> every number in PerformanceIndex.txt, and a
-# change that broad deserves an unambiguous culprit commit.
+# Those eleven patches are now GONE, and the definition below is the single
+# source of `stop_words`. Deleting them was numerically inert precisely BECAUSE
+# all eleven assigned an identical expression and module import always preceded
+# the patch, so the value never changed -- which mattered, because stop_words
+# feeds tokenization -> embeddings -> every number in PerformanceIndex.txt.
 #
 # The download guard matters for import order: bert_models imports this module
 # before it calls ensure_nltk_data(), so on a machine without the corpus an

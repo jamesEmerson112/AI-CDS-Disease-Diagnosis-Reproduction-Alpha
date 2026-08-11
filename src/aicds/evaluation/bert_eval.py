@@ -58,9 +58,8 @@ def ensure_nltk_data():
 
 ensure_nltk_data()
 
-# Initialize stopwords for util_cy preprocessing
+# stop_words now lives at module scope in aicds.utils.cython_utils.
 from nltk.corpus import stopwords
-util_cy.stop_words = set(stopwords.words('english'))
 
 
 class BioClinicalBERTEvaluator:

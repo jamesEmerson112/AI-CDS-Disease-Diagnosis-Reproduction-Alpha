@@ -219,11 +219,6 @@ from aicds.utils.runtime import ensure_nltk_data, format_time
 # Call before any NLTK usage
 ensure_nltk_data()
 
-# FIX: Initialize missing stop_words global variable in util_cy module
-# The compiled C code is missing this initialization
-from nltk.corpus import stopwords
-util_cy.stop_words = set(stopwords.words('english'))
-
 from pathlib import Path
 
 # Import matplotlib for PDF generation

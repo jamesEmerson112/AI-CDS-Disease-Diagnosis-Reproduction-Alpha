@@ -35,16 +35,6 @@ from aicds.utils.Constants import (
 )
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 
-# cython_utils.preprocess_sentence reads a module-level `stop_words` global that
-# is never defined in the module itself -- it is monkey-patched in by every
-# caller (baseline_sent2vec.py, bert_models.py, bert_eval.py,
-# analyze_score_distributions.py). None of the functions under test here call
-# preprocess_sentence, but we set it anyway for parity with how the rest of the
-# suite behaves and in case that changes.
-from nltk.corpus import stopwords
-
-util_cy.stop_words = set(stopwords.words("english"))
-
 # Importing bert_models is expensive (torch, sentence-transformers, sklearn,
 # matplotlib) but the task brief targets its functions directly, so we pay the
 # cost once at module scope like the rest of the suite does.

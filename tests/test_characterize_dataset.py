@@ -16,8 +16,6 @@ hard-coded.
 
 import os
 
-from nltk.corpus import stopwords
-
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils import cython_utils
 from aicds.utils.Constants import CH_DIR
@@ -193,8 +191,6 @@ class TestTrailingNewlineInvariant:
                 assert raw.endswith(b"\n"), f"Fold{i}/{name} is missing its trailing newline"
 
     def test_load_dataset_strips_exactly_the_newline_when_present(self, tmp_path, monkeypatch):
-        cython_utils.stop_words = set(stopwords.words("english"))
-
         fold_dir = tmp_path / "data" / "folds" / "Fold0"
         fold_dir.mkdir(parents=True)
         (fold_dir / "TestSet.txt").write_bytes(b"999_symptomone,symptomtwo.\n")
@@ -212,8 +208,6 @@ class TestTrailingNewlineInvariant:
         file generator that forgets the trailing newline does not raise --
         it silently corrupts the last symptom of the last line.
         """
-        cython_utils.stop_words = set(stopwords.words("english"))
-
         fold_dir = tmp_path / "data" / "folds" / "Fold0"
         fold_dir.mkdir(parents=True)
         # No trailing '\n' here -- the real character 'z' is what gets eaten.

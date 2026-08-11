@@ -34,7 +34,6 @@ from aicds.utils import cython_utils as util_cy
 
 # Initialize NLTK data (required by cython_utils)
 import nltk
-from nltk.corpus import stopwords
 from string import punctuation
 
 for pkg in ['stopwords', 'punkt_tab', 'punkt']:
@@ -42,8 +41,6 @@ for pkg in ['stopwords', 'punkt_tab', 'punkt']:
         nltk.data.find(f'corpora/{pkg}' if pkg == 'stopwords' else f'tokenizers/{pkg}')
     except LookupError:
         nltk.download(pkg, quiet=True)
-
-util_cy.stop_words = set(stopwords.words('english'))
 
 # Matplotlib setup
 import matplotlib

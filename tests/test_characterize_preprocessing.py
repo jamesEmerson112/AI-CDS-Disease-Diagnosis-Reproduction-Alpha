@@ -42,11 +42,9 @@ from nltk.corpus import stopwords
 from aicds.config import CORRECTED, LEGACY, PipelineConfig
 from aicds.utils import cython_utils
 
-# preprocess_sentence reads the module-level `stop_words` global, which the
-# module itself does not define -- every real call site monkey-patches it in
-# (baseline_sent2vec.py:66, bert_models.py:240, bert_eval.py:63,
-# analyze_score_distributions.py:48), all with this identical expression.
-cython_utils.stop_words = set(stopwords.words("english"))
+# `stopwords` is imported above for the assertions in this file that inspect the
+# English stopword list directly; preprocess_sentence gets its `stop_words`
+# global from aicds.utils.cython_utils' own module-scope definition.
 
 
 def _diagnosis_by_description(result):
