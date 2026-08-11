@@ -182,6 +182,30 @@ _BY_NAME = {
     "drg": GRADER_DRG,
 }
 
+
+def name_of(config):
+    """The registry name of ``config``, or ``None`` if it is not a registry entry.
+
+    The inverse of :func:`from_name`, and the reason it can be written as a
+    value lookup rather than an identity check is that ``PipelineConfig`` is a
+    frozen dataclass: two configs with the same three fields ARE equal, so a
+    caller that rebuilt ``PipelineConfig(fold_dir="folds_grouped",
+    preprocess_version="corrected", grader="drg-exact")`` by hand still gets
+    back ``"drg"``. That is the honest answer -- the name describes the values,
+    not the object.
+
+    ``None`` is a first-class result, not a failure. A run may legitimately be
+    driven by a config assembled in a test or in an ad-hoc experiment, and
+    ``run_metadata.json`` records the name *alongside* all three fields for
+    exactly this case: the null says "no registry entry describes this", and the
+    fields still identify the run completely. Never make this raise -- a caller
+    recording provenance must not be the thing that kills a finished run.
+    """
+    for name, known in _BY_NAME.items():
+        if known == config:
+            return name
+    return None
+
 #: Grader values that a consumer actually honours. This exists because a config
 #: field with no reader is worse than no field at all: for a short window during
 #: development, ``--pipeline drg`` was selectable, printed a plausible banner,

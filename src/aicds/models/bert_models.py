@@ -796,6 +796,16 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY, out=None):
     rank_metrics_path = rank_accumulator.write(directory_prediction_root)
     print(f"[SUCCESS] Rank metrics written to {os.path.basename(rank_metrics_path)}")
 
+    ################################################################################################################
+    # P14: RUN METADATA -- what produced this run, written LAST
+    ################################################################################################################
+    # After PerformanceIndex.txt closes, for the same fail-safe reason as the rank
+    # metrics above, and after the rank metrics so that the file's presence means
+    # the run reached the very end. write_run_metadata never raises: a 12-minute
+    # run whose numbers are already on disk must not be lost to a git lookup.
+    if runs.write_run_metadata(directory_prediction_root, config, model_name, _dirs.stamp):
+        print(f"[SUCCESS] Run metadata written to {runs.RUN_METADATA}")
+
     # Close debug log file if it was opened
     if debug_log_file:
         debug_log_file.write("\n" + "=" * 80 + "\n")

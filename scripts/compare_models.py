@@ -26,6 +26,7 @@ would fail all 16 rather than quietly redraw the charts.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from collections import OrderedDict
@@ -171,10 +172,14 @@ SANITY_CHECKS_BY_PIPELINE = {
     ],
 }
 
-# Which pipeline a results tree came from is not recorded in the output (that is
-# P14, run_metadata.json). Until it is, infer from the directory name and let
-# --pipeline override. Inference is a convenience, never a guess that proceeds
-# silently: an unrecognised tree fails loudly below.
+# Which pipeline a results tree came from IS recorded in the output now: every
+# run since P14 writes run_metadata.json next to its PerformanceIndex.txt, and
+# resolve_pipeline reads it. This table is the FALLBACK for pre-P14 runs, which
+# includes every committed tree under results*/ -- they were produced before the
+# writer existed and nothing will retrofit them, since the honest metadata for a
+# run nobody can re-derive is no metadata. Inference is a convenience, never a
+# guess that proceeds silently: an unrecognised tree with no metadata still fails
+# loudly below.
 _PIPELINE_BY_DIRNAME = {
     "results": "legacy",
     "results_corrected": "corrected",
@@ -327,8 +332,74 @@ def describe_run(run):
     return run
 
 
+def recorded_pipeline(results_dir):
+    """The pipeline name every run under ``results_dir`` agrees on, or ``None``.
+
+    ``None`` means no run in the tree carries a readable ``run_metadata.json``
+    with a non-null ``pipeline.name`` -- true of every pre-P14 run, and of any
+    run driven by a hand-built config the registry cannot name. Runs without it
+    are skipped rather than counted against the others: a tree half-migrated in
+    TIME (old runs plus one fresh one) is normal, and only a tree mixed in
+    PIPELINE is a problem.
+
+    Every run is inspected, not just the latest per arm, because a stale
+    ``legacy`` run sitting beside a fresh ``corrected`` one in the same root is
+    exactly the confusion this script exists to prevent -- and the report draws
+    only one of them, so the reader would never see the other.
+
+    Raises ``SystemExit`` on disagreement, naming both runs. Nothing is inferred
+    from a mixed tree: the two answers are equally well-evidenced and picking
+    one would attribute half a comparison to the wrong pipeline.
+    """
+    try:
+        discovered = runs.discover(results_dir, all_runs=True)
+    except (runs.RunLayoutError, OSError):
+        # Not this function's error to report. discover_runs() re-walks the same
+        # tree a moment later and raises with the layout diagnostics.
+        return None
+
+    found = []
+    for run in discovered:
+        path = run.file(runs.RUN_METADATA)
+        if path is None:
+            continue
+        try:
+            with open(path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            name = payload["pipeline"]["name"]
+        except (ValueError, KeyError, TypeError, OSError):
+            # Unreadable or malformed metadata is treated as absent. It is a
+            # provenance file, not a result: it must not be able to stop a
+            # report that the numbers themselves fully support.
+            continue
+        if name:
+            found.append((name, run))
+
+    if not found:
+        return None
+
+    first_name, first_run = found[0]
+    for name, run in found[1:]:
+        if name != first_name:
+            raise SystemExit(
+                "[ERROR] mixed-pipeline results tree: %s\n"
+                "        %s says pipeline '%s'\n"
+                "        %s says pipeline '%s'\n"
+                "        These runs cannot be compared -- they were produced by\n"
+                "        different pipelines. Split them into separate roots."
+                % (results_dir, first_run.path, first_name, run.path, name)
+            )
+    return first_name
+
+
 def resolve_pipeline(results_dir, requested):
     """Decide which pipeline's expectations to check the parse against.
+
+    Three sources, in order: an explicit ``--pipeline``, then the runs' own
+    ``run_metadata.json`` (P14), then the directory name. The last is a
+    fallback for pre-P14 trees and says so on stderr-adjacent output, because an
+    inference that looks like a reading is how a tree ends up mislabelled by its
+    own folder name.
 
     Refuses rather than guesses. A results tree whose pipeline cannot be
     established, or one whose pipeline has no recorded expectations, exits with
@@ -337,7 +408,27 @@ def resolve_pipeline(results_dir, requested):
     """
     known = ", ".join(sorted(SANITY_CHECKS_BY_PIPELINE))
 
-    if requested is None:
+    recorded = recorded_pipeline(results_dir)
+    if recorded is None:
+        # Once per invocation, whether or not --pipeline was passed: the absence
+        # of provenance is a fact about the tree, not about the flag.
+        print(
+            "[WARN] no run_metadata.json under %s; inferring pipeline from "
+            "directory name (pre-C8 runs)" % results_dir
+        )
+
+    if requested is not None:
+        print("[INFO] pipeline: %s (explicit)" % requested)
+        if recorded is not None and recorded != requested:
+            print(
+                "[WARN] run_metadata.json under %s records pipeline '%s', but "
+                "--pipeline says '%s'; using the explicit flag"
+                % (results_dir, recorded, requested)
+            )
+    elif recorded is not None:
+        requested = recorded
+        print("[INFO] pipeline from run_metadata.json: %s" % requested)
+    else:
         basename = os.path.basename(os.path.normpath(results_dir))
         requested = _PIPELINE_BY_DIRNAME.get(basename)
         if requested is None:
@@ -346,8 +437,6 @@ def resolve_pipeline(results_dir, requested):
                 "        Pass --pipeline explicitly. Known: %s." % (results_dir, known)
             )
         print("[INFO] pipeline inferred from directory name: %s" % requested)
-    else:
-        print("[INFO] pipeline: %s (explicit)" % requested)
 
     if requested not in SANITY_CHECKS_BY_PIPELINE:
         raise SystemExit(

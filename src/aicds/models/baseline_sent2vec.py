@@ -522,6 +522,18 @@ def run_analysis(encoder=None, config=LEGACY, out=None):
     rank_metrics_path = rank_accumulator.write(directory_prediction_root)
     print("[SUCCESS] Rank metrics written to " + os.path.basename(rank_metrics_path))
 
+    ##########################################################################################################
+    # P14: RUN METADATA -- what produced this run, written LAST
+    ##########################################################################################################
+    # Also outside the with-block, and after the rank metrics, so the file's
+    # presence means the run reached the very end. This is what retires the
+    # caveat in run_analysis's banner above: until now the run log was the ONLY
+    # record of which pipeline produced a baseline directory, and a log is not an
+    # artifact. write_run_metadata never raises -- a 13-minute run whose numbers
+    # are already on disk must not be lost to a git lookup.
+    if runs.write_run_metadata(directory_prediction_root, config, "BioSentVec", _dirs.stamp):
+        print("[SUCCESS] Run metadata written to " + runs.RUN_METADATA)
+
     print(f"\n[SUCCESS] Timing report saved to: {timing_file_path}")
     print(f"[SUCCESS] Timing summary appended to: {directory_prediction_root}/PerformanceIndex.txt")
 
