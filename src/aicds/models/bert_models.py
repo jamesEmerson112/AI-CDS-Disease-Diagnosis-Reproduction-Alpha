@@ -797,6 +797,18 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY, out=None):
     print(f"[SUCCESS] Rank metrics written to {os.path.basename(rank_metrics_path)}")
 
     ################################################################################################################
+    # P40: PER-CASE RECORD -- a second sibling, same after-the-close position
+    ################################################################################################################
+    # Derived entirely from vectors the accumulator already holds, so it costs no
+    # prediction-time work and cannot move a number. This arm never abstains; the
+    # baseline abstains on 31 of 129 cases, and comparing the two on the baseline's
+    # 98 answered cases -- the self-selection test -- needs a per-case record from
+    # BOTH arms. HADM_ID-keyed, so it stays inside this (gitignored) run directory.
+    # See scripts/analyze_rank_metrics.py.
+    rank_cases_path = rank_accumulator.write_cases(directory_prediction_root)
+    print(f"[SUCCESS] Per-case records written to {os.path.basename(rank_cases_path)}")
+
+    ################################################################################################################
     # P14: RUN METADATA -- what produced this run, written LAST
     ################################################################################################################
     # After PerformanceIndex.txt closes, for the same fail-safe reason as the rank

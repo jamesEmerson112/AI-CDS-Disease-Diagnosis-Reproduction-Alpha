@@ -523,6 +523,18 @@ def run_analysis(encoder=None, config=LEGACY, out=None):
     print("[SUCCESS] Rank metrics written to " + os.path.basename(rank_metrics_path))
 
     ##########################################################################################################
+    # P40: PER-CASE RECORD -- a second sibling, same after-the-close position
+    ##########################################################################################################
+    # Derived entirely from vectors the accumulator already holds, so it costs no
+    # prediction-time work and cannot move a number. It is what makes the
+    # self-selection question answerable: this arm abstains on 31 of 129 cases,
+    # and only a per-case record lets the BERT arms be restricted to the 98 it
+    # DID answer. HADM_ID-keyed -- it stays inside this (gitignored) run
+    # directory. See scripts/analyze_rank_metrics.py.
+    rank_cases_path = rank_accumulator.write_cases(directory_prediction_root)
+    print("[SUCCESS] Per-case records written to " + os.path.basename(rank_cases_path))
+
+    ##########################################################################################################
     # P14: RUN METADATA -- what produced this run, written LAST
     ##########################################################################################################
     # Also outside the with-block, and after the rank metrics, so the file's

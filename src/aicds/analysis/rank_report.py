@@ -70,7 +70,13 @@ from aicds.analysis.rank_metrics import (
 from aicds.config import LEGACY
 from aicds.utils.Constants import K_FOLD
 
-__all__ = ["RankAccumulator", "REPORT_KS", "binarise"]
+__all__ = [
+    "RankAccumulator",
+    "REPORT_KS",
+    "binarise",
+    "first_relevant_rank",
+    "RANK_CASES_FILENAME",
+]
 
 # 1 and 5 are additions -- the pipeline's own range starts at 10, but the top of
 # the list is where a rank-aware metric is most informative and it costs nothing
@@ -83,6 +89,12 @@ POPULATIONS = ["winnable", "all-cases", "answered"]
 # so no metric here can see past rank 50. Naming it MRR@50 rather than MRR is the
 # difference between a bounded statement and an overclaim.
 MRR_CAP = 50
+
+#: The per-case sibling (P40). Named here rather than spelled again in each
+#: reader: ``scripts/analyze_rank_metrics.py`` asks a discovered run for this
+#: exact name, and a typo on either side degrades to "pre-P40 run" rather than
+#: to an error.
+RANK_CASES_FILENAME = "RankCases.txt"
 
 
 def binarise(similarities):
@@ -100,6 +112,28 @@ def binarise(similarities):
     already reports.
     """
     return [1.0 if value >= 1.0 else 0.0 for value in similarities]
+
+
+def first_relevant_rank(relevance):
+    """1-based rank of the first relevant entry, or ``None`` if there is none.
+
+    The same scan ``reciprocal_rank`` performs, reported as the rank rather than
+    as its reciprocal, because ``RankCases.txt`` is read by humans and a rank is
+    what a clinician-facing candidate list actually has. It is NOT re-derived by
+    inverting RR: ``1 / (1 / 3)`` is ``3.0000000000000004`` in IEEE-754, and a
+    rounding step there would be a silent wrong answer in a file whose whole job
+    is to be the per-case record. ``tests/test_rank_cases.py`` pins the identity
+    ``reciprocal_rank(rel) == 1 / first_relevant_rank(rel)`` so the two readings
+    cannot drift.
+
+    Abstention (an empty vector) and "answered but nothing relevant" both return
+    ``None``; the two are told apart by the candidate count, which is why that
+    column exists.
+    """
+    for i, value in enumerate(relevance):
+        if float(value) > 0.0:
+            return i + 1
+    return None
 
 
 def _mean(values):
@@ -146,6 +180,7 @@ class RankAccumulator:
         acc.add(fold, hadm_id, top_similarities_max)
         ...
         acc.write(output_dir)                   # once, at the end
+        acc.write_cases(output_dir)             # the per-case sibling (P40)
 
     ``add`` takes the RAW similarity vector and binarises internally, so a caller
     cannot accidentally pass an already-thresholded list under one convention and
@@ -354,6 +389,98 @@ class RankAccumulator:
             self._write_block(out, "%d-FOLD  (pooled over cases)" % K_FOLD,
                               lambda p: self.aggregate(p, pooled=True))
         return path
+
+    def write_cases(self, output_dir, filename=RANK_CASES_FILENAME):
+        """Write the per-case record: one line per test case (P40).
+
+        WHY A SECOND SIBLING FILE. ``RankMetrics.txt`` carries only aggregates,
+        so the one question finding 13 left open cannot be asked of it: *are the
+        baseline's 98 answered cases simply the easy ones?* Answering that needs
+        the BERT arms restricted to exactly that case set, which needs per-case
+        identities and per-case outcomes. Nothing else in the repository carries
+        them -- both arms' legacy per-case handles have been open-and-closed with
+        nothing written between them since the original code (CLAUDE.md, "Known
+        defects"), and P40 deliberately does NOT repair them: a new sibling keeps
+        the golden covering exactly what it covered before, the same reasoning
+        that kept P5 additive.
+
+        EVERYTHING HERE IS DERIVED, NOTHING IS COLLECTED. The rows come from the
+        ``by_fold`` structure ``add`` already built, so this method adds no work
+        at prediction time, cannot perturb the pipeline's arithmetic, and cannot
+        disagree with ``RankMetrics.txt`` about what happened in a case -- both
+        read the same binarised vectors, produced by the same single relevance
+        rule in :func:`binarise`.
+
+        DUA. Every line is keyed by HADM_ID, so this file may only ever be
+        written into a run directory -- all of which are gitignored, by the
+        ``results*/`` glob and the anchored ``Prediction_Output_*`` patterns. It
+        must never be copied into ``docs/`` or any tracked path. Tests use
+        synthetic 999xxx identifiers for exactly this reason.
+
+        Deliberately does NOT call ``_check_complete``. This is the record of
+        what was stored, and a file that refuses to show you a truncated record
+        is useless precisely when you need it; ``write`` runs first in both arms
+        and already raises on an incomplete fold, so the check is not skipped,
+        only kept out of the dump.
+        """
+        path = os.path.join(output_dir, filename)
+        # newline="\n" so a run harvested from the Linux pod and one produced on
+        # a Windows checkout are byte-comparable -- the same reasoning as
+        # runs.write_run_metadata. RankMetrics.txt predates that decision and is
+        # left alone rather than churned.
+        with open(path, "w", encoding="utf-8", newline="\n") as out:
+            self._write_cases_header(out)
+            for fold in sorted(self.by_fold):
+                # Cases in STORED order, which is the order the fold's test set
+                # was iterated in. Sorting them here would be a second, silent
+                # ordering convention for the same data.
+                for hadm_id, relevance in self.by_fold[fold]:
+                    rank = first_relevant_rank(relevance)
+                    out.write(
+                        "%d\t%s\t%s\t%d\t%s\n"
+                        % (
+                            fold,
+                            hadm_id,
+                            "answered" if relevance else "abstained",
+                            len(relevance),
+                            "none" if rank is None else rank,
+                        )
+                    )
+        return path
+
+    def _write_cases_header(self, out):
+        """A self-describing header: every line starts with ``#``.
+
+        The comment prefix is what makes the format parseable without a schema --
+        a reader keeps the lines that do not start with ``#`` and splits on tabs,
+        and a header line can therefore be added later without breaking one.
+        """
+        # The accumulator is not told which model it belongs to, and is not given
+        # a constructor argument for it here: that would be a signature change to
+        # a method both arms already call, for a fact run_metadata.json records
+        # properly. getattr rather than a hard-coded string so an accumulator that
+        # is later given the attribute starts reporting it.
+        model = getattr(self, "model_name", None)
+        out.write("# RANK CASES -- one line per test case (P40)\n")
+        out.write("# model         %s\n"
+                  % (model or "(not recorded here -- see run_metadata.json)"))
+        out.write("# pipeline      %s   folds: %s   grader: %s\n"
+                  % (self.config.preprocess_version, self.config.fold_dir,
+                     self.config.grader))
+        out.write("# k_fold        %d   folds present: %d   cases: %d\n"
+                  % (K_FOLD, len(self.by_fold),
+                     sum(len(rows) for rows in self.by_fold.values())))
+        out.write("# relevance     similarity >= 1.0, in rank order -- the SAME rule\n")
+        out.write("#               RankMetrics.txt uses, so the two files agree by\n")
+        out.write("#               construction rather than by convention\n")
+        out.write("# format        fold<TAB>hadm_id<TAB>status<TAB>candidates<TAB>"
+                  "first_relevant_rank\n")
+        out.write("# status        answered | abstained; abstained iff candidates == 0\n")
+        out.write("# rank          1-based rank of the first relevant candidate, or\n")
+        out.write("#               `none`. `none` with candidates > 0 is an answer that\n")
+        out.write("#               missed; `none` with candidates == 0 is an abstention.\n")
+        out.write("# DUA           HADM_ID-keyed. This file belongs ONLY inside a\n")
+        out.write("#               gitignored run directory. Never copy it into docs/.\n")
 
     def _write_header(self, out):
         out.write("=" * 78 + "\n")
