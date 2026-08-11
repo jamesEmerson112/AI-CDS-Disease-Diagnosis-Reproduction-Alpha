@@ -768,8 +768,8 @@ rejects its GCC-only compiler flags. See [docs/guides/setup.md](docs/guides/setu
 procedure, including the macOS/ARM OpenMP conflict and the Linux torch/nltk `LD_LIBRARY_PATH` trap.
 
 **Testing:** `pytest` runs the fast suite in seconds. `pytest -m golden` re-runs the full 10-fold
-pipeline and compares it **byte-for-byte** against a committed reference (**43–53 min**, measured five
-times: 43:28, 44:32, ~50:00, 52:35, 53:10 — budget for the top of that range, not the bottom). Nothing here is
+pipeline and compares it **byte-for-byte** against a committed reference (**43–53 min**, measured six
+times: 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 — budget for the top of that range, not the bottom). Nothing here is
 trained, so every emitted number is a pure function of the input data and the arithmetic in
 `cython_utils.py` — meaning any behaviour change is a numerical change, and the realistic failure
 mode of refactoring is the numbers moving while every other test stays green. The golden is the only

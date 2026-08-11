@@ -139,8 +139,8 @@ Tests:
 pytest                    # 413 passed, 3 deselected — this is the green baseline
                           # (was 264 before the C1-C8 refactor added its tests)
 pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
-                          # byte-exact reference. ~43-53 min (measured five
-                          # times: 43:28, 44:32, ~50:00, 52:35, 53:10 — NOT
+                          # byte-exact reference. ~43-53 min (measured six
+                          # times: 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 — NOT
                           # the ~20 min this file used to
                           # claim — and NOT the ~20 min tests/test_golden.py's
                           # own docstring still claims at :68). Run it

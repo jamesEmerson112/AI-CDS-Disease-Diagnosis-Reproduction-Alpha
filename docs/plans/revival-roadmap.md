@@ -6,7 +6,7 @@
 > (docs) was pulled forward and is also done. Phase 1 (safety net) is done — the fast suite now
 > stands at **413 passed / 3 deselected** (264 before the refactor batch), plus `pytest -m
 > golden`, a byte-exact 10-fold regression against a committed reference (**43–53 min**, measured
-> five times: 43:28, 44:32, ~50:00, 52:35, 53:10 — NOT the ~20 min this file once claimed).
+> six times: 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 — NOT the ~20 min this file once claimed).
 >
 > **Phase 2 is finished.** Landed earlier: the `src/aicds/` package move (`d0ecaa9`+`2a0b77d`),
 > src-layout pyproject, helper consolidation (`bd6fe47`), central `stop_words` (`5ae01a0`).
