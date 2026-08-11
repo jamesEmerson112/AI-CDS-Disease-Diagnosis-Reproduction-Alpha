@@ -9,6 +9,24 @@ Updated 2026-08-11 (later): the whole batch PUSHED (e6bb8e3..a53c84b); C9's SHA
   whose ignore pattern never matched. Next up, per decision 4: P40 code, then
   the ONE combined pod session (P29 staged runs + P40-instrumented run + the
   C4/C5 legacy-baseline byte-compare against results/baseline/05082026_18-55-32).
+Updated 2026-08-11 (audit): a full pass over all 1463 lines against the tree at
+  fcc85a8. This file had ACCRETED rather than been updated: five items sat in
+  contradictory checkbox states (P34 five ways; P4, P9, P31, P36 three or two
+  ways; P29 in three at once), five items discovered after Tier 1 were missing
+  from the ranked checklist entirely (P32 P33 P34 P39 P40 -- including P40, the
+  declared highest-value open item), and the "read before designing any
+  exact-match metric" section still recommended, as preference #1, a design this
+  project DESIGNED AND REJECTED ON MEASUREMENT. Fixed in place. THE INVARIANT
+  THIS PASS ESTABLISHES, and the one to preserve: every P-number carries EXACTLY
+  ONE checkbox state across the whole file. An item that is genuinely two things
+  (P29) is split into two separately-named sub-items rather than left ambiguous.
+  Also in this pass: P6 RETIRED, P24 RETIRED, P10/P11/P12 DEMOTED to a new
+  optional section, P41 recorded as new.
+  THE DISCIPLINE OF THIS FILE IS CORRECTION IN PLACE, NOT PRUNING. Closed items
+  keep the evidence that closed them, wrong claims are replaced by the true fact
+  with a dated note saying what was wrong, and decision records stay VERBATIM
+  even where the outcome differed -- a decision is a record of what was decided,
+  not a prediction to be scored.
 
 DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
   1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
@@ -110,26 +128,60 @@ THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, PUSHED to origin/main 2026-08-11
   metadata for such a run is no metadata -- so the noise persists until P29
   produces the first metadata-bearing trees.
 
-  GOLDEN RUNTIME, MEASURED FIVE TIMES: 43:28, 44:32, ~50:00, 52:35, 53:10.
+  GOLDEN RUNTIME, MEASURED SIX TIMES: 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10.
+  (CORRECTED 2026-08-11 (audit): this canonical line said FIVE and omitted 43:50,
+  which P1's own evidence block below has recorded since 2026-08-05. The
+  "five times" phrasing had been copied to TWO other places in this file -- P1's
+  seam note and P31's Tier 3 checklist entry -- not one; the first pass fixed
+  only the seam note and the checklist entry was caught on re-grep. All three
+  now say six. The RANGE was never wrong, only the count.)
   Call it 43-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
   tests/test_golden.py:68 STILL SAYS "about 20 minutes" AND WAS LEFT ALONE ON
   PURPOSE: test_golden.py is the binding constraint on this whole refactor, and
   editing the file that holds the safety net to fix a docstring is not a trade
-  worth making. Every other statement of that number is now correct. (This is
-  the residue of P31.)
+  worth making. Every other statement of the RANGE is now correct; the COUNT
+  still reads "five times" (43:50 missing) in CLAUDE.md, README.md, setup.md,
+  revival-roadmap.md and pyproject.toml, which this prose-scoped audit did not
+  touch. (Both are the residue of P31 -- see its block.)
 
 STATUS
-  DONE     P1 P2 P3 P7 P9 P14 P15 P16 P17 P20 P28 P30 P34 P36
-           (c2115ba, 31bea66, 930c162, d77de02, b53024e, 1d68df9,
-            7400eff, 5ca7f64, 94b4e24, 9c9e251, 9d08c94, 1f69e11, 7927a88,
-            5a52d26)
+  DONE     P1 P2 P3 P4 P5 P7 P9 P14 P15 P16 P17 P20 P28 P30 P33 P34 P36
+           THE FLAT 14-SHA PARENTHETICAL THAT USED TO SIT HERE WAS DROPPED
+           2026-08-11 (audit). It did not map onto the items it followed:
+           b53024e appeared in it while being attributed to nothing, 31bea66 is
+           a plumbing commit rather than a completion, P9 has NO commit at all
+           (it is satisfied by P1's seam), and P15 and P20 each consumed two
+           SHAs. A list of SHAs that cannot be checked against a list of items
+           is a list that will drift, and it had. Per-item attribution now lives
+           in each item's own detail block, and the refactor SHAs live in the
+           C1-C9 batch table above -- both of which say which commit closed
+           which item, which is the thing the parenthetical was trying to say.
            P29 IS NOT DONE and was removed from this line 2026-08-11. It had
                been listed here while also sitting under PARTIAL below and
                unchecked at the ranked-checklist entry, three states at once.
                Its config code landed (45f36fc) and its own detail block says
-               so; the RUNS are what is open. See PARTIAL.
+               so; the RUNS are what is open. SPLIT 2026-08-11 (audit) into
+               P29-configs [x] and P29-runs [ ]; see PARTIAL.
+           P17 is DONE but its BASELINE HALF IS [UNVERIFIED UNTIL THE POD
+               BYTE-COMPARE] (decision 3). The code landed in 9c9e251; the
+               baseline arm has no golden, so the only verification available
+               is one legacy baseline run on Linux byte-compared against
+               results/baseline/05082026_18-55-32. Until that runs, "DONE"
+               here means "written and reviewed", not "proved inert".
+           P33 CLOSED 2026-08-11 (audit) by C7's discover(): the run choice is
+               now newest-MTIME rather than lexically-last-stamp -- the
+               DDMMYYYY string-sort bug this item found is documented at
+               runs.py:497-498 -- the pipeline is recorded in run_metadata.json
+               and read by compare_models.resolve_pipeline, a mixed-pipeline
+               tree is REFUSED rather than silently merged, and the pipeline is
+               printed on the PDF cover page. All three consequences the item
+               listed are closed.
            P18 RETIRED 2026-08-10 -- not done, deliberately abandoned. The
                salvage target never existed in any branch.
+           P24 RETIRED 2026-08-11 (audit) -- superseded by P40, which decided
+               the question P24 posed ("implement or delete") in favour of a
+               NEW SIBLING FILE and explicitly declines to repair the dead
+               handles. See the RETIRED section.
            P4  COMPLETE 2026-08-06. Grader landed (75b6530) and all four arms
                RAN under --pipeline drg. Both predictions written in advance
                HELD; the unpredicted result is that drg-exact reproduces
@@ -146,9 +198,38 @@ STATUS
                UNPREDICTED: abstention treatment is a THIRD knob and it
                inverts every sign. See docs/findings/13-rank-aware-metrics.md.
   PARTIAL  P8   80 of 89 fragments; see P27
-           P29  configs defined; runs STAGED AND READY, deferred 2026-08-06.
-                /workspace/repo/attribution_runs.sh on the pod is written,
-                pre-flighted and unlaunched. Resume is ONE command:
+           P29 IS TWO ITEMS AND THE AUDIT SPLIT IT 2026-08-11, because one
+                P-number in two states is exactly the defect this pass exists to
+                remove. From here on the two halves are named separately and
+                each carries one state:
+                  P29-configs  [x] DONE 2026-08-05 (45f36fc) -- the two
+                                   PipelineConfigs exist and are selectable.
+                  P29-runs     [ ] OPEN -- the eight runs that produce the
+                                   attribution. Nothing about them has run.
+           P29-runs  deferred 2026-08-06; scope is EIGHT RUNS, 4 arms x 2
+                configs (~95 min, ~$1.80). CORRECTED 2026-08-11 (audit): the
+                "TO DO" line at the foot of P29's detail block said "run both on
+                the baseline arm", i.e. two runs. That was never the design --
+                attributing the drop needs every arm under both configs, and the
+                staged script already ran all eight. Eight is the number.
+                RETIRED 2026-08-11 (audit), per owner decision 3: the STAGED
+                /workspace/repo/attribution_runs.sh IS NO LONGER WHAT RUNS. The
+                pod gets `git pull` to current main plus a fresh pre-flight
+                (minutes), and the runs use the simplified two-invocation
+                --pipeline X --out results_X form below. Reason it had to be
+                retired rather than kept: the script was pre-flighted at repo
+                5fbdb2f, which predates C5/C7/C8, so it writes the OLD flat
+                cwd layout with the baseline's space spelling -- output that
+                post-C7 runs.discover REFUSES -- and it predates
+                run_metadata.json, so its trees would carry no provenance at
+                all. Dirname attribution, in the one experiment whose entire
+                purpose is attribution. The pre-flight record below is kept as
+                HISTORY: it is the evidence the pod can do the work, and the
+                environment facts in it (vCPU, memory headroom, import order)
+                are still true.
+                --- pre-flight record, 2026-08-06, kept as history ---
+                /workspace/repo/attribution_runs.sh on the pod was written,
+                pre-flighted and unlaunched. Resume was ONE command:
                   cd /workspace/repo && setsid nohup ./attribution_runs.sh \
                       > attribution_driver.log 2>&1 < /dev/null &
                 ~95 min for all 8 runs (4 arms x 2 configs), ~$1.80.
@@ -185,14 +266,23 @@ STATUS
                   python scripts/run_baseline.py \
                       --pipeline preprocess-only --out results_preprocess_only
 
-                *** THAT IS THE FUTURE FORM, NOT WHAT RUNS NEXT. *** The staged
-                /workspace/repo/attribution_runs.sh on the pod stays exactly as
-                pre-flighted on 2026-08-06 and is what actually executes.
-                Rewriting it would invalidate that pre-flight -- the whole value
-                of a pre-flighted script is that it was checked in the state it
-                will run in -- and the pod session is already carrying P29, P40
-                and the C4/C5 baseline byte-compare. Use the simplified form for
-                any attribution run staged AFTER that session.
+                *** SUPERSEDED 2026-08-11 (audit) -- THIS IS NOW WHAT RUNS. ***
+                This paragraph used to say the opposite: "THAT IS THE FUTURE
+                FORM, NOT WHAT RUNS NEXT", on the reasoning that rewriting a
+                pre-flighted script invalidates the pre-flight, and that the
+                pod session was already carrying enough. That reasoning was
+                sound when written and is now WRONG, because the thing it was
+                protecting no longer exists: the pre-flight was taken at repo
+                5fbdb2f, and main has since moved through C5, C7 and C8. A
+                pre-flight is only worth something if the tree it was taken on
+                is the tree that runs. Owner decision 3 (2026-08-11): pull the
+                pod to current main, re-pre-flight -- it costs minutes, and it
+                is the same check, taken on the tree that will actually
+                execute -- and run the eight invocations above. The reward for
+                the pull is not tidiness: --out removes the collision that
+                forced the per-batch harvest, and run_metadata.json makes these
+                THE FIRST METADATA-BEARING TREES in the project, which is also
+                what silences the C8 [WARN].
 
                 Note also: the two new roots must be gitignored before anything
                 is written into them. results_folds_only/ and
@@ -207,9 +297,15 @@ STATUS
                 is the only thing blocking the self-selection test that P5
                 could not run (see the P40 detail section)
            P38 (clean public repo) is the hard BLOCKER on publication
-  NEW      P27 P29 P30 P31 P32 P33 P34 - found while implementing Tier 1
-           P35 P36 P37 - found while implementing P4
+  NEW      P27 P29 P30 P31 P32 P33 - found while implementing Tier 1
+           P34 P35 P36 P37 - found while implementing P4. (P34 MOVED HERE
+                2026-08-11 (audit) from the Tier 1 line above: its own detail
+                block dates it 2026-08-06 and attributes it to the corrected
+                comparison PDF, which is P4-era work, not the 2026-08-05
+                Tier 1 window.)
            P39 P40 - found while implementing P5 (tie-breaks; per-case output)
+           P41 - found 2026-08-11 by the C1-C9 audit (the `-m` entry point
+                silently ignores AICDS_PIPELINE on the BERT arm only)
 
 THE RESULT SO FAR - all four arms, corrected pipeline, 2026-08-06
 Full writeup in docs/findings/11-corrected-pipeline-first-results.md.
@@ -371,32 +467,71 @@ TIER 1 - BLOCKS ANY VALID COMPARISON. Nothing downstream means anything until th
            treatment inverts every sign. finding 13.
 
 TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
+  RESTRUCTURED 2026-08-11 (audit). The open half of this tier is now exactly
+  three items, in order. P6 was RETIRED, P10/P11/P12 were DEMOTED off the
+  publication path (see DIMINISHED PAYOFF below), and P29 appears here as
+  P29-runs only, because its configs are done. The closed items stay as history.
 
-  [ ] P6   B2. Set-level soft P/R/F1 (Option B)   (days)
+  [ ] P40  Per-case output (new sibling file)     (hours)  <- HIGHEST VALUE
+           The only thing blocking the self-selection test P5 raised and could
+           not run. Additive by design: a new sibling file, not a repair of the
+           dead handles. Detail section at the foot of this file.
+  [ ] P27  Finish the comma rejoin - 9 residual   (hours)  <- fix MEASURED
+           Second-highest. Lands as a THIRD preprocess_version, working name
+           `corrected2` (owner decision 4, 2026-08-11): `corrected` stays FROZEN
+           so every existing results tree, every finding-11 and finding-13
+           number, and the pod byte-compare stay reproducible. The config seam
+           was built for exactly this.
+  [ ] P29-runs  The eight attribution runs        (pod, ~95 min)
+           4 arms x 2 configs (folds-only, preprocess-only), simplified
+           --pipeline X --out results_X form, on a pod pulled to current main.
+           P29-configs is [x] DONE (45f36fc) and is NOT this item.
+
+  --- closed / partial, kept as history ---
   [x] P7   A4a. Fix "w/o" -> "w" negation loss    DONE 2026-08-05 (c2115ba)
            Under CORRECTED, "w/o" now survives as "without". LEGACY still
            collapses it to "w", as pinned.
   [~] P8   A4b. Fix comma-split fragments         PARTIAL 2026-08-05 (c2115ba)
            Recovers 80 of 89 (1805->1725 tokens, 573->564 unique). NINE
-           OCCURRENCES REMAIN -- see P27, which is now the highest-value
-           unfinished item in this file.
+           OCCURRENCES REMAIN -- see P27. (CORRECTED 2026-08-11 (audit): this
+           line used to call P27 "the highest-value unfinished item in this
+           file". P40 is; P27 is second. The STATUS block has said so since
+           2026-08-06 and this line was never updated to match.)
   [x] P9   B5. Keep the legacy number, labelled   SATISFIED BY P1's SEAM
            LEGACY is a permanent, selectable, byte-reproducible path rather than
            a number copied into a report. Nothing further needed here.
-  [ ] P10  A5. Centre the embeddings              (ONE LINE)
-  [ ] P11  B4. Per-model threshold calibration    (hours)
-  [ ] P12  B3. MEAN aggregator alongside MAX      (hours)
-  [ ] P27  Finish the comma rejoin - 9 residual   (hours)  <- NEW, fix measured
-  [ ] P29  Third arm: folds-only, to attribute    (trivial) <- NEW
+  [~] P32  Collect the corrected-pipeline results PARTIAL 2026-08-06 (3b8aed9)
+           All four arms ran and are written up in finding 11. Two things
+           remain and both are runs, not code: P29-runs, and the
+           analyze_score_distributions re-run (P37). Added to this checklist
+           2026-08-11 (audit) -- it had a detail block but no checklist entry.
 
 TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared code.
 
   [x] P28  Guard make_folds.py --out              DONE 2026-08-05 (930c162)
   [x] P30  Widen the pre-commit hook to cover     DONE 2026-08-05 (d77de02)
            data/folds_grouped/ and any future fold set
+  [x] P33  compare_models silently picks one run  DONE 2026-08-11 (7927a88)
+           runs.discover picks by newest MTIME, prints the choice when a key
+           has more than one run, records the pipeline via run_metadata.json,
+           refuses mixed-pipeline trees, and puts the pipeline on the PDF
+           cover. Added to this checklist 2026-08-11 (audit).
+  [x] P34  compare_models sanity checks keyed     DONE 2026-08-06 (b53024e)
+           by pipeline. SANITY_CHECKS_BY_PIPELINE + HOSTS_BY_DATE. Added to
+           this checklist 2026-08-11 (audit).
+  [ ] P39  The two arms break score ties          (1 h + one golden run)
+           differently. Bounded at <= 0.0022 MRR; needs its own `ranking`
+           config field and its own golden run, so it is not free. Added to
+           this checklist 2026-08-11 (audit).
   [ ] P38  CODE-ONLY PUBLIC REPO, data removed    (days)  <- BLOCKS PUBLICATION
            NOW ALSO CARRIES the Phase 3 polish, per decision 1: P19 CLI,
-           P21 encoder registry, P22 dashboard, the F1 -> accuracy rename.
+           P21 encoder registry, P22 dashboard, P23 deprecation shims, the
+           F1 -> accuracy rename. (P23 added to this carry list 2026-08-11
+           (audit) -- decision 1 moved it with the rest of the polish but this
+           line never listed it. It is NOT cosmetic: scripts/ now holds the
+           check_out_root DUA guard and the config banners, so shimming
+           scripts/ means RELOCATING A SAFETY MECHANISM, not forwarding a
+           call.)
   [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
   [x] P14  C10. Result provenance (run_metadata.json)  DONE 2026-08-11 (5a52d26)
            Both arms write it LAST, after the PerformanceIndex handle closes.
@@ -433,9 +568,12 @@ TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared c
            recursive ** because it asserts that committed results exist at all
            rather than discovering a run.
   [~] P31  Correct the golden's stated runtime    MOSTLY DONE 2026-08-11 (C9)
-           Every doc now says 43-53 min, measured five times. Only
-           tests/test_golden.py:68 still says "about 20 minutes", and it was
-           left alone on purpose -- see the runtime note in the STATUS block.
+           Every doc now says 43-53 min; the golden was measured SIX times, not
+           the five this line claimed until 2026-08-11 (audit) -- it was the
+           third count-bearing site in this file and the one the first pass
+           missed. Only tests/test_golden.py:68 still says "about 20 minutes",
+           and it was left alone on purpose -- see the runtime note in the
+           STATUS block.
 
 TIER 4 - FINISH THE REFACTOR. The drift-stoppers landed here; polish moved to P38.
 
@@ -449,9 +587,11 @@ TIER 4 - FINISH THE REFACTOR. The drift-stoppers landed here; polish moved to P3
            Dead code 94b4e24; baseline 9c9e251, [UNVERIFIED] until the pod
            byte-compare (decision 3). See the P17 detail section for what the
            old description of the two handles got WRONG.
-  [-] P18  C3.  Salvage hf_automodel before deleting bert_eval.py
-           RETIRED 2026-08-10 by decision 2, then executed as a plain deletion
-           in 5ca7f64. The salvage target NEVER EXISTED in any branch.
+      P18  C3.  Salvage hf_automodel before deleting bert_eval.py
+           RETIRED. Its checkbox moved to the RETIRED section below 2026-08-11
+           (audit) so that every retired item sits in one place; the slot is
+           kept here because C3 is part of the refactor sequence and a gap in
+           it reads like an omission.
   [ ] P19  C6.  A real CLI (no main.py; input() still blocks automation)
            MOVED TO P38 by decision 1.
   [x] P20  C7.  ONE PerformanceIndex parser replacing FOUR  DONE 2026-08-11
@@ -472,15 +612,88 @@ TIER 4 - FINISH THE REFACTOR. The drift-stoppers landed here; polish moved to P3
 
 TIER 5 - NICE TO HAVE.
 
-  [ ] P24  C12. Per-case output files are all empty (decide: implement or delete)
+      P24  C12. Per-case output files are all empty (decide: implement or delete)
+           RETIRED. Its checkbox moved to the RETIRED section below 2026-08-11
+           (audit); P40 decided the question it posed.
   [ ] P25  C13. Fold parallelisation via multiprocessing
   [ ] P26  Retrieval interface -> local decoder (the RAG endgame)
+
+DIMINISHED PAYOFF - OPTIONAL, OFF THE PUBLICATION PATH.
+  Added 2026-08-11 (audit), per owner decision 2. These three were written as
+  Tier 2 items in 2026-08-05, BEFORE P4 and P5 landed. None of them is wrong and
+  none is retired -- but the metric each was designed to rescue is no longer the
+  metric the project leads with, so each now buys strictly less than its own
+  description implies. Ordered by what is left of the payoff.
+
+  [ ] P10  A5. Centre the embeddings              (NOT one line, see below)
+           Still the only probe of anisotropy this project has. But what it can
+           improve is the COSINE-graded tables only -- the headline path is
+           drg-exact, where there is no cosine to un-skew. "ONE LINE" counts the
+           subtraction and excludes what it actually costs: a config-seam field
+           (numbers move, so it cannot ride an existing pipeline name -- P35's
+           rule) plus a golden gate. Line-drift note: the normalize_embeddings
+           remark that used to point at bert_models.py:337-343 has TWO sites
+           now, :352-358 and :261-267, and it remains a red herring at both --
+           L2-normalising before a cosine that divides by the norms is
+           algebraically a no-op.
+  [ ] P12  B3. MEAN aggregator alongside MAX      (hours)
+           Right framing is a REGISTERED AGGREGATOR, not a replacement: MAX
+           stays, MEAN sits beside it, and a reader can see both. Two duties
+           come with it. (1) SORT BEFORE REDUCING -- a mean over hash-ordered
+           labels reintroduces last-ULP nondeterminism, which finding 12 hit on
+           HADM 178513 and which no test would have caught. (2) It is a new
+           config axis, so SUPPORTED_GRADERS-style refusal plus a banner line
+           plus its consumer land in the SAME commit (P35).
+  [ ] P11  B4. Per-model threshold calibration    (hours)
+           LIKELY MOOT. drg-exact collapses the five threshold rows to one, so
+           on the headline path there is no threshold left to calibrate. It is
+           also the HIGHEST GOLDEN-RISK surface of the three: the thresholds are
+           duplicated across seven set literals whose ITERATION ORDER decides
+           output row order, plus a hand-kept matching list at
+           bert_models.py:511. And its evidence base is
+           analyze_score_distributions.py, which is P37 -- unfixed, and
+           measuring with a retired ruler. Fix P37 first or the calibration
+           targets are legacy-measured.
+
+RETIRED - DELIBERATELY ABANDONED, NOT DONE. Kept with the reasoning, because a
+  silently vanished item reads as an oversight and invites someone to re-open it.
+
+  [-] P6   B2. Set-level soft P/R/F1 (Option B)
+           RETIRED 2026-08-11 by owner decision 1. Its stated motivation was
+           KILLING THE DEGENERACY -- and findings 04 and 13 dissolved that
+           motivation rather than satisfying it: P == R was never the metric
+           collapsing, it is PR == 1.0, i.e. the answered and all-cases
+           populations being the same set because those arms never abstain. The
+           columns were unlabelled, not wrong. Worse, the proposed method is
+           cosine over the diagnosis embeddings, which REINTRODUCES THE
+           SELF-GRADING CONFOUND P4 removed: the arm that produced the retrieval
+           would once again be the arm marking it. Retiring beats implementing
+           because implementing would undo a closed fix in order to solve a
+           problem that turned out to be a labelling error.
+           WHAT SURVIVES, and it is worth keeping: the underlying idea that a
+           prediction SET should be scored against a truth SET, so that missing
+           a second true diagnosis costs something. Nothing in the project
+           measures that today. If it is ever wanted, build it on the
+           encoder-independent DRG labels, not on cosine.
+  [-] P18  C3. Salvage hf_automodel before deleting bert_eval.py
+           RETIRED 2026-08-10 by decision 2, then executed as a plain deletion
+           in 5ca7f64. The salvage target NEVER EXISTED in any branch.
+  [-] P24  C12. Per-case output files are all empty
+           RETIRED 2026-08-11 (audit): SUPERSEDED BY P40, which answers P24's
+           own question ("implement or delete") with a third option P24 did not
+           consider -- write a NEW SIBLING FILE and leave the dead handles dead.
+           That is a decision, not an oversight: repairing the handles would put
+           new writes inside the region the byte-exact golden covers, for output
+           nothing reads. P40 carries the work; P24 carries nothing.
 
 TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
 
   [ ] P35  No config axis may be unannounced      (minutes) <- NEW, partly done
   [x] P36  bert_models' private containGreaterOrEqualsValue    DONE 2026-08-06 (1d68df9)
   [ ] P37  analyze_score_distributions.py re-implements the grader   (hours)
+  [ ] P41  `python -m aicds.models.bert_models` ignores AICDS_PIPELINE (minutes)
+           Found 2026-08-11 (audit). A P35-class hole, and ASYMMETRIC BETWEEN
+           THE ARMS. Fix lands in the very next commit; see its detail block.
 
 WHY THIS ORDER
   P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
@@ -540,10 +753,18 @@ TIER 1 DETAIL
         P2/P3/P7/P8 landed - 43:50 on the default seed, 44:32 under
         PYTHONHASHSEED=12345. Fast suite 122 passed, 2 deselected.
 
-        NOTE FOR ANY DOC EDIT: the golden takes 43-53 MINUTES, measured five
-        times (43:28, 44:32, ~50:00, 52:35, 53:10). Every doc now says so
-        as of C9. The single remaining "~20 minutes" is tests/test_golden.py:68,
-        deliberately untouched. See P31.
+        NOTE FOR ANY DOC EDIT: the golden takes 43-53 MINUTES, measured SIX
+        times (43:28, 43:50, 44:32, ~50:00, 52:35, 53:10). Every doc says the
+        RANGE correctly as of C9; the COUNT is six only inside this file.
+        CLAUDE.md:143, README.md:772, docs/guides/setup.md:107,
+        docs/plans/revival-roadmap.md:9 and pyproject.toml:62 still say "five"
+        and omit 43:50 -- C9 wrote five into all of them, and this audit is
+        prose-scoped to the three plan docs, so they were left standing. Fixing
+        them is a one-line-each edit for whoever next touches those files. The
+        single remaining "~20 minutes" is tests/test_golden.py:68, deliberately
+        untouched. See P31. (Count corrected from five to six 2026-08-11
+        (audit): 43:50 is recorded four lines above this one, in this very
+        block, and was missing from every summary of it.)
 
 [x] P2. A1 - REGROUP THE FOLDS BY PATIENT (GroupKFold on SUBJECT_ID)
         DONE 2026-08-05 (c2115ba). scripts/make_folds.py -> data/folds_grouped/.
@@ -562,12 +783,17 @@ TIER 1 DETAIL
         script. Regenerate with:  python scripts/make_folds.py
         This keeps 1290 more lines of DUA-covered MIMIC text out of a public repo.
 
-        STILL OPEN, CARRIED TO P28: make_folds.py --out has no guard against
-        pointing at data/folds/ and destroying the golden's inputs.
-        STILL OPEN, CARRIED TO P30: .githooks/pre-commit does NOT cover
-        data/folds_grouped/ - the gitignore is the only thing stopping a commit.
-        STILL OPEN: the 58.1% ceiling was measured on the LEAKY folds and has
-        not been re-measured on the grouped ones.
+        ALL THREE "STILL OPEN" LINES THAT USED TO SIT HERE ARE CLOSED, and were
+        replaced by this note 2026-08-11 (audit). They had been true when
+        written and were never revisited:
+          - the make_folds.py --out guard is P28, DONE 2026-08-05 (930c162);
+          - the .githooks/pre-commit widening is P30, DONE 2026-08-05 (d77de02);
+          - THE CEILING WAS RE-MEASURED. 76 of 129 = 58.9% on folds_grouped,
+            against 75/129 = 58.1% reproduced on the leaky folds. Both figures
+            are PINNED in tests/test_drg_grader.py, so they cannot rot again.
+            The leakage fix moved retrievability by exactly ONE CASE, which is
+            the interesting part: leakage and label sparsity are independent
+            defects, and fixing one told us nothing about the other.
 
         --- original notes, kept for reference ---
         Why: folds split on HADM_ID, but 129 admissions come from only 100 patients
@@ -585,10 +811,13 @@ TIER 1 DETAIL
 
         This is a data regeneration, not a code change (folds are committed files).
 
-        TRAP: cython_utils.py:202 does line[line.index("_")+1 : len(line)-1] and drops
+        TRAP: load_dataset does line[line.index("_")+1 : len(line)-1] and drops
         the last character unconditionally. ANY regenerated fold file MUST end with a
         trailing newline or the last symptom of the last line loses a character.
-        (Docs citing :184 are stale - the package move shifted it.)
+        (Re-resolved 2026-08-11 (audit): it is cython_utils.py:375. This block
+        said :202 and older docs said :184; the file has grown twice since. The
+        BEHAVIOUR is pinned by tests/test_characterize_dataset.py, which is the
+        thing to trust -- a line number in prose is a comment, not a test.)
 
         FOLD FILE FORMAT, verified across all 1290 existing lines:
           {HADM_ID}_{raw SYMPTOMS field verbatim}.\n    <- note the APPENDED PERIOD
@@ -604,6 +833,8 @@ TIER 1 DETAIL
 
         Grouped folds will be uneven in size. That is correct - report the per-fold n.
         Re-measure the 58.1% ceiling afterwards; it was computed on the leaky folds.
+        (DONE, 2026-08-06: 76/129 = 58.9%. Noted here 2026-08-11 (audit) because
+        this instruction outlived its own completion by five days.)
 
 [x] P3. A4c - UNIFY CROSS-ARM DIAGNOSIS PREPROCESSING   DONE 2026-08-05 (c2115ba)
 
@@ -625,8 +856,13 @@ TIER 1 DETAIL
         This broke the project's central design constraint - both arms are supposed
         to share everything EXCEPT the embedding model.
 
-[~] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
+[x] P4. A2 - REPLACE THE COSINE GRADER WITH A DRG-BASED ONE
+        DONE 2026-08-06 (75b6530 + the four-arm run).
         Effort: days.  Impact: makes cross-encoder comparison valid AT ALL.
+        (State corrected from [~] to [x] 2026-08-11 (audit): the STATUS block
+        and the Tier 1 checklist have both said COMPLETE since 2026-08-06, and
+        the three items this block listed as outstanding are all reported done
+        in the STATUS block above. Only this header was left behind.)
 
         *** CODE LANDED 2026-08-06. Full writeup: docs/findings/12-drg-grader.md ***
 
@@ -651,11 +887,16 @@ TIER 1 DETAIL
           - Both run banners now print the grader. Omitting it is how a run ends
             up filed under the wrong ruler; see P35.
 
-        STILL TO DO
-          - `pytest -m golden` must come back byte-exact (in flight).
-          - Four-arm rerun under `drg`; the baseline arm needs the pod.
-          - Re-run the paired t-test on the results. THE question P4 exists to
-            answer: once every arm is graded by the same ruler, do they separate?
+        NOTHING IS STILL TO DO. This block used to carry a three-item "STILL TO
+        DO" list -- golden byte-exact "(in flight)", the four-arm rerun under
+        drg, and the paired t-test. All three were completed on 2026-08-06 and
+        reported in the STATUS block at the top of this file; the list was
+        deleted 2026-08-11 (audit) rather than left as a to-do that had already
+        happened. Outcomes, so they are not lost with the list: the golden came
+        back BYTE-EXACT; all four arms ran under drg; and the t-test is the
+        knobless result -- NO PAIR SEPARATES, max |t| 1.718 vs the 2.262 needed.
+        That last one IS the question P4 existed to answer, and the answer is
+        "no, they do not separate", which is a result rather than a failure.
 
         MEASURED, and it settles two open questions elsewhere
           - Grouped-fold exact-match ceiling is 76/129 = 58.9% (was never
@@ -753,8 +994,18 @@ TIER 1 DETAIL
         no zero guard (:362).
         Still the right starting point. Budget real work, not a one-liner.
 
-        DO NOT use exact match alone - see the 58.1% ceiling. Use graded relevance:
-        full credit for an exact DRG match, partial for a same-family match.
+        CORRECTED 2026-08-11 (audit): this line used to read "DO NOT use exact
+        match alone - see the 58.1% ceiling. Use graded relevance: full credit
+        for an exact DRG match, partial for a same-family match." Both halves
+        are now wrong. The ceiling is 58.9% (76/129) on folds_grouped -- 58.1%
+        (75/129) is the legacy-fold figure, superseded as the headline -- and
+        GRADED RELEVANCE WAS DESIGNED, MEASURED AND REJECTED 2026-08-06; see the
+        rejection record 70 lines above in this same block, finding 12, and the
+        inverted preference order at the ceiling section below. What shipped is
+        exact match REPORTED AGAINST THE CEILING, plus the `winnable` (n=76)
+        population in RankMetrics.txt. It survived here in imperative voice
+        after the rest of the file was corrected, which is exactly the failure
+        mode this file's one-state-per-item invariant exists to catch.
 
 [x] P5. B1 - RANK-AWARE RETRIEVAL METRICS (Option C: Recall@K, MRR, nDCG)
         DONE 2026-08-06. Code 47e81bd + 5393cab, four-arm run under --pipeline drg,
@@ -767,8 +1018,10 @@ TIER 1 DETAIL
         The ONLY option that fixes all three metric defects at once.
 
         Why: rank IS computed at bert_models.py:170 and then DISCARDED. The scorer
-        (containGreaterOrEqualsValue, cython_utils.py:390-394 - docs citing :366-370
-        are stale by 24 lines) returns true if ANY of the K candidates clears
+        (containGreaterOrEqualsValue, cython_utils.py:658 - re-resolved
+        2026-08-11 (audit); this block said :390-394 and P36's block said :573,
+        both stale, and P36 has since deleted the BERT arm's private copy so
+        there is exactly one definition to point at) returns true if ANY of the K candidates clears
         threshold, so a hit at rank 1 and a hit at rank 50
         count identically. That makes score(TOP-50) >= score(TOP-10) true BY
         CONSTRUCTION - verified monotonic in 18/18 model x threshold combinations,
@@ -782,12 +1035,41 @@ TIER 1 DETAIL
 TIER 2 DETAIL
 ===============================================================================
 
-[ ] P6. B2 - SET-LEVEL SOFT PRECISION / RECALL / F1 (Option B)
-        Makes precision and recall genuinely independent quantities that can trade
-        off, which KILLS THE DEGENERACY. Does not fix the self-grading or rank defects.
+[-] P6. B2 - SET-LEVEL SOFT PRECISION / RECALL / F1 (Option B)
+        RETIRED 2026-08-11 by owner decision 1. Not done; deliberately
+        abandoned, like P18. The proposal, kept so the retirement can be
+        argued with:
             soft_precision = mean over predicted p of ( max over true g of cos(g,p) )
             soft_recall    = mean over true g      of ( max over predicted p of cos(g,p) )
             soft_f1        = harmonic mean of the two
+
+        WHY IT IS RETIRED RATHER THAN DEFERRED. Two independent reasons, and
+        either alone would be enough.
+
+        1. ITS MOTIVATION WAS DISSOLVED, NOT POSTPONED. This item existed to
+           "kill the degeneracy" -- P == R == F in all 12,600 committed BERT
+           rows. Findings 04 and 13 established that there was no degeneracy to
+           kill: P == R is PR == 1.0, i.e. the answered population and the
+           all-cases population being the SAME SET because those arms never
+           abstain. RankMetrics.txt reproduces legacy P / R / PR bit-exactly
+           from an independent code path, which is the proof. The columns were
+           UNLABELLED, NOT WRONG. Implementing a new metric to fix a labelling
+           error would be answering the wrong question at the cost of days.
+        2. IT WOULD REOPEN A CLOSED FIX. Every term above is a cosine over the
+           diagnosis embeddings -- which is precisely the SELF-GRADING that P4
+           removed. The arm that produced the retrieval would once again be the
+           arm marking it, and a more compact space would once again mark its
+           own work leniently. P4's whole argument is that you do not get to
+           grade yourself; P6 as specified grades itself in a more elaborate
+           way.
+
+        WHAT SURVIVES THE RETIREMENT, and is worth keeping in view: the
+        underlying intuition that a prediction SET should be scored against a
+        truth SET, so that missing a second true diagnosis costs something.
+        Nothing in the project measures that today -- MRR and Hit@K both stop
+        at the FIRST relevant candidate. If it is ever wanted, build it on the
+        encoder-independent DRG labels, not on cosine, and expect the 58.9%
+        ceiling to apply to it.
 
 [x] P7. A4a - "w/o" COLLAPSES TO "w"; NEGATION IS DESTROYED   DONE 2026-08-05 (c2115ba)
         Under CORRECTED, "w/o" is protected before slash-padding and survives as
@@ -815,56 +1097,147 @@ TIER 2 DETAIL
         fragment get a spurious 1.0 contribution. Severity distinctions also
         collapse (stage I vs stage IV).
 
-[ ] P9. B5 - KEEP THE LEGACY NUMBER
+[x] P9. B5 - KEEP THE LEGACY NUMBER          SATISFIED BY P1's SEAM
+        (State corrected from [ ] to [x] 2026-08-11 (audit) to match the Tier 2
+        checklist entry, which has said SATISFIED since 2026-08-05. There is no
+        commit for this item and there should not be: it was satisfied by a
+        design decision taken elsewhere, which is a legitimate way for an item
+        to close and the reason the STATUS block no longer tries to give every
+        DONE item a SHA.)
         Report the existing MAX-at-0.6 result alongside everything new, clearly
         labelled as legacy, so results stay comparable to Comito et al. and to this
         project's own history. Keep every metric SIDE BY SIDE rather than replacing.
+        HOW IT WAS SATISFIED, and why this is stronger than what was asked for:
+        the ask was to COPY a legacy number into reports beside the new ones. P1
+        instead made LEGACY a permanent, selectable, byte-reproducible PATH --
+        `--pipeline legacy`, default everywhere, pinned by the golden. A copied
+        number can only be trusted; a re-runnable path can be checked.
 
 [ ] P10. A5 - CENTRE THE EMBEDDINGS BEFORE COMPUTING COSINE
-        Effort: ONE LINE.  Impact: unknown, worth measuring.
+        DEMOTED 2026-08-11 to DIMINISHED PAYOFF (optional, off the publication
+        path) by owner decision 2. Not retired -- it is still the only probe of
+        anisotropy this project has, and anisotropy is a documented property of
+        the models. What changed is the size of the prize: centring can only
+        rehabilitate the COSINE-GRADED tables, and the headline path is
+        drg-exact, where there is no cosine for a shared threshold to be
+        meaningful ON. It buys a better version of a ruler the project stopped
+        leading with.
+        "ONE LINE" IS A TRUE STATEMENT ABOUT THE SUBTRACTION AND A FALSE ONE
+        ABOUT THE WORK. Centring MOVES THE NUMBERS, so by P1's rule it cannot
+        ride an existing pipeline name: it needs its own PipelineConfig field
+        with a legacy-preserving default, its consumer and banner line in the
+        same commit (P35), and a 43-53 minute golden gate. Budget that, not one
+        line.
+        Effort: ONE LINE of arithmetic, plus a config seam and a golden run.
+        Impact: unknown, worth measuring.
         BERT embeddings are anisotropic (Ethayarajh 2019) - a documented property of
         the MODELS, not of MIMIC-III. Demo with random vectors: a shared offset moves
         mean pairwise cosine from 0.001 to 0.94, reproducing the three models'
         measured similarity profiles with no medical content whatsoever.
         Fix: subtract the mean embedding (the core of BERT-whitening). If it works, a
-        single shared threshold becomes meaningful again.
-        NOT THE SAME as normalize_embeddings=False at bert_models.py:337-343, which
-        cannot affect results at all - L2-normalising before a cosine that already
-        divides by the norms is algebraically a no-op.
+        single shared threshold becomes meaningful again -- on the cosine tables.
+        NOT THE SAME as normalize_embeddings=False, which cannot affect results
+        at all: L2-normalising before a cosine that already divides by the norms
+        is algebraically a no-op. (Re-resolved 2026-08-11 (audit): this said
+        bert_models.py:337-343 and there are now TWO such sites, :352-358 and
+        :261-267. The no-op argument holds at both, which is the point -- a
+        second copy of a red herring is still a red herring.)
 
 [ ] P11. B4 - PER-MODEL THRESHOLD CALIBRATION (Option D)
+        DEMOTED 2026-08-11 to DIMINISHED PAYOFF by owner decision 2, and it is
+        the weakest of the three. LIKELY MOOT: drg-exact makes the threshold
+        knob inert -- all five threshold rows collapse to one value -- so on the
+        headline path THERE IS NO THRESHOLD LEFT TO CALIBRATE.
         Set each threshold at a fixed PERCENTILE of that model's own similarity
         distribution instead of a hardcoded 0.6. Equal-selectivity values from the
         measured medians: BiomedBERT ~0.93, Bio_ClinicalBERT ~0.84, BlueBERT ~0.72.
         A patch, not a fix - makes cross-model comparison meaningful without
         addressing leniency or rank.
+        TWO HAZARDS THAT MAKE IT MORE EXPENSIVE THAN IT LOOKS.
+          1. HIGHEST GOLDEN-RISK SURFACE OF THE THREE DEMOTED ITEMS. The
+             thresholds are duplicated across SEVEN set literals whose SET
+             ITERATION ORDER decides output row order, plus a hand-kept matching
+             list at bert_models.py:511 that a comment is the only thing keeping
+             in sync. Touching them moves formatting, and the golden compares
+             bytes, not floats.
+          2. ITS EVIDENCE SOURCE IS UNFIXED. The measured medians above come
+             from analyze_score_distributions.py, which is P37: it re-implements
+             the grader against its own numpy cosine and reads no
+             PipelineConfig. Calibrating to legacy-measured percentiles would
+             pin a new knob to a retired ruler. Fix P37 first or do not start.
 
 [ ] P12. B3 - MEAN INSTEAD OF MAX (Option A)
+        DEMOTED 2026-08-11 to DIMINISHED PAYOFF by owner decision 2, and it is
+        the best-shaped of the three because it does not replace anything.
         Cheap. Fixes only the leniency defect. New problem: dilution - a patient with
         3 true diagnoses and 1 correct prediction averages the correct match against
         2 irrelevant comparisons, so patients with more diagnoses are penalised for
-        having more diagnoses. Worth having as a registered aggregator, not an end state.
+        having more diagnoses. Worth having as a REGISTERED AGGREGATOR, not an end
+        state: MAX stays, MEAN sits beside it, and a reader compares the two rather
+        than being handed one.
+        TWO DUTIES COME WITH IT.
+          1. SORT BEFORE REDUCING. A mean over hash-ordered labels reintroduces
+             last-ULP nondeterminism -- finding 12 hit exactly this on HADM
+             178513 -- and no existing test would catch it, because the values
+             agree to 15 significant figures and differ in the printed digits.
+             MAX is immune (it selects rather than accumulates), which is why
+             this hazard is NEW with MEAN rather than pre-existing.
+          2. IT IS A NEW CONFIG AXIS, so P35's rule binds: the field, its
+             consumer, its SUPPORTED_*-style refusal for unknown values, and its
+             banner line all land in the SAME commit. A named aggregator nothing
+             reads is the P4 mistake with a different noun.
 
 
 ===============================================================================
-THE 58.1% CEILING - READ BEFORE DESIGNING ANY EXACT-MATCH METRIC
+THE 58.9% CEILING - READ BEFORE DESIGNING ANY EXACT-MATCH METRIC
 ===============================================================================
+REWRITTEN 2026-08-11 (audit). This section was the single most misleading thing
+in the file: it was titled 58.1%, still said the figure had not been re-measured,
+and still listed GRADED RELEVANCE as preference #1 -- a design this project
+subsequently built, measured, and REJECTED. A reader following it would have
+redone rejected work. What it got right, and why it is still here first: the
+ceiling itself is real and binds every exact-match metric anyone designs.
+
 The method predicts by copying an answer from a retrieved patient, so the answer must
 EXIST in the pool to be copied. 145 unique diagnosis descriptions across 129
 admissions; 105 of them (72.4%) occur exactly once in the whole dataset.
-Only 75 of 129 test cases (58.1%) have their correct DRG present anywhere in their
-fold's training pool. The other 41.9% are unwinnable under exact matching - not
-because retrieval is bad, but because the answer is not in the library.
-A PERFECT RETRIEVER THEREFORE CAPS AT 58.1% UNDER EXACT MATCH.
+(105 is the admission-level count, and it is the RIGHT one here -- do not
+"correct" it to the occurrence-level 85. See P4's block.)
+Only 76 of 129 test cases (58.9%) have their correct DRG present anywhere in their
+fold's training pool ON folds_grouped; 75 of 129 (58.1%) on the legacy folds. The
+other ~41% are unwinnable under exact matching - not because retrieval is bad, but
+because the answer is not in the library.
+A PERFECT RETRIEVER THEREFORE CAPS AT 58.9% UNDER EXACT MATCH.
+Per fold the ceiling ranges from 3/12 (25%) to 13/15 (87%), which makes it a
+source of per-fold variance in its own right.
 
-Three ways to handle it, in order of preference:
-  1. Graded relevance - partial credit for a same-family DRG. Raises the ceiling and
-     is more clinically sensible than all-or-nothing.
-  2. Report against the ceiling - "X of a possible 58.1%". Honest and standard.
-  3. Restrict evaluation to the 75 winnable cases and say so. Cleanest signal,
-     smallest n.
+BOTH FIGURES ARE PINNED IN tests/test_drg_grader.py. Cite the tests, not this
+paragraph: a number in prose rots, a number in a test cannot.
 
-NOTE: measured on the CURRENT, LEAKY folds. Re-measure after P2. Neither plan says so.
+Three ways to handle it. The preference order INVERTED once they were measured:
+  1. Graded relevance - partial credit for a same-family DRG. *** WAS RANKED
+     FIRST; DESIGNED, MEASURED AND REJECTED 2026-08-06 (finding 12,
+     metric-redesign.md). *** Three candidate ladders were built; the best
+     needed ~156 hand-written lexicon strings mined from the same 146 titles it
+     scores, with no held-out set, precision 0.13 and 0.08 on its two lowest
+     rungs, the LOWEST AUC of the three, blindness to numbers ("96+ hours" vs
+     "<96 hours" scored 0.900), and it graded "discharged alive" against
+     "expired" at 0.900. P4 exists to remove an arbitrary ruler; a more
+     elaborate arbitrary ruler concedes the argument. If ever revisited, use an
+     EXTERNAL DRG hierarchy, not a lexicon derived from these 146 strings.
+  2. Report against the ceiling - "X of a possible 58.9%". ADOPTED.
+  3. Restrict evaluation to the 76 winnable cases and say so. ADOPTED TOO -- it
+     is RankMetrics.txt's `winnable` population, reported beside all-cases and
+     answered rather than instead of them.
+
+NOTE, corrected 2026-08-11 (audit): this line used to read "measured on the
+CURRENT, LEAKY folds. Re-measure after P2. Neither plan says so." All three
+clauses are now false. It was re-measured (2026-08-06), and BOTH plan files say
+so -- correctness-fixes.md:206-210 and metric-redesign.md:168-183.
+(The metric-redesign anchor was written as :141-156, which was true of the
+pre-audit file and was falsified by this same audit's +49-line edit to it --
+:141-156 now lands in the unrelated nDCG blockquote. Anchor by content, not by
+line, when citing across files edited in one pass.)
 
 
 ===============================================================================
@@ -877,6 +1250,22 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         test still green - exactly the failure mode the golden exists to prevent.
         Now mintable, because the arm finally runs. Linux only; needs the 21 GB model
         and ~13 minutes of compute.
+
+        THE COST ESTIMATE ABOVE IS INVALIDATED BY C4, in the cheap direction
+        (noted 2026-08-11 (audit)). "Linux only, 21 GB, pod time" was true when
+        the baseline executed at import with no seam. C4 gave it
+        run_analysis(encoder=None, config=LEGACY, out=None), so THE BASELINE ARM
+        NOW TAKES AN INJECTED ENCODER exactly as the BERT arm does -- which
+        means a StubEncoder-based baseline golden is mintable LOCALLY, on
+        Windows, with no sent2vec build and no 21 GB download. That is the
+        version worth having first: it is what would catch a shared
+        cython_utils.py change moving the baseline numbers, and that is the
+        failure mode this item exists to prevent. A REAL-MODEL baseline golden
+        still needs Linux and the 21 GB model, but it can ride the pod session
+        P29-runs and P40 need anyway -- and the decision-3 legacy verification
+        run is already a reference candidate for it.
+        THE PREMISE IS UNCHANGED AND STILL TRUE: cython_utils.py is SHARED
+        between the arms and only one arm has a golden.
 
 [x] P14. C10 - RESULT PROVENANCE            DONE 2026-08-11 (5a52d26)
         Was: no output directory recorded the commit, machine, or library versions
@@ -990,8 +1379,24 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         line it was meant to preserve is worthless given finding 08 (a GPU buys
         under 0.5% for these arms), and mean-pooling can be rebuilt behind the
         P38 encoder registry if it is ever actually wanted. Deleting 545 orphaned
-        lines also removed the third ensure_nltk_data/format_time copy and one of
-        the 11 stop_words patches.
+        lines also removed the third ensure_nltk_data/format_time copy.
+
+        CORRECTED 2026-08-11 (audit): this paragraph used to end "...and one of
+        the 11 stop_words patches", crediting C2's deletion with removing it.
+        THAT IS WRONG. `git show 7400eff` -- C1, the commit before -- deleted
+        ALL ELEVEN, bert_eval.py:63 included, with the deliberate note "line
+        only; the file itself is deleted next commit". C1 removed the patch; C2
+        removed the file it had sat in. The distinction is not pedantry: C1 was
+        the commit that got its own golden gate BECAUSE stop_words feeds
+        tokenization -> embeddings -> every number, and the whole point of
+        isolating it was that the gate covers all eleven removals and nothing
+        else. Attributing one of them to a later commit would put a
+        number-touching change outside the gate that proved it inert. The count
+        of 11 stated at the top of this file and in P16 is correct as written.
+        (Decision 2 at the head of this file predicted C2 would delete the
+        patch. It reads verbatim as a decision record; the executor simply took
+        all eleven in one gated commit instead, which is strictly better and
+        changed nothing about the outcome.)
 
 [ ] P19. C6 - A REAL CLI                         MOVED TO P38 by decision 1
         There is no main.py and no [project.scripts]. bert_models.py:87 still
@@ -1000,6 +1405,16 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         returns before prompting -- but live via
         python -m aicds.models.bert_models. Needs a stdin-closed test over every
         subcommand.
+        THE MECHANISM, recorded 2026-08-11 (audit) because "dead but live" is
+        the kind of statement that gets simplified into a wrong one: select_model
+        RETURNS EARLY when it is given a model id, so the input() is unreachable
+        whenever --model is passed, and run_bert_analysis.py always passes it.
+        The ONLY way to reach the prompt is `python -m aicds.models.bert_models`,
+        whose __main__ calls run_analysis() with model_id=None.
+        CROSS-REF P41: that same `-m` entry point is the one that silently
+        ignores AICDS_PIPELINE. So the module's __main__ has two independent
+        defects, both invisible from the supported path, and a real CLI closes
+        the class rather than either instance.
 
 [x] P20. C7 - ONE PerformanceIndex PARSER REPLACING FOUR   DONE 2026-08-11
         1f69e11 added src/aicds/analysis/performance_index.py and proved it
@@ -1018,20 +1433,54 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
 [ ] P21. C5 - SentenceEncoder PROTOCOL + ENCODER REGISTRY
         embed_sentence(text) -> seq[seq[float]], with readable names and 1|2|3 aliases.
         This is also the seam the RAG work needs.
+        CONSTRAINT ADDED 2026-08-11 (audit): any registry built in the P38 repo
+        MUST be built on aicds.runs.MODEL_KEYS / KEY_LABELS, not on a fresh
+        name table. Those two are now the single authority on display-name <->
+        directory-key, and C7 collapsed a genuine four-way naming drift onto
+        them; runs.discover RAISES on an unregistered label rather than
+        skipping it. A second, independent name map in the encoder registry
+        would recreate exactly the drift C7 removed, in the repo that is
+        supposed to be the clean one.
 
 [ ] P22. C8 - FIX THE DASHBOARD (it 404s today)
         Regenerate into dashboard/public/data/, commit it, delete the stray
         dashboard/dashboard/ tree.
+        STEP 1 OF 3 IS ALREADY DONE (recorded 2026-08-11 (audit)): C7's gate
+        re-ran build_dashboard_data.py and the JSON came out BYTE-IDENTICAL
+        (sha 0638b6c5...), which is both the regeneration and the proof that
+        rewiring the builder onto runs.discover changed nothing. The
+        regenerated JSON is sitting UNTRACKED in the working tree right now, at
+        the correct dashboard/public/data/ path. Steps 2 and 3 -- commit it,
+        delete the stray dashboard/dashboard/ tree -- are deferred to P38 with
+        the rest of the dashboard work, because whether that JSON gets committed
+        at all is a P38 data-exposure question, not a dashboard question.
 
 [ ] P23. C9 - CONVERT scripts/ TO DEPRECATION SHIMS
+        MOVED TO P38 by decision 1, and added to P38's carry list 2026-08-11
+        (audit) -- decision 1 moved it with the rest of the polish but the P38
+        checklist entry never named it.
+        NOT COSMETIC ANY MORE, and this changed after decision 1 was taken.
+        scripts/ now holds SAFETY MECHANISMS, not just argparse: check_out_root's
+        DUA guard (C5) refuses an un-ignored --out root before the model loads,
+        and the run banners are the only record of which config a run used for
+        an arm that writes to a timestamp-only directory. Shimming scripts/
+        therefore means RELOCATING a safety mechanism, and a shim that forwards
+        the call while dropping the guard would be a silent regression of the
+        one defect class that cannot be taken back.
 
-[ ] P24. C12 - PER-CASE OUTPUT FILES ARE ALL EMPTY
-        SUPERSEDED BY P40, which decided it: implement, as a NEW SIBLING FILE.
-        The baseline emits 258 zero-byte files; cython_utils.py:203-204 opens the two
+    P24. C12 - PER-CASE OUTPUT FILES ARE ALL EMPTY
+        RETIRED 2026-08-11 (audit) -- the checkbox lives in the RETIRED section
+        above, and the work lives in P40. This block is kept because its
+        MEASUREMENTS are still the best statement of the defect:
+        the baseline emits 258 zero-byte files; cython_utils.py:203-204 opens the two
         handles and :308-309 closes them with NOTHING written in between. The BERT arm
         never opens them but still creates the Fold*/ dirs (bert_models.py:539-540).
         Neither arm has EVER produced per-case output. (Line numbers re-resolved
         2026-08-11.)
+        P40 answers P24's question ("implement or delete") with a third option:
+        write a NEW SIBLING FILE and leave the dead handles dead. Repairing them
+        would put new writes inside the region the byte-exact golden covers, for
+        output nothing reads.
 
 [ ] P25. C13 - FOLD PARALLELISATION
         The 10 folds are embarrassingly parallel and the loop is 93%+ of runtime.
@@ -1045,6 +1494,11 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         step. A HOSTED LLM API IS RULED OUT - the repo carries MIMIC-III under a
         PhysioNet DUA, so the decoder must run locally. This is where a GPU finally
         earns its keep; for the encoder arms it buys under 0.5%.
+        ITS PREREQUISITE NOW LIVES IN ANOTHER REPO, which nothing said (noted
+        2026-08-11 (audit)). P21 -- the retrieval interface this item is waiting
+        on -- MOVED TO P38 by decision 1. So P26 is a CROSS-REPO dependency: the
+        RAG endgame cannot start in this repo, because the seam it needs will be
+        built in the clean one. Worth knowing before anyone schedules it here.
 
 
 ===============================================================================
@@ -1053,6 +1507,22 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
 
 [ ] P27. FINISH THE COMMA REJOIN - NINE OCCURRENCES REMAIN
         Effort: hours. The fix is already MEASURED; what is missing is the commit.
+        SECOND-HIGHEST-VALUE OPEN ITEM (P40 is first).
+
+        IT LANDS AS A THIRD preprocess_version, working name `corrected2` --
+        owner decision 4, 2026-08-11. NOT as an edit to `corrected`. The reason
+        is reproducibility rather than caution: `corrected` is what produced
+        every existing results tree, every number in findings 11 and 13, and the
+        byte-compare reference the pod session will use, so changing it in place
+        would silently invalidate all of them and leave no way to reproduce the
+        old figures. The config seam was designed for exactly this -- add a
+        field value with a legacy-preserving default, never change an existing
+        one. `corrected` stays FROZEN; corrected2 is corrected plus rule 2.
+        A CONSEQUENCE WORTH PLANNING FOR: the three tests that broke under the
+        naive rule pin `corrected`, so they must STAY GREEN. corrected2 gets its
+        own pinned expectations -- including proof that "fever,cough" still
+        SPLITS under corrected2, since the 24-char cap is what is supposed to
+        prevent the over-join that reverted the first attempt.
 
         P8's rule ("a token starting with a space rejoins to its predecessor")
         recovers 80 of 89 fragments. It misses the nine where the intra-label comma
@@ -1095,8 +1565,12 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         tests/test_make_folds_guard.py, 13 tests. Suite 122 -> 135 passed.
         Also pins the determinism the gitignore rests on: two runs byte-identical.
 
-[x] P29. THE TWO ONE-CHANGE-AT-A-TIME CONFIGS    DONE 2026-08-05 (45f36fc)
-        CONFIGS DEFINED; THE RUNS THEMSELVES ARE STILL TO DO.
+    P29. THE TWO ONE-CHANGE-AT-A-TIME CONFIGS
+        SPLIT INTO TWO ITEMS 2026-08-11 (audit), because one P-number in two
+        states is what let this sit as [x] here, [~] under PARTIAL and [ ] in
+        the ranked checklist simultaneously -- three states for one item:
+          [x] P29-configs  DONE 2026-08-05 (45f36fc)
+          [ ] P29-runs     OPEN -- eight runs, 4 arms x 2 configs, on the pod
 
           folds-only       grouped folds, legacy preprocessing -> leakage effect
           preprocess-only  legacy folds, fixed preprocessing    -> preproc effect
@@ -1109,8 +1583,14 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         real bug here: c2115ba shipped the seam with no CLI able to reach
         CORRECTED, and 31bea66 had to add the plumbing afterwards.
 
-        TO DO: run both on the baseline arm (~13 min each on the pod) to split the
-        measured 0.090 F1 drop into a leakage part and a preprocessing part.
+        TO DO (P29-runs): EIGHT runs -- 4 arms x 2 configs -- to split the
+        measured 0.090 baseline F1 drop into a leakage part and a preprocessing
+        part. (CORRECTED 2026-08-11 (audit): this line said "run both on the
+        baseline arm", i.e. two runs, which contradicted the eight-run scope
+        recorded under PARTIAL at the top of this file and the eight runs the
+        staged script actually performed. Two baseline runs would attribute the
+        BASELINE's drop and leave the three BERT arms unattributed, which is
+        half the experiment. Eight is the number.)
 
 [x] P30. WIDEN .githooks/pre-commit                   DONE 2026-08-05 (d77de02)
         Both rules had missed data/folds_grouped/ - verified, not assumed:
@@ -1126,17 +1606,64 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         does. Same defence-in-depth reasoning that added rule 2 originally.
         Verified end to end: staging a grouped fold file now exits 1.
 
-[ ] P31. THE GOLDEN TAKES ~44 MINUTES, NOT 20-26. FOUR DOCS SAY OTHERWISE.
-        Effort: minutes. Measured twice on an M-series Mac: 43:50 and 44:32.
-        CLAUDE.md and three plan/test docs claim "~20 min" or "20-26 min". Anyone
-        budgeting a refactor gate off that number will assume it hung.
-        While in there: tests/stubs.py records StubEncoder(dim=64) at 128s versus
-        1245s at 768 - worth stating as the DEVELOPMENT loop, with 768 reserved for
-        minting anything committed.
+[~] P31. THE GOLDEN TAKES 43-53 MINUTES, NOT 20-26
+        MOSTLY DONE 2026-08-11 (C9). REWRITTEN TO RESIDUE-ONLY 2026-08-11
+        (audit); state corrected from [ ] to [~] to match the Tier 3 checklist
+        entry, which has said MOSTLY DONE since C9 landed.
 
-[ ] P33. compare_models.py SILENTLY PICKS ONE RUN PER MODEL, UNLABELLED
-        Effort: hours. Found 2026-08-05 while deciding where to put the
-        corrected results. Belongs with P14 (provenance) and P15 (paths).
+        MEASURED SIX TIMES, not the twice this block used to claim: 43:28,
+        43:50, 44:32, ~50:00, 52:35, 53:10. Call it 43-53 minutes.
+
+        WHAT IS LEFT ON THE RANGE IS EXACTLY ONE LINE: tests/test_golden.py:68
+        still says "about 20 minutes". C9 corrected the RANGE in every other
+        statement of the number -- CLAUDE.md, this file, revival-roadmap.md,
+        findings/10, architecture.md, setup.md, README.md, pyproject.toml's
+        golden-runtime comment -- and left that one ALONE ON PURPOSE.
+        test_golden.py is the binding constraint on the entire refactor;
+        editing the file that holds the safety net in order to fix a docstring
+        is not a trade worth making. That is why this item is [~] and not [x],
+        and why it should probably stay [~] forever: the residue is a
+        deliberate choice, not an oversight.
+
+        NARROWED 2026-08-11 (audit): this block used to claim C9 corrected
+        EVERY other statement, leaving one line. That is true of the range and
+        false of the COUNT. C9 wrote "five times" plus a five-item list omitting
+        43:50 into CLAUDE.md:143, README.md:772, docs/guides/setup.md:107,
+        docs/plans/revival-roadmap.md:9 and pyproject.toml:62; all five stand
+        today. The residue is therefore ONE range statement (test_golden.py:68,
+        deliberate) plus FIVE count statements (accidental, out of this
+        prose-scoped audit's reach, each a one-line fix). Do not restate the
+        "exactly one line" claim without re-grepping for `five times`.
+
+        STILL WORTH DOING while in the area: tests/stubs.py records
+        StubEncoder(dim=64) at 128s versus 1245s at 768 - worth stating as the
+        DEVELOPMENT loop, with 768 reserved for minting anything committed.
+
+[x] P33. compare_models.py SILENTLY PICKS ONE RUN PER MODEL, UNLABELLED
+        CLOSED 2026-08-11 (7927a88 + 5a52d26); recorded here 2026-08-11 (audit).
+        Found 2026-08-05 while deciding where to put the corrected results.
+        Belonged with P14 (provenance) and P15 (paths) -- and was in fact closed
+        BY them, which is why it had no commit of its own and was missed.
+
+        BOTH CONSEQUENCES ARE CLOSED, and the remedy this block proposed was
+        superseded by a better one:
+          1. UNLABELLED PIPELINE -- gone. run_metadata.json records the pipeline
+             by name AND by all three PipelineConfig fields;
+             compare_models.resolve_pipeline prefers it and demotes dirname
+             inference to a [WARN] fallback; a MIXED-PIPELINE TREE IS REFUSED
+             outright rather than half-charted; and the pipeline is printed on
+             the PDF cover page. The --results-dir separation is still available
+             but is no longer the only thing keeping the trees apart.
+          2. STRING-SORTED TIMESTAMPS -- gone, but NOT by the fix proposed
+             below. runs.discover picks the run whose directory has the NEWEST
+             MTIME rather than parsing the stamp at all, and PRINTS the choice
+             when a key has more than one run. The DDMMYYYY hazard is written
+             down where the code is, at runs.py:497-498, with this item's own
+             example (15022026 sorts after 05082026 while being five months
+             older). Parsing the stamp would have re-derived a date the
+             filesystem already knows; mtime cannot drift out of sync with the
+             directory it describes.
+        The "Fix:" line below is kept as the ORIGINAL PROPOSAL, superseded.
 
         discover_runs() takes candidates[-1] - the LEXICALLY last timestamp per
         model - and records nothing about which PIPELINE produced it. Two
@@ -1152,8 +1679,10 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
              01022026 although it is a day earlier. It happens to be correct
              today (05 Aug < 06 Aug) which is exactly why it will go unnoticed.
 
-        Fix: parse the timestamp into a real date before sorting, record the
-        pipeline in run_metadata.json (P14), and put it on the PDF.
+        ORIGINAL PROPOSAL, superseded in part: parse the timestamp into a real
+        date before sorting, record the pipeline in run_metadata.json (P14), and
+        put it on the PDF. Two of the three shipped as written; the timestamp
+        parse was replaced by mtime.
 
 [~] P32. COLLECT THE CORRECTED-PIPELINE RESULTS         PARTIAL 2026-08-06 (3b8aed9)
         DONE: all four arms ran on the pod, exit 0, ~48 min total (baseline
@@ -1183,42 +1712,71 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         for the replacement claim (ordering inverts with K; TOP-K rewards not
         abstaining). Do not re-quote the four-way-tie framing from anywhere.
 
-        STILL TO DO:
-          - regenerate the comparison PDF -- BLOCKED by P34 below
-          - update docs/README.md: it still lists leakage as UNFIXED, never
-            mentions finding 11, and says "Phase 1 is next". The root
-            README.md is DONE (e83b5be) and docs/README.md now contradicts it
-          - re-measure the 58.1% ceiling on the grouped folds (see P2)
-          - run folds-only and preprocess-only to attribute the drop (P29)
-          - re-run analyze_score_distributions.py under corrected: the
-            saturation statistics (mean pairwise cosine 0.72-0.93, the >=0.6
-            percentages) are LEGACY-measured and now labelled as such in the
-            README, which is a stopgap rather than a fix
+        STILL TO DO -- PRUNED TO TWO ITEMS 2026-08-11 (audit). Three of the five
+        that used to be listed here were already done, and both remaining ones
+        are RUNS rather than code:
+          - P29-runs: folds-only and preprocess-only, to attribute the drop
+          - P37: re-run analyze_score_distributions.py -- the saturation
+            statistics (mean pairwise cosine 0.72-0.93, the >=0.6 percentages)
+            are LEGACY-measured and labelled as such in the README, which is a
+            stopgap rather than a fix. Note this one is not a plain re-run: the
+            script re-implements the grader (P37), so fixing it comes first or
+            the new numbers come from the same fourth cosine implementation.
 
-[ ] P34. compare_models.py SANITY CHECKS ARE PINNED TO LEGACY VALUES
-        Effort: ~an hour. Found 2026-08-06. BLOCKS the corrected comparison PDF.
+        THE THREE THAT WERE DELETED FROM THIS LIST, and why each was false:
+          - "regenerate the comparison PDF -- BLOCKED by P34". NOT BLOCKED. P34
+            was fixed 2026-08-06 (b53024e): SANITY_CHECKS_BY_PIPELINE keys the
+            expectations by pipeline, C7 re-ran all 16 checks green on
+            results/, results_corrected/ and results_drg/, and the PDFs exist on
+            disk. This line outlived its own blocker by five days.
+          - "update docs/README.md". Done -- refreshed in 2e5c6f3, and the C9
+            documentation pass went over it again.
+          - "re-measure the 58.1% ceiling". Done 2026-08-06: 76/129 = 58.9% on
+            the grouped folds, pinned in tests/test_drg_grader.py.
 
-        The 16 baked-in assertions hard-code legacy numbers, so
-        --results-dir results_corrected fails all 16 and exits before writing
-        the PDF. The checks are RIGHT to fire; the expectations are simply
+[x] P34. compare_models.py SANITY CHECKS WERE PINNED TO LEGACY VALUES
+        DONE 2026-08-06 (b53024e). Found 2026-08-06 while trying to build the
+        corrected comparison PDF. State corrected from [ ] to [x] 2026-08-11
+        (audit) -- the STATUS block has listed P34 as DONE since b53024e landed,
+        and this block was the last of FIVE places that disagreed about it.
+
+        WAS: 16 baked-in assertions hard-coded legacy numbers, so
+        --results-dir results_corrected failed all 16 and exited before writing
+        the PDF. The checks were RIGHT to fire; the expectations were simply
         legacy-specific.
 
-        Fix: key the expected values by pipeline, inferred from the run
-        directory or - better - from run_metadata.json once P14 lands.
-        DO NOT delete the assertions to unblock the PDF. They are the only
-        thing verifying the parser reads the columns correctly.
+        SHIPPED, and it is now this file's own example of a check that refuses
+        rather than guesses: SANITY_CHECKS_BY_PIPELINE keys the 16 expectations
+        by pipeline name, and resolve_pipeline decides which set applies --
+        explicit --pipeline first, then the runs' own run_metadata.json (P14),
+        then the directory name with a [WARN]. An unknown tree, a pipeline with
+        no recorded expectations, and a run in which ZERO checks executed are
+        all HARD EXITS. C7's gate re-ran them on all three committed trees:
+        16/16 pass on results/, results_corrected/ and results_drg/ bare, and
+        results_p5 REFUSES bare because it is not in _PIPELINE_BY_DIRNAME --
+        that refusal being the feature, not a gap.
+        The assertions were never deleted to unblock the PDF. They are still the
+        only thing verifying the parser reads the columns correctly.
 
-        Same commit should fix the host label: hosts_by_date maps 15022026 and
-        05082026 only, so the 06082026 corrected runs fall through to the
-        per-model default and are mislabelled "M-series Mac" when they ran on
-        RunPod Linux. Deriving host from a date prefix was always a stopgap.
+        THE HOST LABEL WAS FIXED IN THE SAME COMMIT, and better than this block
+        asked. It said "hosts_by_date maps 15022026 and 05082026 only". That is
+        no longer true in two ways: HOSTS_BY_DATE now carries 06082026 ->
+        "RunPod Linux" as well, and an UNMAPPED date resolves to "unknown host"
+        instead of falling through to a per-model constant. The old fallback
+        asserted "M-series Mac" for every arm, so it did not degrade gracefully
+        -- it stated a specific wrong machine. An honest blank beats a confident
+        error in a provenance box.
 
-        REMEMBER when writing them up: these numbers are leakage-free and
-        preprocessing-unified, but they are STILL SELF-GRADED (P4) and still
-        rank-blind (P5). They are defensible as a reproduction; they are NOT yet
-        defensible as an encoder ranking. Say so explicitly rather than letting a
-        reader infer otherwise - the README already made one overclaim of exactly
-        this kind and it had to be corrected.
+        REMEMBER when writing up numbers from these trees -- CORRECTED
+        2026-08-11 (audit): this block used to warn that the corrected numbers
+        were "STILL SELF-GRADED (P4) and still rank-blind (P5)". BOTH WERE
+        CLOSED ON 2026-08-06, hours after this was written. What remains true,
+        and is the version to carry: the corrected numbers are leakage-free,
+        preprocessing-unified, encoder-independently graded and rank-aware --
+        and they still do not support an encoder ranking, because NO PAIR
+        SEPARATES (max |t| 1.718 vs 2.262). Say that explicitly rather than
+        letting a reader infer a winner; the README already made one overclaim
+        of exactly this kind and it had to be corrected.
 
 [ ] P35. NO CONFIG AXIS MAY BE UNANNOUNCED, AND NONE MAY LACK A READER
         Effort: minutes for the remaining part. Found 2026-08-06 while doing P4,
@@ -1244,34 +1802,73 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
           - The same audit for any FUTURE field. The rule: a config field and
             its consumer land in the SAME commit, and the field appears in the
             banner in that commit too.
+          - P41, found 2026-08-11 (audit), is a NEW INSTANCE OF THIS ITEM'S
+            FAILURE MODE in a place the rule did not look: not a field with no
+            reader, but an ENTRY POINT that never asks. `python -m
+            aicds.models.bert_models` imports no from_env, so AICDS_PIPELINE is
+            silently ignored there while the baseline twin honours it. Same
+            outcome as the original P4 mistake -- a run whose config is not
+            what its invocation said -- reached by a different route. The rule
+            this suggests: when an arm gains a config entry point, EVERY entry
+            point of EVERY arm gets checked in that commit.
 
-[ ] P36. bert_models KEEPS A PRIVATE containGreaterOrEqualsValue AND NO TEST
-        TOUCHES IT
-        Effort: hours. Found 2026-08-06 during P4's call-site sweep.
+[x] P36. bert_models KEPT A PRIVATE containGreaterOrEqualsValue AND NO TEST
+        TOUCHED IT
+        DONE 2026-08-06 (1d68df9). State corrected from [ ] to [x] 2026-08-11
+        (audit) to match the checklist entry, which has said DONE since the
+        commit landed.
+        Found 2026-08-06 during P4's call-site sweep.
 
-        bert_models.py:198 defines its own copy. cython_utils.py:573 has the
-        original. tests/test_characterize_similarity.py imports the cython_utils
+        WAS: bert_models.py defined its own copy while cython_utils.py held the
+        original. tests/test_characterize_similarity.py imported the cython_utils
         one; tests/test_bert_symptom_pairwise.py defines a THIRD and injects it.
-        So the copy the BERT arm actually calls in production is exercised by
+        So the copy the BERT arm actually called in production was exercised by
         nothing.
 
-        Why it matters now: P5 (rank-aware metrics) must change this function's
-        semantics -- it currently answers "did anything in the top K clear the
-        bar", and rank-awareness needs "at what rank". Change cython_utils and
-        the baseline gets the new rule while the BERT arm keeps the old one. The
-        golden would catch the numeric fallout without naming the cause.
+        SHIPPED. The copy is DELETED -- bert_models.py:197-198 is now a comment
+        recording that it used to be there and what its docstring wrongly
+        claimed -- and the production call site at bert_models.py:681 is
+        qualified `util_cy.containGreaterOrEqualsValue`, so the BERT arm reaches
+        the shared definition. The one remaining definition is
+        cython_utils.py:658. (Line numbers re-resolved 2026-08-11 (audit); this
+        block said :198 and :573, and P5's block said :390-394. All three were
+        written at different points in the file's growth.)
+        AND IT IS PINNED, which is what stops it recurring:
+        tests/test_topk_threshold_gate.py:58-59 asserts bert_models has NO
+        attribute of that name, with a failure message explaining why a private
+        copy is a silent divergence. A test that the copy cannot come back beats
+        a test of the copy.
 
-        Fix: delete the copy, import the shared one, add a test that pins the
-        production path. Do this BEFORE P5, not during.
+        Why it mattered: P5 (rank-aware metrics) reads this function's answer --
+        it says "did anything in the top K clear the bar", and rank-awareness
+        needs "at what rank". Change cython_utils with a copy still in place and
+        the baseline gets the new rule while the BERT arm keeps the old one. The
+        golden would have caught the numeric fallout without naming the cause.
+        (The "do this BEFORE P5, not during" instruction that used to close this
+        block was FOLLOWED -- 1d68df9 landed 2026-08-06, before P5's 5393cab --
+        and was deleted 2026-08-11 (audit) because an instruction that has been
+        carried out reads as one that has not.)
 
 [ ] P37. analyze_score_distributions.py RE-IMPLEMENTS THE GRADER
         Effort: hours. Found 2026-08-06 during P4's call-site sweep.
+        PRIORITY RAISED 2026-08-11 (audit) -- see the C7 note below.
 
-        :152-187 simulates get_diagnosis_similarity_by_description_max against
+        :148-183 simulates get_diagnosis_similarity_by_description_max against
         its own numpy cosine -- a fourth cosine implementation in this repo --
-        and imports no PipelineConfig. It feeds build_dashboard_data.py and
-        build_readme_plots.py, so it will keep generating SATURATION EVIDENCE
-        FOR A RETIRED RULER: under drg-exact there is no saturation to show.
+        and imports no PipelineConfig. (Line drift corrected 2026-08-11 (audit)
+        from :152-187; the block is compute_per_patient_max_scores.) It feeds
+        build_dashboard_data.py and build_readme_plots.py, so it will keep
+        generating SATURATION EVIDENCE FOR A RETIRED RULER: under drg-exact
+        there is no saturation to show.
+
+        WHY IT IS MORE URGENT THAN IT WAS. C7 fixed build_readme_plots.py, which
+        used to raise FileNotFoundError on EVERY invocation. So this script's
+        legacy-measured statistics are no longer inert prose that happens to be
+        stale -- they are now ACTIVELY REGENERATED into committed SVGs by a
+        script that runs. The failure mode changed from "a stale number sits in
+        a document" to "a stale number is re-derived and re-committed on
+        demand", and the second is the one that survives a documentation pass.
+        It is also P11's evidence base and P32's last open code item.
 
         Its spot_check_against_cython guards only the cosine kernel, not the
         aggregator or the prefix stripping, so it passes while being wrong.
@@ -1295,11 +1892,34 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         independent copies, and clones persist. A rewrite would look like
         remediation without being it.
 
-        Exposure, measured: 29 tracked files carry identifiers. 25 substantive
-        (data/raw, the 20 fold files, 3 committed run outputs, the golden) and 4
-        incidental prose mentions. The data entered at commit 2 of 53 (b23657b)
-        and was NEVER modified since; each clinical path was touched by exactly
-        one commit.
+        Exposure, measured 2026-08-06: 29 tracked files carry identifiers. 25
+        substantive (data/raw, the 20 fold files, 3 committed run outputs, the
+        golden) and 4 incidental prose mentions. The data entered at commit 2 of
+        53 (b23657b) and was NEVER modified since; each clinical path was
+        touched by exactly one commit.
+
+        THAT AUDIT HAS DRIFTED IN BOTH DIRECTIONS, re-dated 2026-08-11 (audit).
+        It is a snapshot, and the tree moved under it:
+          - "commit 2 OF 53" no longer locates anything: the repo is past 86
+            commits. Read it as "the second commit ever made", which is the
+            durable fact.
+          - ONE CARRIER WAS REMOVED. a53c84b untracked
+            .system-design-visualization.md (a Feb-2026 snapshot that had been
+            committed despite declaring itself local-review-only).
+          - TWO WERE ADDED, by the refactor itself. C6 and C7 introduced the
+            real sample line HADM_ID=124073 into
+            src/aicds/analysis/performance_index.py:27 (a docstring showing the
+            per-case header trap) and tests/test_performance_index.py:880 (a
+            pinned parser literal). Neither is under data/, so neither was
+            caught by the path rule; both are single IDs, so neither trips the
+            20-distinct-ID content rule. They are being replaced with a
+            synthetic 999001 in the commit after this one.
+          - THE TREND IS THE POINT, and it is the argument for doing P38 rather
+            than a one-off scrub: NEW CODE RE-INTRODUCES THE LINE. Documenting a
+            parser trap naturally reaches for a real example, and the real
+            examples are all identifiers. A cleanup that is not accompanied by a
+            convention (synthetic IDs in fixtures and docstrings) will be undone
+            by the next person writing a docstring.
 
         TWO MEASUREMENTS MAKE THIS NON-LOSSY, which is why it is worth doing
         properly rather than just deleting things:
@@ -1402,9 +2022,12 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         construction, not by an impact bound that happens to be small this time.
 
 --------------------------------------------------------------------------------
-P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
+[ ] P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
      Priority: HIGHEST of the open non-blocker items. Found 2026-08-06 while
-     writing up P5.
+     writing up P5. Checkbox added and cross-linked from TIER 2 on 2026-08-11
+     (audit): this block existed for five days with no entry in the ranked
+     checklist at all, which is how the file's declared top item stayed
+     invisible to anyone reading the checklist. It supersedes P24 (retired).
 
      WHY IT IS SUDDENLY VALUABLE. It has been on the known-defects list for
      months as a cosmetic wart. P5 turned it into the binding constraint on the
@@ -1450,14 +2073,70 @@ P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
      repairing the two dead handles. PerformanceIndex.txt stays untouched, so
      the byte-exact golden still covers exactly what it covered before -- the
      same reasoning that made P5 additive. Repairing the dead handles is a
-     separate, lower-value cleanup.
+     separate, lower-value cleanup -- and P24, the item that used to carry it,
+     is RETIRED on exactly this reasoning rather than left open.
+     THE SIBLING-FILE PATTERN NOW HAS TWO SHIPPED PRECEDENTS (noted 2026-08-11
+     (audit)): RankMetrics.txt (P5) and run_metadata.json (P14). Both are
+     written AFTER the PerformanceIndex handle closes, both left the golden
+     byte-exact, and both were additive by construction rather than by careful
+     editing. Follow the same call site and the same after-the-close discipline;
+     it is a paved road now, not a proposal.
 
      DATA-USE CONSTRAINT: per-case output is keyed by HADM_ID, so it is
      DUA-covered and must stay under results*/ (gitignored by glob) and out of
      docs/. Only aggregates go in findings. The pre-commit hook's 20-distinct-
      HADM_ID rule is the second line of defence, not the first.
+     PARTIALLY ENFORCED IN CODE SINCE C5 (noted 2026-08-11 (audit)):
+     runs.check_out_root asks git whether the --out root is ignored and RAISES
+     UnignoredOutRoot before the model loads if it is not, probing a
+     representative per-case path rather than the root. So "must stay under
+     results*/" is now checked rather than merely written down -- for runs that
+     pass --out. It is not total: a run with out=None returns immediately (that
+     is what keeps the golden contract untouched), and nothing stops a human
+     copying a RankCases.txt into docs/ afterwards. Treat the guard as the
+     floor, not the ceiling.
 
      REPORTABLE EITHER WAY. If the 98 are no easier, `answered` stops being
      suspect and the baseline's first place there becomes the honest headline.
      If they are easier, that quantity IS the confound and belongs in the
      README. There is no outcome in which this measurement is wasted.
+
+--------------------------------------------------------------------------------
+[ ] P41  `python -m aicds.models.bert_models` SILENTLY IGNORES AICDS_PIPELINE
+     Effort: minutes. Found 2026-08-11 by the C1-C9 audit. A P35-class hole,
+     and the FIX LANDS IN THE VERY NEXT COMMIT -- this item is recorded as [ ]
+     because it is open at the moment this file is committed, not because it is
+     expected to stay open. Flip it to [x] in that commit, not later.
+
+     THE DEFECT. bert_models.py's `__main__` calls a bare `run_analysis()`,
+     which takes `config=LEGACY` by default, and the module imports no
+     `from_env`. So:
+         AICDS_PIPELINE=corrected python -m aicds.models.bert_models
+     runs the LEGACY pipeline, prints a banner saying legacy, files its output
+     as legacy -- and never mentions that a variable asking for something else
+     was set. Nothing fails. This is the P4 failure mode exactly: a run whose
+     configuration is not what its invocation asked for, with no signal.
+
+     WHY IT IS WORSE THAN A PLAIN OVERSIGHT: IT IS ASYMMETRIC BETWEEN THE ARMS.
+     The baseline's twin entry point at baseline_sent2vec.py:543-552 DOES honour
+     it, deliberately, with an eight-line comment explaining this precise
+     failure mode -- "a bare run_analysis() defaults to LEGACY and would have
+     silently dropped the variable on the one entry point that has no
+     --pipeline flag to fall back to". The reasoning was written down, applied
+     to one arm, and not carried to the other. So the two arms disagree about
+     what the same command means, in a project whose central design constraint
+     is that the arms share everything except the embedding model.
+
+     HOW IT SURVIVED. It is invisible from the supported path: run_bert_analysis.py
+     always passes --pipeline explicitly, so the `-m` entry point is the only
+     way to reach it -- the same entry point that is the only way to reach the
+     dead input() prompt (P19). C4 gave both arms a __main__ guard; only one of
+     them got from_env(). A guard that runs the wrong config is not obviously
+     better than no guard.
+
+     FIX: give bert_models' __main__ the same `config=from_env()` parity, with
+     the comment that explains why, so the next person to read either module
+     finds the same reasoning. NOT ON THE GOLDEN PATH -- test_golden.py injects
+     the config through run_analysis directly and never reaches __main__ -- so
+     it needs the fast suite, not a 43-53 minute gate. Say that in the commit
+     message rather than leaving a reader to wonder why no golden ran.

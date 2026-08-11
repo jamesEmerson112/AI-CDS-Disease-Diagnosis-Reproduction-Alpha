@@ -7,10 +7,13 @@
 > Option C — rank-aware metrics against a model-independent answer key — was implemented
 > ([12](../findings/12-drg-grader.md), [13](../findings/13-rank-aware-metrics.md)) and its
 > measurements overturned two of this document's own assumptions along the way, both preserved
-> below with their corrections. Option B (a real precision/recall) remains open as P6.
+> below with their corrections. Option B (a real precision/recall) was **retired on 2026-08-11**
+> — the degeneracy it was designed to kill turned out to be a labelling artifact, and its
+> method would have undone option C's main gain. *(Updated 2026-08-11 by the TODO audit.)*
 
 **Status: option C implemented 2026-08-06** (`drg-exact` grader + `RankMetrics.txt`); **option B
-is open as P6**; options A and D remain unimplemented, with A's payoff diminished now that the
+RETIRED 2026-08-11 as P6** (§B below carries the reasoning; the math is kept for reference);
+options A and D remain unimplemented, with A's payoff diminished now that the
 threshold knob is gone. Originally: the substance of the "pluggable metrics" line in
 [revival-roadmap.md](revival-roadmap.md) Phase 5.
 
@@ -89,7 +92,10 @@ Replaces the MAX aggregator with the mean over the Cartesian product.
 Worth implementing as a registered aggregator alongside MAX for comparison, but it is not the
 end state.
 
-### B. Set-level soft precision / recall / F1 — OPEN, tracked as P6
+### B. Set-level soft precision / recall / F1 — RETIRED 2026-08-11 as P6
+
+**Not implemented, and deliberately not deferred.** The math below is kept for reference, and
+because the retirement is easier to argue with when the proposal is in front of you.
 
 Treat ground truth and prediction as *sets* of diagnoses and match them:
 
@@ -99,11 +105,32 @@ soft_recall    = mean over gt g       of ( max over predicted p of cos(g, p) )
 soft_f1        = harmonic mean of the two
 ```
 
-- **Fixes:** defects 1 and, critically, the degeneracy documented in
+- **Was claimed to fix:** defects 1 and, critically, the degeneracy documented in
   [../findings/04-metric-degeneracy.md](../findings/04-metric-degeneracy.md) — precision and
   recall become genuinely different quantities that can trade off, instead of collapsing to the
   same number.
 - **Does not fix:** defect 2 (still cosine-based, still model-dependent) or defect 3.
+
+> **Why it was retired rather than scheduled, 2026-08-11.** Two independent reasons, either
+> sufficient on its own.
+>
+> 1. **The degeneracy it targets does not exist as described.** This document's own footnote at
+>    §"The population question" below says so: `P == R` for the BERT arms is `PR == 1.0` — the
+>    answered-only and all-cases populations being *the same set*, because those arms never
+>    abstain. The baseline's `P != R` is the identical formula on a genuinely smaller answered
+>    population. Finding [13](../findings/13-rank-aware-metrics.md) then reproduced legacy
+>    `P`/`R`/`PR` **bit-exactly** from an independent code path, which settles it. The columns
+>    were unlabelled, not collapsing. **This section and that footnote had disagreed with each
+>    other since 2026-08-06**; the footnote was right.
+> 2. **It would undo option C's main gain.** Every term above is `cos(g, p)` over the diagnosis
+>    embeddings — the arm that produced the retrieval marking its own retrieval, which is
+>    precisely the self-grading that the `drg-exact` grader removed. A compact space would once
+>    again mark its own work leniently, and no amount of set-level structure changes that.
+>
+> **What survives:** the intuition that a prediction *set* should be scored against a truth
+> *set*, so that missing a second true diagnosis costs something. Nothing in the project measures
+> that today — MRR and Hit@K both stop at the *first* relevant candidate. If it is ever wanted,
+> build it on the encoder-independent DRG labels, and expect the 58.9% ceiling to bind it.
 
 ### C. Rank-aware retrieval metrics — Recall@K, MRR, nDCG — IMPLEMENTED 2026-08-06
 
@@ -173,9 +200,17 @@ metric side by side rather than replacing. That order held:
 1. **C (rank-aware)** — **done.** MRR and Precision@K against DRG relevance, all three
    populations, additively (new `RankMetrics.txt`, golden untouched). The result: no pair of
    encoders separates, max paired |t| = 1.718 vs the 2.262 needed.
-2. **B (set-level soft F1)** — **next; open as P6.** Still the only fix that makes P, R, and F1
-   three genuinely different numbers.
-3. **A (MEAN)** and **D (calibrated thresholds)** — unimplemented; D is likely moot post-`drg`.
+2. **B (set-level soft F1)** — **RETIRED 2026-08-11 as P6**, and the order line above is why the
+   retirement is worth stating rather than quietly dropping: B sat here as "next" for five days
+   after the measurements that removed its reason to exist. It was going to be the fix that made
+   P, R and F1 three genuinely different numbers — but they already are three different numbers
+   on a genuinely smaller answered population (the baseline), and identical on arms that never
+   abstain because those two populations are the same set. See §B.
+3. **A (MEAN)** and **D (calibrated thresholds)** — unimplemented, and **demoted 2026-08-11** to
+   optional/off-the-publication-path (P12 and P11). D is likely moot post-`drg` — there is no
+   threshold left to calibrate on the headline path. A is worth having as a *registered
+   aggregator* beside MAX, with the sort-before-reduce ULP hazard from
+   [12](../findings/12-drg-grader.md) handled in the same commit.
 
 The existing MAX-at-0.6 number is still reported alongside, clearly labelled as the legacy
 metric, so the new results remain comparable to Comito et al. and to this project's own

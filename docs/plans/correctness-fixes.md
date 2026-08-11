@@ -4,9 +4,11 @@
 > deliberately *move the numbers*, as opposed to the refactor work that must not. As of
 > 2026-08-08 the four big ones have landed (fold regrouping, the DRG grader, rank-aware
 > metrics, the preprocessing repairs), each behind a selectable config so the original pipeline
-> still reproduces bit-for-bit. What remains: embedding centring (item 5, never attempted), the
-> set-level metric (P6), the last nine comma fragments (P27), the attribution runs (P29), and
-> per-case output (P40).
+> still reproduces bit-for-bit. What remains: per-case output (P40), the last nine comma
+> fragments (P27), and the attribution runs (P29). Embedding centring (item 5) was never
+> attempted and is now optional rather than pending. **The set-level metric (P6) was RETIRED
+> on 2026-08-11** — findings 04 and 13 dissolved its motivation instead of satisfying it.
+> *(Updated 2026-08-11 by the TODO audit.)*
 
 This is the ordered TODO for making the encoder comparison valid. It is separate from
 [revival-roadmap.md](revival-roadmap.md), which is about code organisation. Nothing here is a
@@ -223,8 +225,13 @@ ladder was not.)
 | Item | What | Why it matters |
 |---|---|---|
 | **P40** | Per-case output (new sibling file; do not repair the dead handles) | Blocks the self-selection test — the one untestable confound in finding 13 |
-| **P6** | Set-level soft P/R/F1 over diagnosis sets | The complete fix for degeneracy; makes P, R, F1 three real numbers |
-| **P29** | `folds-only` / `preprocess-only` attribution runs (staged on the pod, unlaunched) | Splits the corrected-vs-legacy delta into its two causes |
-| **P27** | The last nine comma fragments | Completeness of 4b |
+| **P29** | `folds-only` / `preprocess-only` attribution runs (8 runs: 4 arms × 2 configs, on a pod pulled to current main) | Splits the corrected-vs-legacy delta into its two causes |
+| **P27** | The last nine comma fragments — lands as a *third* `preprocess_version`, `corrected2`; `corrected` stays frozen | Completeness of 4b |
 | **Item 5** | Embedding centring | Diminished payoff post-`drg`, but still the only probe of anisotropy |
 | **P39** | The two arms break score ties differently | Bounded at 0.0022 MRR; filed, not fixed |
+
+### Retired, with the reasoning — 2026-08-11
+
+| Item | What | Why it is retired rather than deferred |
+|---|---|---|
+| **P6** | Set-level soft P/R/F1 over diagnosis sets | Its motivation was **dissolved, not postponed**. It existed to kill the degeneracy; findings [04](../findings/04-metric-degeneracy.md) and [13](../findings/13-rank-aware-metrics.md) established there was none to kill — `P == R` is `PR == 1.0`, the answered and all-cases populations being the same set because those arms never abstain. The columns were unlabelled, not wrong. Separately, every term in the proposed formula is a cosine over the diagnosis embeddings, which **reintroduces the self-grading confound P4 removed**. What survives is the intuition that a prediction *set* should be scored against a truth *set* — nothing measures that today; if ever built, build it on the DRG labels, not on cosine. |
