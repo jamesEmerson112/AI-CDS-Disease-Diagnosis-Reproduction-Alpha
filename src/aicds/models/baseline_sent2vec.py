@@ -20,6 +20,7 @@ from aicds.utils.Constants import *
 from aicds.utils import cython_utils as util_cy
 from aicds.config import LEGACY, from_env, require_supported_grader
 from aicds.analysis.rank_report import RankAccumulator
+from aicds import runs
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -183,7 +184,7 @@ def generate_timing_pdf(timing_data, output_path):
     print(f"[SUCCESS] PDF report generated: {output_path}")
 
 
-def run_analysis(encoder=None, config=LEGACY):
+def run_analysis(encoder=None, config=LEGACY, out=None):
     """
     Run the full BioSentVec baseline disease diagnosis analysis pipeline.
 
@@ -200,6 +201,12 @@ def run_analysis(encoder=None, config=LEGACY):
                 published pipeline bit-for-bit. Pass aicds.config.CORRECTED (or
                 any other registry entry) for a pipeline that deliberately moves
                 the numbers.
+        out: output root. None (the default) writes
+             ``Prediction_Output_BioSentVec_{timestamp}/`` into the current
+             working directory. A path writes ``{out}/baseline/{timestamp}/``
+             instead, the results*/ layout scripts/compare_models.py reads. See
+             aicds.runs -- and note the old ``Prediction Output_`` spelling, with
+             a space, is retired.
 
     Returns:
         str: Path to the output directory containing results.
@@ -213,11 +220,11 @@ def run_analysis(encoder=None, config=LEGACY):
     # print belongs in the function, not at module scope: only the function
     # knows which config is actually being run, so a module-level banner could
     # report the environment's and still be wrong the moment a caller passes
-    # config= explicitly. It matters here because this arm writes its output to
-    # a directory named only by timestamp -- no model name, no pipeline -- so
-    # the run log is the ONLY place the configuration is recorded until
-    # run_metadata.json lands. Without it a corrected or DRG-graded baseline run
-    # is indistinguishable from a legacy one after the fact.
+    # config= explicitly. It matters here because the output directory names the
+    # encoder and the timestamp but NOT the pipeline, so the run log is the ONLY
+    # place the configuration is recorded until run_metadata.json lands. Without
+    # it a corrected or DRG-graded baseline run is indistinguishable from a
+    # legacy one after the fact.
     print("=" * 60)
     print("AI-CDS Disease Diagnosis - BioSentVec baseline")
     print("=" * 60)
@@ -319,10 +326,15 @@ def run_analysis(encoder=None, config=LEGACY):
     ################################################################################################################
     #OUTPUT DIRECTORIES
     ################################################################################################################
-    # Fix: Replace colons with dashes for Windows compatibility
-    timestamp = util_cy.current_time().replace('/','').replace(':', '-')
-    directory_prediction_root = os.getcwd() + '/Prediction Output_' + timestamp + '/'
-    directory_prediction_details_root = os.getcwd() + '/Prediction Symptom Details_' + timestamp + '/'
+    # Was: util_cy.current_time().replace('/','').replace(':','-') into
+    # 'Prediction Output_' + stamp -- a SPACE, and no model name, so no glob in
+    # the repo ever matched this arm's output (finding 10). aicds.runs unifies
+    # both arms onto 'Prediction_Output_{Name}_{stamp}'; the underscore spelling
+    # is forced by tests/test_golden.py:115's timestamp regex. util_cy.current_time
+    # itself is untouched -- its "%d/%m/%Y %H:%M:%S" format still feeds log lines.
+    _dirs = runs.run_dirs("BioSentVec", out=out)
+    directory_prediction_root = _dirs.root
+    directory_prediction_details_root = _dirs.details_root
     shutil.rmtree(directory_prediction_root, ignore_errors=True)
     shutil.rmtree(directory_prediction_details_root, ignore_errors=True)
     Path(directory_prediction_root).mkdir(parents=True, exist_ok=True)

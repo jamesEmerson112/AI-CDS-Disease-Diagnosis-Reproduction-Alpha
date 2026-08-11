@@ -6,6 +6,7 @@ Run from project root: python scripts/run_baseline.py [--pipeline NAME]
 
 import argparse
 import os
+import sys
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -23,7 +24,28 @@ if __name__ == "__main__":
         default=None,
         help=PIPELINE_HELP,
     )
+    parser.add_argument(
+        "--out",
+        metavar="ROOT",
+        default=None,
+        help="Output root. Default writes Prediction_Output_* into the current "
+        "directory (the layout the golden pins). --out ROOT writes "
+        "ROOT/<model>/<timestamp>/ -- the results*/ layout "
+        "compare_models.py --results-dir reads directly.",
+    )
     args = parser.parse_args()
+
+    # DUA guard, for the same reason the config is resolved early: fail in
+    # milliseconds, not after the 21GB model load. --out can aim HADM_ID-named
+    # per-case files at a repo-internal path no .gitignore rule covers, where the
+    # pre-commit hook is blind because those files are empty. out=None is not
+    # checked -- that layout is covered by .gitignore and pinned by the golden.
+    from aicds import runs
+
+    try:
+        runs.check_out_root(args.out)
+    except runs.UnignoredOutRoot as exc:
+        sys.exit("ERROR: %s" % exc)
 
     # Resolved here, before the module import, so a bad $AICDS_PIPELINE raises
     # from from_env in under a second rather than after the 21GB model load.
@@ -46,4 +68,4 @@ if __name__ == "__main__":
 
     from aicds.models.baseline_sent2vec import run_analysis
 
-    run_analysis(config=config)
+    run_analysis(config=config, out=args.out)

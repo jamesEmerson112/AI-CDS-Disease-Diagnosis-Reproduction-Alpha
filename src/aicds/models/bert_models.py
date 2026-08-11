@@ -25,6 +25,7 @@ from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid
 from aicds.utils.cython_utils import use_corrected_preprocessing
 from aicds.config import LEGACY, require_supported_grader
 from aicds.analysis.rank_report import RankAccumulator
+from aicds import runs
 
 # Debug mode - set to False to disable verbose logging
 DEBUG_MODE = False
@@ -368,7 +369,7 @@ def compute_bert_diagnosis_embeddings(model, admissions, config=LEGACY):
     print(f"[INFO] Format: Wrapped in arrays for util_cy compatibility")
     return embeddings
 
-def run_analysis(model_id=None, encoder=None, config=LEGACY):
+def run_analysis(model_id=None, encoder=None, config=LEGACY, out=None):
     """
     Run the full BERT disease diagnosis analysis pipeline.
 
@@ -385,6 +386,11 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
                 run_analysis without it and must stay byte-identical. Pass
                 aicds.config.CORRECTED for the correctness-fixed pipeline,
                 which deliberately moves the numbers.
+        out: output root. None (the default) writes
+             ``Prediction_Output_{Model}_{timestamp}/`` into the current working
+             directory -- the layout tests/test_golden.py pins, so it must not
+             move. A path writes ``{out}/{model_key}/{timestamp}/`` instead, the
+             results*/ layout scripts/compare_models.py reads. See aicds.runs.
 
     Returns:
         str: Path to the output directory containing results.
@@ -477,9 +483,14 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
     #OUTPUT DIRECTORIES
     ################################################################################################################
     # Create timestamped output directories with model name
-    timestamp = time.strftime("%d%m%Y_%H-%M-%S")
-    directory_prediction_root = os.getcwd() + f'/Prediction_Output_{model_name}_' + timestamp + '/'
-    directory_prediction_details_root = os.getcwd() + f'/Prediction_Symptom_Details_{model_name}_' + timestamp + '/'
+    # Shape decided in aicds.runs, not here -- one contract shared with the
+    # baseline arm and with the readers. out=None reproduces this line's previous
+    # behaviour byte for byte, which the golden requires; --out ROOT switches to
+    # the results*/ layout. Everything below keeps concatenating off these two
+    # strings, both of which still end in '/'.
+    _dirs = runs.run_dirs(model_name, out=out)
+    directory_prediction_root = _dirs.root
+    directory_prediction_details_root = _dirs.details_root
     shutil.rmtree(directory_prediction_root, ignore_errors=True)
     shutil.rmtree(directory_prediction_details_root, ignore_errors=True)
     Path(directory_prediction_root).mkdir(parents=True, exist_ok=True)

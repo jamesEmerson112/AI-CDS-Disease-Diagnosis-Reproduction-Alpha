@@ -72,12 +72,15 @@ def test_import_creates_no_directories(tmp_path, monkeypatch):
 
 
 def test_run_analysis_signature():
-    """``run_analysis(encoder=None, config=LEGACY)`` -- both defaults matter.
+    """``run_analysis(encoder=None, config=LEGACY, out=None)`` -- every default matters.
 
     ``encoder=None`` keeps the untouched real path the default, and
     ``config=LEGACY`` is the invariant ``aicds.config`` exists to protect: if
     the default ever stops being LEGACY, the golden's byte-exact reference stops
-    describing what a no-argument run does.
+    describing what a no-argument run does. ``out=None`` is the same kind of
+    invariant one level out: it selects the flat ``Prediction_Output_*``-in-cwd
+    layout, which is the layout the golden discovers by glob. ``out`` is last so
+    that the positional order of the older parameters is unchanged.
     """
     from aicds.config import LEGACY
 
@@ -86,9 +89,10 @@ def test_run_analysis_signature():
     assert callable(module.run_analysis)
 
     sig = inspect.signature(module.run_analysis)
-    assert list(sig.parameters) == ["encoder", "config"]
+    assert list(sig.parameters) == ["encoder", "config", "out"]
     assert sig.parameters["encoder"].default is None
     assert sig.parameters["config"].default is LEGACY
+    assert sig.parameters["out"].default is None
 
 
 def test_import_does_not_read_the_pipeline_env_var(tmp_path, monkeypatch):
