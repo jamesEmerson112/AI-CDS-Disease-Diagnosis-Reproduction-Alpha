@@ -877,7 +877,7 @@ def test_truncated_file_with_no_aggregate_still_parses():
         (
             "per-case only",
             " FOLD 0: LEN train: 116, LEN test: 13 \n"
-            "0 - HADM_ID=124073: PERFORMANCE INDEX of MAX SIMILARITY by MAX\n"
+            "0 - HADM_ID=999001: PERFORMANCE INDEX of MAX SIMILARITY by MAX\n"
             + PERFORMANCE_INDEX_HEADER
             + "1.0\t1\t0\t1.0\t1.0\t1.0\t1.0\n",
         ),

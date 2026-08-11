@@ -24,7 +24,7 @@ The traps, each of which cost a parser somewhere
 
 1. **Three header shapes, and the per-case one must be tested first.** A loose
    ``.+ SIMILARITY by MAX`` pattern swallows the per-case header, because
-   ``"0 - HADM_ID=124073: PERFORMANCE INDEX of MAX SIMILARITY by MAX"`` matches
+   ``"0 - HADM_ID=999001: PERFORMANCE INDEX of MAX SIMILARITY by MAX"`` matches
    it too. Order: per-case, then ``<k>-FOLD``, then fold-aggregate.
 
 2. **The optional leading space on the fold-aggregate header is load-bearing.**

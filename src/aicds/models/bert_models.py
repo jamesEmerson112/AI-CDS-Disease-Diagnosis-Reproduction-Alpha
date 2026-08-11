@@ -23,7 +23,7 @@ from aicds.utils.cython_utils import cosine_similarity  # Direct import to avoid
 # corrected branch. A bare name raises NameError instead unless the test
 # registers it (it does, at the _load_bert_functions namespace).
 from aicds.utils.cython_utils import use_corrected_preprocessing
-from aicds.config import LEGACY, require_supported_grader
+from aicds.config import LEGACY, from_env, require_supported_grader
 from aicds.analysis.rank_report import RankAccumulator
 from aicds import runs
 
@@ -842,4 +842,16 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY, out=None):
 
 # Run interactively when executed as a module directly (backwards compatible)
 if __name__ == "__main__":
-    run_analysis()
+    # ``config=from_env()`` and not the bare default, matching the baseline arm
+    # (baseline_sent2vec.py's ``__main__``). This module never resolved the env
+    # var, so ``AICDS_PIPELINE=corrected python -m aicds.models.bert_models``
+    # ran LEGACY and said nothing about it -- the failure mode this repository
+    # fears most, since the output of a legacy run and a corrected one differ
+    # only in the numbers. scripts/run_bert_analysis.py was unaffected (it
+    # resolves ``from_name(args.pipeline) if args.pipeline else from_env()``
+    # itself), so the hole was confined to this one entry point, which is also
+    # the only one with no ``--pipeline`` flag to fall back to. from_env()
+    # returns LEGACY when the variable is unset, so the default path stays
+    # bit-identical and the golden -- which calls run_analysis(config=...)
+    # directly and never reaches this block -- is unaffected.
+    run_analysis(config=from_env())
