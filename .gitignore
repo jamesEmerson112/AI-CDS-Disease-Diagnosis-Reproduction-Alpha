@@ -128,7 +128,7 @@ htmlcov/
 BioSentVec_PubMed_MIMICIII-bigram_d700.bin
 
 # System design visualization (local-only, detailed architecture diagrams)
-.system-design-visualization
+.system-design-visualization.md
 
 # The GroupKFold-on-SUBJECT_ID replacement splits (aicds.config.CORRECTED).
 # These are MIMIC-III derived and fall under the PhysioNet DUA, so they are
