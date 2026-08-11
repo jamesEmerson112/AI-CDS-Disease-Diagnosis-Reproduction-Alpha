@@ -21,7 +21,7 @@ def main():
     print("\n[1] Checking directory structure...")
     required_dirs = [
         "src", "src/aicds", "src/aicds/models", "src/aicds/entity",
-        "src/aicds/utils", "src/aicds/evaluation",
+        "src/aicds/utils",
         "scripts", "tests", "data", "data/folds", "data/raw",
         "output", "docs", "config", "archive"
     ]

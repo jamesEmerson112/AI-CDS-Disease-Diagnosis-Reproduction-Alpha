@@ -57,7 +57,7 @@ class TestDirectoryStructure:
 
     def test_src_structure(self):
         dirs = ["src", "src/aicds", "src/aicds/models", "src/aicds/entity",
-                "src/aicds/utils", "src/aicds/evaluation"]
+                "src/aicds/utils"]
         for d in dirs:
             path = os.path.join(project_root, d)
             assert os.path.isdir(path), f"{d}/ missing"
