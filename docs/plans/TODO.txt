@@ -4,6 +4,11 @@ Updated 2026-08-06 (late): P4 AND P5 BOTH COMPLETE. Both metric knobs are gone.
 Updated 2026-08-10: four phase decisions recorded (below); audit corrections folded in.
 Updated 2026-08-11: C1-C9 landed. Phase 2 is DONE and Phase 3's drift-stoppers are
   done in this repo. P14 P15 P16 P17 P20 closed, P18 retired.
+Updated 2026-08-11 (later): the whole batch PUSHED (e6bb8e3..a53c84b); C9's SHA
+  resolved to 760ff1d; tail commit a53c84b untracked the stale design snapshot
+  whose ignore pattern never matched. Next up, per decision 4: P40 code, then
+  the ONE combined pod session (P29 staged runs + P40-instrumented run + the
+  C4/C5 legacy-baseline byte-compare against results/baseline/05082026_18-55-32).
 
 DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
   1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
@@ -28,7 +33,9 @@ DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
      staged attribution runs AND the P40-instrumented run together (plus the
      decision-3 verification run). Most value per pod-hour.
 
-THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, all on main, unpushed
+THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, PUSHED to origin/main 2026-08-11
+  (e6bb8e3..a53c84b -- the eight code commits, the docs pass, the decisions
+  record a725aac, and one tail commit; nothing of the batch remains local)
   Eight code commits plus this documentation pass. The 2026-08-08 audit listed
   every outstanding Phase 2 item and both regressed Phase 3 items; this batch
   closed all of them. Fast suite 264 -> 413 passed, 3 deselected.
@@ -67,9 +74,21 @@ THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, all on main, unpushed
     5a52d26  C8  run_metadata.json on both arms, written after the handle
                  closes; config.name_of; fold_dir digest allowlisted to the
                  TRAIN/TEST filenames. Closes P14.
-    (this)   C9  documentation made true again: CLAUDE.md, this file,
+    760ff1d  C9  documentation made true again: CLAUDE.md, this file,
                  revival-roadmap.md, findings/10, architecture.md, setup.md,
-                 pyproject.toml's golden-runtime comment.
+                 README.md, pyproject.toml's golden-runtime comment. (The
+                 commit wrote "(this)" here because it could not know its own
+                 SHA; resolved after the fact.)
+    a53c84b  --  tail commit, found during C9's final sweep: the tracked
+                 .system-design-visualization.md declared itself
+                 local-review-only and claimed .gitignore covered it, but the
+                 ignore pattern lacked the .md extension and never matched, so
+                 the Feb-2026 snapshot (pre-src/aicds layout, bert_eval as a
+                 live component) had been committed anyway. Pattern fixed,
+                 file untracked; the local copy stays on disk as its header
+                 intended. Lesson filed with the other two ignore-pattern
+                 bites: a pattern nobody tests is a pattern that does not
+                 match.
 
   C7 GATE RESULTS, recorded because they are the evidence the rewiring is inert:
     - compare_models: 16 sanity checks pass on results/, results_corrected/ and
