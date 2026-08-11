@@ -34,7 +34,6 @@ from aicds.utils import cython_utils as util_cy
 
 # Initialize NLTK data (required by cython_utils)
 import nltk
-from string import punctuation
 
 for pkg in ['stopwords', 'punkt_tab', 'punkt']:
     try:

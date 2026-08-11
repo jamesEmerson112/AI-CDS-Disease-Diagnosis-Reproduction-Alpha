@@ -51,10 +51,24 @@ data/models/*.bin
 *.joblib
 
 # Output Directories
-# Note: Prediction Output* folders are now tracked to transfer results between computers
-# Uncomment lines below if you want to exclude them:
-# Prediction Output*/
-# Prediction Symptom Details*/
+#
+# Root-level run output is DUA-covered clinical data: a baseline run leaves 129
+# per-case files NAMED by HADM_ID under Fold*/, and because they are EMPTY the
+# pre-commit hook's content rule (20+ distinct HADM_IDs inside a file) cannot
+# see them at all. The path rule is the only defence, so it must exist here.
+#
+# ANCHORED, and the leading slash is load-bearing (see the note further down
+# about unanchored `entity/`): docs/Prediction_Output_* is the project's
+# committed regression oracle and stays tracked precisely because these
+# patterns only match at the repository root.
+#
+# Both spellings are kept on purpose. The baseline writes "Prediction Output_"
+# with a SPACE, and any pre-rename SHA still emits it, so checking out an older
+# commit and running it must not leave unignored clinical data behind.
+/Prediction_Output_*/
+/Prediction_Symptom_Details_*/
+/Prediction Output_*/
+/Prediction Symptom Details_*/
 output/
 results/
 

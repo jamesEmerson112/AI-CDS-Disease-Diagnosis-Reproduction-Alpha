@@ -13,10 +13,10 @@ class TestImports:
     """Verify all modules can be imported correctly."""
 
     def test_import_entity_modules(self):
+        # SymptomsDiagnosis is the only live entity. Admission / Symptom /
+        # Drgcodes were deleted: this test was their only importer anywhere in
+        # the repo, so it was also the only thing keeping them alive.
         from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
-        from aicds.entity.Admission import Admission
-        from aicds.entity.Symptom import Symptom
-        from aicds.entity.Drgcodes import Drgcodes
 
     def test_import_utils_modules(self):
         from aicds.utils.Constants import CH_DIR, K_FOLD, TOP_K_LOWER_BOUND

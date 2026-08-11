@@ -2,17 +2,14 @@ import os
 import shutil
 import sys
 import time
-from math import floor
 
-# Bio_ClinicalBERT imports
+# Bio_ClinicalBERT imports.
+# ``torch`` is deliberately NOT imported here: this module never references it,
+# and sentence_transformers imports it itself, so the runtime dependency is
+# unchanged.
 from sentence_transformers import SentenceTransformer
-import torch
 
-import numpy
 import numpy as np
-import sklearn
-from scipy import spatial
-from sklearn.model_selection import train_test_split, KFold
 
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
@@ -211,9 +208,10 @@ def predict_topk_diagnoses_pure(test_admission, test_symptoms, x_train,
 # which cannot arise, since topk comes from Constants' TOP-K range (10..50).
 # The golden gates the claim regardless.
 
-# Ensure NLTK data is available before first use
-import nltk
-
+# Ensure NLTK data is available before first use.
+# ``import nltk`` used to sit here; its last consumer in this module was the
+# stop_words monkeypatch deleted in C1. NLTK is still reached, indirectly,
+# through cython_utils' preprocessing -- which is why the data check stays.
 from aicds.utils.runtime import ensure_nltk_data, format_time
 
 # Call before any NLTK usage
@@ -221,11 +219,9 @@ ensure_nltk_data()
 
 from pathlib import Path
 
-# Import matplotlib for PDF generation
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
+# No matplotlib here. This module emits no PDF -- plotting lives in
+# baseline_sent2vec.generate_timing_pdf and in scripts/. The block that used to
+# stand here also called matplotlib.use('Agg') as an import side effect.
 
 # Timing utilities live in aicds.utils.runtime, imported above.
 
@@ -410,7 +406,6 @@ def run_analysis(model_id=None, encoder=None, config=LEGACY):
 
     file_name = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
     f = open(file_name, "r").readlines()
-    orig_stdout = sys.stdout
 
     admissions = dict()
     for line in f:

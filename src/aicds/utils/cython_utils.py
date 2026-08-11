@@ -1,6 +1,5 @@
 import os
 import re
-from scipy import spatial
 import numpy as np
 
 from datetime import datetime
@@ -535,25 +534,6 @@ def get_diagnosis_similarity_by_description_max(embendings_diagnosis, gt_diagnos
     return max_similarity
 
 
-def get_diagnosis_similarity_by_description_max_model(model, gt_diagnosis, predicted_diagnosis, method, config=LEGACY):
-    MIN_SIMILARITY = 0
-    max_diagnosis_similarity = dict()
-    max_similarity = MIN_SIMILARITY
-    
-    for x in gt_diagnosis:
-        x_description = x[x.index(':') + 1:len(x)]
-        for y in predicted_diagnosis:
-            y_description = y[y.index(':') + 1:len(y)]
-            emb_diagnosis_to_predict = model.embed_sentence(preprocess_sentence(x_description, config))
-            emb_diagnosis_predicted = model.embed_sentence(preprocess_sentence(y_description, config))
-            diagnosis_similarity = 1 - spatial.distance.cdist(emb_diagnosis_to_predict, emb_diagnosis_predicted, method)[0]
-            
-            if diagnosis_similarity > max_similarity:
-                max_similarity = diagnosis_similarity
-    
-    return max_similarity[0]
-
-
 def drg_descriptions(labels):
     """Prefix-stripped, lowercased, whitespace-trimmed description set.
 
@@ -757,8 +737,3 @@ def print_performance_index(performance_matrix, performance_out_file):
             str(i) + "\t" + str(values[TP] / K_FOLD) + "\t" + str(values[FP] / K_FOLD) + "\t" + str(
                 values[P] / K_FOLD) + "\t" + str(values[R] / K_FOLD) +
             "\t" + str(values[FS] / K_FOLD) + "\t" + str(values[PR] / K_FOLD) + "\n")
-
-
-def print_log(file, str, log):
-    if log == LOG:
-        file.write(str)

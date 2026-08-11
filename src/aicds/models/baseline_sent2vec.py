@@ -2,16 +2,17 @@ import os
 import shutil
 import sys
 import time
-from math import floor
 
-from gensim.models import fasttext
-
+# ``import sent2vec`` used to sit here and it was pure dead weight: the only
+# Sent2vecModel in the repo is constructed inside cython_utils.load_model, which
+# imports sent2vec LOCALLY. Deleting it does NOT make this module importable on
+# Windows -- it only moves the failure one frame deeper: the whole pipeline still
+# runs at import time, so ``util_cy.load_model()`` at line ~251 reaches that
+# local ``import sent2vec``, fails, and exits 1. It becomes a real Windows import
+# only once the pipeline moves into a run_analysis() function (tracked
+# separately, see the note below).
 import numpy
 import numpy as np
-import sent2vec
-import sklearn
-from scipy import spatial
-from sklearn.model_selection import train_test_split, KFold
 
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 from aicds.utils.Constants import *
@@ -55,9 +56,10 @@ print("=" * 60)
 DEBUG_MODE = False
 DEBUG_CASE_LIMIT = 3  # Only debug first N cases per fold
 
-# Ensure NLTK data is available before first use
-import nltk
-
+# Ensure NLTK data is available before first use.
+# ``import nltk`` used to sit here; its last consumer in this module was the
+# stop_words monkeypatch deleted in C1. NLTK is still reached, indirectly,
+# through cython_utils' preprocessing -- which is why the data check stays.
 from aicds.utils.runtime import ensure_nltk_data, format_time
 
 # Call before any NLTK usage
@@ -222,7 +224,6 @@ script_start_time = time.perf_counter()
 dataset_start = time.perf_counter()
 file_name = os.path.join(CH_DIR, "data", "raw", "Symptoms-Diagnosis.txt")
 f = open(file_name, "r").readlines()
-orig_stdout = sys.stdout
 
 admissions = dict()
 for line in f:

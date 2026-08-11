@@ -24,7 +24,6 @@ import math
 
 import pytest
 
-from aicds.utils import cython_utils as util_cy
 from aicds.utils.cython_utils import cosine_similarity, containGreaterOrEqualsValue
 from aicds.utils.Constants import (
     PRUNING_SIMILARITY,
@@ -35,9 +34,9 @@ from aicds.utils.Constants import (
 )
 from aicds.entity.SymptomsDiagnosis import SymptomsDiagnosis
 
-# Importing bert_models is expensive (torch, sentence-transformers, sklearn,
-# matplotlib) but the task brief targets its functions directly, so we pay the
-# cost once at module scope like the rest of the suite does.
+# Importing bert_models is expensive (sentence-transformers, and torch
+# transitively through it) but the task brief targets its functions directly, so
+# we pay the cost once at module scope like the rest of the suite does.
 from aicds.models.bert_models import (
     compute_patient_similarity_pairwise,
     predict_topk_diagnoses_pure,
