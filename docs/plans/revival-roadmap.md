@@ -1,16 +1,30 @@
 # Reviving AI-CDS: reorganization, `main.py`, and docs
 
-> **Status, re-audited 2026-08-08 — Phases 0, 1 and 4 complete; Phase 2 is 2.5 of 7 items done;
-> Phase 3 not started.** Phase 0 (`bb84b82`): environment repaired, data-use guard installed,
-> `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4 (docs) was pulled forward
-> and is also done. Phase 1 (safety net) is done — the fast suite now stands at 264 passed /
-> 3 deselected in ~21–52s, plus `pytest -m golden`, a byte-exact 10-fold regression against a
-> committed reference (~43–53 min, NOT the ~20 min this file once claimed). Phase 2's landed
-> items: the `src/aicds/` package move (`d0ecaa9`+`2a0b77d`), src-layout pyproject, helper
-> consolidation (`bd6fe47`), central `stop_words` (`5ae01a0`). Still open in Phase 2: deleting
-> the **11** `stop_words` monkeypatches (7 in tests + 4 in non-test code), the `--out`/results
-> root, the `bert_eval.py` salvage, the dead code, and the baseline's two residual defects.
-> CLAUDE.md's refactor-status section carries the audited file:line details.
+> **Status, updated 2026-08-11 — Phases 0, 1, 2 and 4 complete; Phase 3's drift-stoppers
+> complete in this repo, its polish moved to P38.** Phase 0 (`bb84b82`): environment repaired,
+> data-use guard installed, `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4
+> (docs) was pulled forward and is also done. Phase 1 (safety net) is done — the fast suite now
+> stands at **413 passed / 3 deselected** (264 before the refactor batch), plus `pytest -m
+> golden`, a byte-exact 10-fold regression against a committed reference (**43–53 min**, measured
+> five times: 43:28, 44:32, ~50:00, 52:35, 53:10 — NOT the ~20 min this file once claimed).
+>
+> **Phase 2 is finished.** Landed earlier: the `src/aicds/` package move (`d0ecaa9`+`2a0b77d`),
+> src-layout pyproject, helper consolidation (`bd6fe47`), central `stop_words` (`5ae01a0`).
+> Landed 2026-08-10/11 as commits C1–C8, which closed everything the 2026-08-08 audit had listed:
+> all **11** `stop_words` monkeypatches deleted (`7400eff`, golden byte-exact at 52:35 on its own
+> gate); `bert_eval.py` and the `evaluation/` package deleted outright (`5ca7f64`, decision 2 —
+> **not** salvaged, see "Deliberately not doing"); verified dead code deleted (`94b4e24`); the
+> baseline's `run_analysis()` + `__main__` guard and its collapsed `PerformanceIndex` handle
+> (`9c9e251`, `[UNVERIFIED]` until the pod byte-compare); `--out` and the `aicds.runs` writer
+> contract (`9d08c94`, second golden gate byte-exact, covering C2–C5).
+>
+> **Phase 3 split** (owner decision 1, 2026-08-10). The two drift-stoppers landed here: **one**
+> `PerformanceIndex` parser (`1f69e11` + `7927a88`, replacing four) and **one** run-discovery rule
+> (`7927a88`, replacing six-to-seven). `run_metadata.json` followed in `5a52d26`. The polish — the
+> `main.py` CLI, the `SentenceEncoder` protocol and encoder registry, the dashboard fix, the `F1`
+> rename, `scripts/` shims — moved to **P38**, the clean public repo. **The ship point is
+> redefined accordingly: this repo ships when the drift-stoppers land, which they have.**
+> CLAUDE.md's refactor-status section carries the per-commit detail.
 >
 > Phase 5's metric work was **removed from this roadmap** and tracked in
 > [correctness-fixes.md](correctness-fixes.md) and [metric-redesign.md](metric-redesign.md) —
@@ -43,7 +57,7 @@ You want to revive and extend this repo, and you want it clean first. The recon 
 |---|---|---|
 | 1 | ~~**The baseline arm cannot run at all.**~~ **FIXED in `c2fee6e`, verified by the full 10-fold run of 2026-08-05** (reproduced the published TOP-10 to within 0.007 — `docs/findings/09-baseline-first-run.md`). | Was: `baseline_sent2vec.py:236` read `CH_DIR/Symptoms-Diagnosis.txt` (file lives at `data/raw/`) → `FileNotFoundError`; then `:244-247` called bare `entity.SymptomsDiagnosis...` with only `entity_module` bound → `NameError`. |
 | 2 | ~~**`import torch` fails**, so the BERT arm can't run either.~~ **FIXED in Phase 0.** | `OMP: Error #15` — conda's `llvm-openmp` plus torch's bundled copy. Resolved by symlinking torch's to conda's; see `docs/guides/setup.md`. |
-| 3 | **`build_readme_plots.py` raises on every invocation.** | Line 30 globs `<repo_root>/Prediction_Output_*`; the three result dirs live under `docs/`. Glob matches nothing → `FileNotFoundError`. |
+| 3 | ~~**`build_readme_plots.py` raises on every invocation.**~~ **FIXED in `7927a88`** — it discovers via `runs.discover` with a `docs/` default, and regenerating all six committed SVGs produced byte-identical files, which is the evidence the rewiring changed nothing but the lookup. | Was: line 30 globbed `<repo_root>/Prediction_Output_*`; the three result dirs live under `docs/`. Glob matched nothing → `FileNotFoundError`. |
 
 Nobody noticed 1 and 3 because running them needs a 21 GB model / nobody re-ran the plots. The committed baseline numbers came from the pre-reorg `CS2V.py`; **the current checkout has never reproduced them.**
 
@@ -81,7 +95,9 @@ src/aicds/
                 retrieval.py (<- RAG seam), aggregators.py, metrics.py, evaluation.py
   encoders/     base.py (Protocol), registry.py, builtin.py,
                 sentence_transformer.py, sent2vec_encoder.py (deferred import),
-                hf_automodel.py (salvaged), stub.py (deterministic, zero-dep)
+                hf_automodel.py (rebuild if wanted; NOT salvaged — see
+                                 "Deliberately not doing"),
+                stub.py (deterministic, zero-dep)
   results/      schema.py, writer.py, render.py, parser.py (THE one), discovery.py
   analysis/     score_distributions.py, performance_report.py
   reporting/    plots.py, dashboard.py, compare.py (NEW: multi-run table)
@@ -141,26 +157,37 @@ Nothing can be verified until torch imports.
 - `git mv src src/aicds` + mechanical import rewrite. **Nothing else in this commit.**
 - Real `pyproject.toml`: dependencies, extras `baseline`/`bert`/`dev`, `[project.scripts]`, readme → root README. Collapse the three dependency manifests. Delete every `sys.path.insert`.
 - Consolidate `ensure_nltk_data` (×3) and `format_time` (×3).
-- `stop_words` into `preprocessing.py` as **two commits**: define it while leaving all **8** monkey-patches in place, then delete the patches. It feeds tokenization → embeddings → every number, so it deserves an unambiguous culprit commit. (First commit landed as `5ae01a0`, which defines it in `cython_utils.py` rather than a new `preprocessing.py`. The count of 4 here was wrong: the sites are `baseline_sent2vec.py:36`, `bert_models.py:211`, `bert_eval.py:63`, `analyze_score_distributions.py:46`, `test_characterize_dataset.py:196` and `:215`, `test_characterize_similarity.py:46`, `test_characterize_preprocessing.py:37` — all the identical `set(stopwords.words('english'))`, so deletion is provably inert.)
-- Replace `os.getcwd()` output roots with an explicit `--out`/`results/` root; fix the `build_readme_plots` glob in the same commit. **Bigger than recorded here** — there are five discovery sites disagreeing four ways about the base directory, *and* the baseline writes `Prediction Output_` with a space so no glob matches it at all. See `docs/findings/10-output-path-fragmentation.md`; the fix direction is forced by `test_golden.py:115`.
-- **Salvage `encoders/hf_automodel.py` out of `bert_eval.py` before deleting the rest.** Those 545 orphaned lines contain a raw `AutoModel` + mean-pooling path — a genuinely different encoder from SentenceTransformer's pooling — and the repo's only GPU-aware line. That's exactly what roadmap items (iii) more encoders and (vi) a decoder chatbot would reuse. Archive rather than delete; record the SHA.
-- Then delete the verified-dead: 4 `cython_utils` functions, `print_log` (references an undefined `LOG`), unused gensim/sklearn imports, `orig_stdout`, dead matplotlib import, `entity/{Admission,Symptom,Drgcodes}`.
-  - **DO NOT delete `get_diagnosis_similarity_baseline` (`cython_utils.py:353`) or `get_diagnosis_similarity_by_drgcode` (`:365`).** They are zero-caller, so they look dead, but they are the only **encoder-independent** graders in the repository — pure string comparison, no embedding — and they are precisely what `correctness-fixes.md` item 2 ("replace the cosine grader") needs. `:353` returns graded credit (fraction of ground-truth diagnoses matched), `:365` returns a binary hit. Deleting them would throw away a written-and-committed head start on the metric work. Move them somewhere honest instead; only `get_diagnosis_similarity_by_description_max_model` (`:334`) and `print_log` are genuinely disposable.
+- `stop_words` into `preprocessing.py` as **two commits**: define it while leaving all monkey-patches in place, then delete the patches. It feeds tokenization → embeddings → every number, so it deserves an unambiguous culprit commit. (First commit landed as `5ae01a0`, which defines it in `cython_utils.py` rather than a new `preprocessing.py`. Second as `7400eff`, with its own byte-exact golden gate at 52:35. **The final count was 11** — this line said 4, a later revision said 8, and the four in non-test code were what nobody had counted. All eleven were the identical `set(stopwords.words('english'))`, which is what made deletion provably inert.)
+- Replace `os.getcwd()` output roots with an explicit `--out`/`results/` root; fix the `build_readme_plots` glob in the same commit. **Bigger than recorded here** — five discovery sites disagreed four ways about the base directory, *and* the baseline wrote `Prediction Output_` with a space so no glob matched it at all. **Landed as `9d08c94` (writers) and `7927a88` (readers), both behind `src/aicds/runs.py`.** See `docs/findings/10-output-path-fragmentation.md`; the fix direction was forced by `test_golden.py:115`, exactly as predicted.
+- ~~**Salvage `encoders/hf_automodel.py` out of `bert_eval.py` before deleting the rest.**~~ **Reversed by owner decision 2 and deleted outright in `5ca7f64`** — the salvage target never existed in any branch. See "Deliberately not doing" for the full evidence.
+- Then delete the verified-dead: 4 `cython_utils` functions, `print_log` (references an undefined `LOG`), unused gensim/sklearn imports, `orig_stdout`, dead matplotlib import, `entity/{Admission,Symptom,Drgcodes}`. **Landed as `94b4e24`**, which also removed `scripts/run_all_bert_models.py`.
+  - **DO NOT delete `get_diagnosis_similarity_baseline` or `get_diagnosis_similarity_by_drgcode`** (written here as `cython_utils.py:353` and `:365`; re-resolved 2026-08-11 to **`:576`** and **`:592`**, and both are still present — `94b4e24` kept them). They are zero-caller, so they look dead, but they are the only **encoder-independent** graders in the repository — pure string comparison, no embedding — and they are precisely what `correctness-fixes.md` item 2 ("replace the cosine grader") needs. The first returns graded credit (fraction of ground-truth diagnoses matched), the second a binary hit. Deleting them would throw away a written-and-committed head start on the metric work. Move them somewhere honest instead; only `get_diagnosis_similarity_by_description_max_model` and `print_log` were genuinely disposable, and `94b4e24` disposed of them.
   - Note `entity/{Admission,Symptom,Drgcodes}` are imported by `tests/test_reorganization.py:17-19`, so deletion needs a same-commit test edit.
-- **Fix the baseline's 5 defects** — data path, the `entity.` NameError, wrap module scope in `run_analysis()` with a `__main__` guard, collapse the two conflicting `PerformanceIndex` handles (`:315` opened and abandoned, `:456` a second handle to the same path), and the discarded `line.replace("\n","")`. Ship it behind an **`[UNVERIFIED]`** banner — it cannot be validated without the 21 GB model.
+- **Fix the baseline's 5 defects** — data path, the `entity.` NameError, wrap module scope in `run_analysis()` with a `__main__` guard, collapse the two conflicting `PerformanceIndex` handles, and the discarded `line.replace("\n","")`. Ship it behind an **`[UNVERIFIED]`** banner — it cannot be validated without the 21 GB model. **Three landed in `c2fee6e` and were verified by the 2026-08-05 run; the last two in `9c9e251` and remain `[UNVERIFIED]` pending the pod byte-compare.** Correction to this line: the `'w'` handle was *not* "opened and abandoned" — it wrote the whole body and was merely never closed explicitly, and the `'a'` handle's trailer landed correctly only because rebinding the name refcount-closed the first handle first. That accident is what makes the single-`with`-block collapse byte-safe.
 - **Do not merge the two pipeline loops.** They diverge in ways that matter: the BERT per-case header is space-padded while the aggregate uses a tab-delimited constant, and BERT per-case recall is `tp/(tp+fp)` where the baseline's is `tp/nrow`. Unifying them would silently rewrite the baseline's entire output format, and the oracle is BERT-only so nothing would catch it.
 
 **Gate:** stub golden byte-identical; `pip install -e .` then `import aicds` succeeds **with sent2vec absent**.
 
-### Phase 3 — CLI, encoders, one parser (~2–3 days) ← **SHIP POINT**
+### Phase 3 — CLI, encoders, one parser ← **SHIP POINT, split 2026-08-10**
+
+Owner decision 1 split this phase. **The two drift-stoppers land in this repo; the polish moves to
+P38, the clean public repo**, and the ship point is redefined as "this repo ships when the
+drift-stoppers land".
+
+Landed here:
+
+- **One** `PerformanceIndex` parser replacing all **four** (the count had grown past three), plus one discovery rule (*a directory is a run iff it contains `PerformanceIndex.txt`*). Gated on an equivalence test proving the new parser reproduces all four old ones on all goldens **before** deleting them — `1f69e11` added the parser and the test, `7927a88` deleted the old parsers and converted the test to pinned literals, since new-vs-old stops meaning anything once old is gone. **Landed.**
+
+Moved to P38:
 
 - `SentenceEncoder` Protocol shaped `embed_sentence(text) -> seq[seq[float]]` — every call site already indexes `emb[0]`, so extraction is a no-op. Registry with readable names plus `1|2|3` aliases.
 - The full argparse tree above; stdin-closed test over every subcommand.
-- **One** `PerformanceIndex` parser replacing all three, plus one discovery rule (*a directory is a run iff it contains `PerformanceIndex.txt`*). Gate on an equivalence test proving the new parser reproduces all three old parsers on all goldens **before** deleting them. The new parser raises on unrecognized section headers instead of silently returning `None`.
 - Fix the dashboard: regenerate into `dashboard/public/data/`, commit it, delete the stray `dashboard/dashboard/` tree. It 404s today.
 - `scripts/` → deprecation shims.
 
-**Gate:** stub golden green; parser equivalence green; dashboard renders; plots regenerate.
+**Gate, as met:** stub golden byte-exact (two gates, `7400eff` and `9d08c94`); parser equivalence
+green; `build_readme_plots` regenerated all six committed SVGs byte-identical; `build_dashboard_data`
+JSON byte-identical. The dashboard-renders half of the gate travels with the work to P38.
 
 ### Phase 4 — Docs — **DONE** (`bb84b82`, pulled forward ahead of 1–3)
 
@@ -192,7 +219,7 @@ results/golden/        raw runs move OUT of docs/ — they're data, not document
 
 ### Phase 5 — Optional payoff (only if 0–4 landed clean)
 
-`ExperimentConfig` + run manifest (git SHA, seed, dep versions, encoder, aggregator); aggregator registry; the two legacy threshold constants replacing the 8 scattered set literals. **And the real fix: report a genuine set-level P/R/F1 alongside the existing accuracy-as-F1.**
+`ExperimentConfig` + run manifest — **the manifest half landed early as `run_metadata.json` (`5a52d26`)**, carrying git SHA + dirty, the pipeline by name and by all three fields, a fold-split content digest, model, `K_FOLD`, and platform/Python/numpy versions; aggregator registry; two legacy threshold constants replacing the **7** scattered set literals (all in `cython_utils.py`; the long-standing "8" counted `bert_eval.py`, now deleted). **And the real fix: report a genuine set-level P/R/F1 alongside the existing accuracy-as-F1.**
 
 **Gate:** `--aggregator max` still byte-reproduces the stub golden.
 
@@ -214,4 +241,16 @@ baseline arm, and continue past the Phase 3 ship point.
 
 ## Deliberately not doing
 
-Creating `index/`, `remote/`, `chat/`, `orchestration/` directories; merging the two pipeline loops; rewriting git history; `KMP_DUPLICATE_LIB_OK=TRUE` as the torch "fix"; deleting `bert_eval.py` without salvaging its AutoModel path.
+Creating `index/`, `remote/`, `chat/`, `orchestration/` directories; merging the two pipeline loops; rewriting git history; `KMP_DUPLICATE_LIB_OK=TRUE` as the torch "fix".
+
+~~Deleting `bert_eval.py` without salvaging its AutoModel path.~~ **Reversed 2026-08-10 (owner
+decision 2), and executed as a plain deletion in `5ca7f64`.** The evidence that settled it: **no
+`encoders/` directory and no `hf_automodel*` file has ever existed in any branch of this
+repository** — `git log --all --diff-filter=A` returns nothing for either path — so the
+"salvage before deleting" instruction had been protecting a target that was never built, in three
+documents, for months. The other two justifications did not survive either: the GPU-aware line is
+worthless given [08](../findings/08-runtime-and-cost.md) (a GPU buys under 0.5% for these arms),
+and raw `AutoModel` + mean-pooling is a few dozen lines that the P38 encoder registry is the right
+place to rebuild if a pooling-strategy ablation is ever actually wanted. Deleting the 545 orphaned
+lines also removed the third `ensure_nltk_data`/`format_time` copy and one of the eleven
+`stop_words` monkeypatches, both of which the salvage plan would have kept alive.

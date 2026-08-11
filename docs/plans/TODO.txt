@@ -2,6 +2,8 @@ AI-CDS DISEASE DIAGNOSIS - RANKED TODO
 Generated 2026-08-05 from docs/plans/. Plain-text digest; the .md files remain authoritative.
 Updated 2026-08-06 (late): P4 AND P5 BOTH COMPLETE. Both metric knobs are gone.
 Updated 2026-08-10: four phase decisions recorded (below); audit corrections folded in.
+Updated 2026-08-11: C1-C9 landed. Phase 2 is DONE and Phase 3's drift-stoppers are
+  done in this repo. P14 P15 P16 P17 P20 closed, P18 retired.
 
 DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
   1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
@@ -26,9 +28,89 @@ DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
      staged attribution runs AND the P40-instrumented run together (plus the
      decision-3 verification run). Most value per pod-hour.
 
+THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, all on main, unpushed
+  Eight code commits plus this documentation pass. The 2026-08-08 audit listed
+  every outstanding Phase 2 item and both regressed Phase 3 items; this batch
+  closed all of them. Fast suite 264 -> 413 passed, 3 deselected.
+
+    7400eff  C1  all 11 stop_words monkeypatches deleted (P16). The count was
+                 11, not the 7 or 8 earlier files claimed -- four sat in
+                 non-test code nobody had counted. All were the identical
+                 set(stopwords.words('english')), so removal was provably
+                 inert. GOLDEN GATE #1: byte-exact, 52:35, on its own commit
+                 with nothing else in it.
+    5ca7f64  C2  bert_eval.py + the whole evaluation/ package DELETED OUTRIGHT,
+                 no salvage (decision 2). RETIRES P18.
+    94b4e24  C3  anchored .gitignore Prediction_Output patterns; verified dead
+                 code deleted -- scripts/run_all_bert_models.py, entity
+                 Admission/Symptom/Drgcodes, print_log,
+                 get_diagnosis_similarity_by_description_max_model. The two
+                 encoder-independent graders were KEPT, as P4 required.
+    9c9e251  C4  baseline run_analysis(encoder=None, config=LEGACY, out=None) +
+                 __main__ guard; the two PerformanceIndex handles collapsed to
+                 one with-block; run_baseline.py gains full argparse including
+                 --pipeline. Closes P17. *** [UNVERIFIED] *** -- the content
+                 byte-compare against results/baseline/05082026_18-55-32 is
+                 STILL PENDING on the pod (decision 3).
+    9d08c94  C5  aicds/runs.py writer side; --out on both arms and both run
+                 scripts; check_out_root DUA guard; baseline directory spelling
+                 unified to Prediction_Output_BioSentVec_{stamp}. Closes the
+                 writer half of P15. GOLDEN GATE #2 at this SHA: byte-exact,
+                 ~50 min, covering C2-C5 together.
+    1f69e11  C6  aicds/analysis/performance_index.py -- ONE parser, proved
+                 equivalent to all four private ones before any deletion.
+    7927a88  C7  runs.discover: ONE rule + a Run dataclass. Five consumers
+                 rewired, the four private parsers deleted, the equivalence
+                 test converted to pinned literals in
+                 tests/test_performance_index.py. Closes P20 and the reader
+                 half of P15.
+    5a52d26  C8  run_metadata.json on both arms, written after the handle
+                 closes; config.name_of; fold_dir digest allowlisted to the
+                 TRAIN/TEST filenames. Closes P14.
+    (this)   C9  documentation made true again: CLAUDE.md, this file,
+                 revival-roadmap.md, findings/10, architecture.md, setup.md,
+                 pyproject.toml's golden-runtime comment.
+
+  C7 GATE RESULTS, recorded because they are the evidence the rewiring is inert:
+    - compare_models: 16 sanity checks pass on results/, results_corrected/ and
+      results_drg/ bare; results_p5 needs --pipeline drg and REFUSES bare BY
+      DESIGN (it is not in _PIPELINE_BY_DIRNAME). That refusal is the feature.
+    - build_readme_plots now RUNS -- it used to raise FileNotFoundError on every
+      invocation -- and regenerated all six committed SVGs BYTE-IDENTICAL.
+    - build_dashboard_data JSON byte-identical (sha 0638b6c5...).
+    - verify_setup exits 0. The output/ check is gone, so any doc claiming it
+      "reports one spurious output/ failure" is now false.
+    - analyze_performance auto-detect no longer crashes from the repo root
+      (bounded to depth=1) but no longer auto-detects a nested results*/ tree
+      either. Name such a tree explicitly. That cost was accepted knowingly.
+
+  C8 RESIDUE, interim and by design: every compare_models invocation on the
+  three EXISTING trees prints one
+      [WARN] no run_metadata.json under <dir>; inferring pipeline from ... (pre-C8 runs)
+  line. Nothing retrofits metadata onto a run nobody can re-derive -- the honest
+  metadata for such a run is no metadata -- so the noise persists until P29
+  produces the first metadata-bearing trees.
+
+  GOLDEN RUNTIME, MEASURED FIVE TIMES: 43:28, 44:32, ~50:00, 52:35, 53:10.
+  Call it 43-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
+  tests/test_golden.py:68 STILL SAYS "about 20 minutes" AND WAS LEFT ALONE ON
+  PURPOSE: test_golden.py is the binding constraint on this whole refactor, and
+  editing the file that holds the safety net to fix a docstring is not a trade
+  worth making. Every other statement of that number is now correct. (This is
+  the residue of P31.)
+
 STATUS
-  DONE     P1 P2 P3 P7 P9 P28 P29 P30 P34 P36
-           (c2115ba, 31bea66, 930c162, 45f36fc, d77de02, b53024e, 1d68df9)
+  DONE     P1 P2 P3 P7 P9 P14 P15 P16 P17 P20 P28 P30 P34 P36
+           (c2115ba, 31bea66, 930c162, d77de02, b53024e, 1d68df9,
+            7400eff, 5ca7f64, 94b4e24, 9c9e251, 9d08c94, 1f69e11, 7927a88,
+            5a52d26)
+           P29 IS NOT DONE and was removed from this line 2026-08-11. It had
+               been listed here while also sitting under PARTIAL below and
+               unchecked at the ranked-checklist entry, three states at once.
+               Its config code landed (45f36fc) and its own detail block says
+               so; the RUNS are what is open. See PARTIAL.
+           P18 RETIRED 2026-08-10 -- not done, deliberately abandoned. The
+               salvage target never existed in any branch.
            P4  COMPLETE 2026-08-06. Grader landed (75b6530) and all four arms
                RAN under --pipeline drg. Both predictions written in advance
                HELD; the unpredicted result is that drg-exact reproduces
@@ -59,16 +141,46 @@ STATUS
                 output was moved to _done_drg/ so the harvest globs cannot
                 pick it up -- it is already downloaded as results_p5/ locally.
 
-                THE SCRIPT HARVESTS PER BATCH, NOT AT THE END, and that is
-                load-bearing: P14 (run_metadata.json) is unimplemented, so
-                NOTHING in a run's output records which pipeline produced it.
+                THE SCRIPT HARVESTS PER BATCH, NOT AT THE END, and that WAS
+                load-bearing when it was written: P14 was unimplemented, so
+                NOTHING in a run's output recorded which pipeline produced it.
                 Both batches emit identically-named
                 Prediction_Output_<Model>_<timestamp> dirs into one cwd, so
                 sorting them afterwards means inferring the config from
                 timestamp order alone -- in the one experiment whose entire
                 purpose is attribution. Mis-filing a folds-only number as
-                preprocess-only would invert the conclusion. Fix P14 and this
-                whole hazard goes away.
+                preprocess-only would invert the conclusion.
+
+                UPDATE 2026-08-11: C5 and C8 removed the hazard. --out writes
+                ROOT/{key}/{stamp}/ directly, so the two batches cannot collide
+                in one cwd, and run_metadata.json records the pipeline by name
+                AND by all three PipelineConfig fields. The simplified form is
+                two invocations per arm with NO harvest step at all:
+
+                  python scripts/run_bert_analysis.py --model all \
+                      --pipeline folds-only      --out results_folds_only
+                  python scripts/run_bert_analysis.py --model all \
+                      --pipeline preprocess-only --out results_preprocess_only
+                  python scripts/run_baseline.py \
+                      --pipeline folds-only      --out results_folds_only
+                  python scripts/run_baseline.py \
+                      --pipeline preprocess-only --out results_preprocess_only
+
+                *** THAT IS THE FUTURE FORM, NOT WHAT RUNS NEXT. *** The staged
+                /workspace/repo/attribution_runs.sh on the pod stays exactly as
+                pre-flighted on 2026-08-06 and is what actually executes.
+                Rewriting it would invalidate that pre-flight -- the whole value
+                of a pre-flighted script is that it was checked in the state it
+                will run in -- and the pod session is already carrying P29, P40
+                and the C4/C5 baseline byte-compare. Use the simplified form for
+                any attribution run staged AFTER that session.
+
+                Note also: the two new roots must be gitignored before anything
+                is written into them. results_folds_only/ and
+                results_preprocess_only/ both match .gitignore's results*/ glob,
+                which is precisely why that line is a glob and not a hand-kept
+                list. check_out_root (C5) verifies it by asking git, and refuses
+                the run otherwise.
            P32  all four arms RAN; root README REWRITTEN (e83b5be) and again
                 for P4+P5; comparison PDF BUILDS for all pipelines (P34 fixed);
                 docs/README.md refreshed (2e5c6f3)
@@ -264,21 +376,80 @@ TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared c
   [x] P30  Widen the pre-commit hook to cover     DONE 2026-08-05 (d77de02)
            data/folds_grouped/ and any future fold set
   [ ] P38  CODE-ONLY PUBLIC REPO, data removed    (days)  <- BLOCKS PUBLICATION
+           NOW ALSO CARRIES the Phase 3 polish, per decision 1: P19 CLI,
+           P21 encoder registry, P22 dashboard, the F1 -> accuracy rename.
   [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
-  [ ] P14  C10. Result provenance (run_metadata.json)  (hours)
-  [ ] P15  C2.  Unify output paths + the five globs    (hours)
-  [ ] P31  Correct the golden's stated runtime    (minutes) <- NEW
+  [x] P14  C10. Result provenance (run_metadata.json)  DONE 2026-08-11 (5a52d26)
+           Both arms write it LAST, after the PerformanceIndex handle closes.
+           Records git SHA + dirty, the pipeline by NAME and by all three
+           PipelineConfig fields, a SHA-256 of the fold split's TRAIN/TEST
+           contents, model key + label, K_FOLD, platform/python/numpy.
+           write_run_metadata NEVER RAISES -- a finished 13-minute run must not
+           be lost to a git subprocess call about provenance.
+           TWO DESIGN NOTES WORTH KEEPING. (1) The digest is ALLOWLISTED to
+           Constants.TRAIN/TEST rather than hashing every file under the
+           directory: the owner's Windows checkout carries a hidden 105-byte
+           desktop.ini in every data/folds/Fold*/ that git has never tracked,
+           so the byte-identical legacy split hashed to b7554079... there and
+           93f0943a... on the Linux pod -- in the one field whose entire job is
+           saying whether two runs saw the same data. Explorer also rewrites
+           desktop.ini when a folder view changes, so an untouched split would
+           start reporting itself as a different one. Local now matches the
+           predicted Linux 93f0943a... (2) run_metadata.json is deliberately
+           NOT the run marker; PerformanceIndex.txt keeps that job, so every
+           pre-C8 run stays discoverable.
+  [x] P15  C2.  Unify output paths + the five globs   DONE 2026-08-11
+           Writer half 9d08c94, reader half 7927a88. Both arms emit
+           Prediction_Output_{Name}_{stamp} via aicds.runs.run_dirs; FIVE
+           consumers call runs.discover, ONE rule -- analyze_performance.py:71,
+           analyze_rank_metrics.py:149, build_dashboard_data.py:156,
+           build_readme_plots.py:302, compare_models.py:282/:355. That is
+           THREE of finding 10's five tabulated sites plus the two later rules,
+           NOT all five of the table: the table's other two entries are the
+           deliberate exceptions below. Two DELIBERATE exceptions
+           remain and are not drift: tests/test_golden.py keeps its own tmp-dir
+           glob and its \d{8}_\d{2}-\d{2}-\d{2} regex -- that regex is what
+           FORCED the underscore direction, and the golden must not depend on
+           the code it audits -- and test_reorganization.py:75 keeps a
+           recursive ** because it asserts that committed results exist at all
+           rather than discovering a run.
+  [~] P31  Correct the golden's stated runtime    MOSTLY DONE 2026-08-11 (C9)
+           Every doc now says 43-53 min, measured five times. Only
+           tests/test_golden.py:68 still says "about 20 minutes", and it was
+           left alone on purpose -- see the runtime note in the STATUS block.
 
-TIER 4 - FINISH THE REFACTOR. Phase 3 is the ship point.
+TIER 4 - FINISH THE REFACTOR. The drift-stoppers landed here; polish moved to P38.
 
-  [ ] P16  C1.  Delete the 8 stop_words monkeypatches
-  [ ] P17  C4.  Dead code + the last 2 baseline defects
-  [ ] P18  C3.  Salvage hf_automodel before deleting bert_eval.py
+  [x] P16  C1.  Delete the stop_words monkeypatches   DONE 2026-08-11 (7400eff)
+           THE COUNT WAS 11, not the 8 this line used to claim and not the 4
+           the roadmap claimed. All were the identical
+           set(stopwords.words('english')), so removal was provably inert;
+           golden byte-exact afterwards at 52:35, on a commit containing
+           nothing else.
+  [x] P17  C4.  Dead code + the last 2 baseline defects  DONE 2026-08-11
+           Dead code 94b4e24; baseline 9c9e251, [UNVERIFIED] until the pod
+           byte-compare (decision 3). See the P17 detail section for what the
+           old description of the two handles got WRONG.
+  [-] P18  C3.  Salvage hf_automodel before deleting bert_eval.py
+           RETIRED 2026-08-10 by decision 2, then executed as a plain deletion
+           in 5ca7f64. The salvage target NEVER EXISTED in any branch.
   [ ] P19  C6.  A real CLI (no main.py; input() still blocks automation)
-  [ ] P20  C7.  ONE PerformanceIndex parser replacing three
+           MOVED TO P38 by decision 1.
+  [x] P20  C7.  ONE PerformanceIndex parser replacing FOUR  DONE 2026-08-11
+           1f69e11 added aicds/analysis/performance_index.py and proved it
+           equivalent to all four private parsers on the committed goldens;
+           7927a88 deleted them and converted the equivalence test to pinned
+           literals in tests/test_performance_index.py. The count in the old
+           line ("three") was already stale when it was written.
   [ ] P21  C5.  SentenceEncoder Protocol + encoder registry
+           MOVED TO P38 by decision 1.
   [ ] P22  C8.  Fix the dashboard (404s today)
+           MOVED TO P38 by decision 1. The builder and the fetcher already
+           AGREE on dashboard/public/data/; only the committed JSON sits at the
+           stray dashboard/dashboard/ path. Fix = re-run the builder, commit
+           the output, delete the stray tree.
   [ ] P23  C9.  scripts/ -> deprecation shims
+           MOVED TO P38 by decision 1.
 
 TIER 5 - NICE TO HAVE.
 
@@ -339,15 +510,21 @@ TIER 1 DETAIL
         CLI could select it, which made it decorative:
             python scripts/run_bert_analysis.py --model all --pipeline corrected
             AICDS_PIPELINE=corrected python scripts/run_baseline.py
-        (The baseline needs the env var because baseline_sent2vec.py still executes
-        at import time and takes no arguments - see P17.)
+        (HISTORICAL, and no longer true as of C4/9c9e251: the baseline needed the
+        env var because baseline_sent2vec.py executed at import time and took no
+        arguments. It now has run_analysis(encoder=None, config=LEGACY, out=None)
+        at :187 and a __main__ guard at :543, and scripts/run_baseline.py has a
+        full argparse with --pipeline and --out; the env var still works via
+        from_env() when --pipeline is omitted. See P17.)
 
         EVIDENCE THE SEAM HOLDS: pytest -m golden passed TWICE after all of
         P2/P3/P7/P8 landed - 43:50 on the default seed, 44:32 under
         PYTHONHASHSEED=12345. Fast suite 122 passed, 2 deselected.
 
-        NOTE FOR ANY DOC EDIT: four places claim the golden takes 20-26 minutes.
-        Measured twice at ~44 MINUTES on an M-series Mac. See P31.
+        NOTE FOR ANY DOC EDIT: the golden takes 43-53 MINUTES, measured five
+        times (43:28, 44:32, ~50:00, 52:35, 53:10). Every doc now says so
+        as of C9. The single remaining "~20 minutes" is tests/test_golden.py:68,
+        deliberately untouched. See P31.
 
 [x] P2. A1 - REGROUP THE FOLDS BY PATIENT (GroupKFold on SUBJECT_ID)
         DONE 2026-08-05 (c2115ba). scripts/make_folds.py -> data/folds_grouped/.
@@ -502,7 +679,13 @@ TIER 1 DETAIL
           lexicon derived from these 146 strings.
 
         ------------------------------------------------------------------
-        Original analysis, kept because its warnings were mostly right:
+        Original analysis, kept because its warnings were mostly right.
+        EVERY LINE NUMBER BELOW IS AS OF 2026-08-05 AND HAS SINCE DRIFTED --
+        read them as a record of the reasoning, not as pointers into the tree.
+        Current, re-resolved 2026-08-11: the cosine grader is at
+        cython_utils.py:518, drg_descriptions at :537, and the two
+        encoder-independent graders (which were NOT deleted, as instructed) at
+        :576 and :592.
         ------------------------------------------------------------------
 
         Why: the same encoder both RETRIEVES and JUDGES. The grader is
@@ -676,51 +859,142 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
         Now mintable, because the arm finally runs. Linux only; needs the 21 GB model
         and ~13 minutes of compute.
 
-[ ] P14. C10 - RESULT PROVENANCE
-        No output directory records the commit, machine, or library versions that
-        produced it. A four-line run_metadata.json per run closes it, and it matters
-        for defending any number later.
+[x] P14. C10 - RESULT PROVENANCE            DONE 2026-08-11 (5a52d26)
+        Was: no output directory recorded the commit, machine, or library versions
+        that produced it.
 
-[ ] P15. C2 - UNIFY OUTPUT PATHS AND THE FIVE GLOBS
-        BIGGER THAN THE ROADMAP RECORDS: five discovery sites disagree four ways about
-        the base directory, AND the baseline writes "Prediction Output_" with a SPACE
-        (baseline_sent2vec.py:272-274), so NO glob in the repo matches baseline output
-        at all. Fix direction is FORCED by test_golden.py:115, which hard-codes
-        \d{8}_\d{2}-\d{2}-\d{2} - writers must unify onto the UNDERSCORE spelling.
-        See docs/findings/10-output-path-fragmentation.md.
+        SHIPPED: aicds/runs.py write_run_metadata(), called by BOTH arms after the
+        PerformanceIndex handle closes -- the same after-the-close discipline as
+        RankAccumulator.write, and for the same reason. test_golden.strip_trailer
+        raises "No timing trailer found" if that file lacks its trailer, so
+        anything that could throw before the trailer is written surfaces as A
+        GOLDEN FAILURE THAT LOOKS LIKE THE PIPELINE CHANGED. Writing it last also
+        means its presence proves the run reached the end.
 
-[ ] P16. C1 - DELETE THE 8 stop_words MONKEYPATCHES  (the roadmap says 4; it is WRONG)
-        baseline_sent2vec.py:36, bert_models.py:211, bert_eval.py:63,
-        analyze_score_distributions.py:46, test_characterize_dataset.py:196 and :215,
-        test_characterize_similarity.py:46, test_characterize_preprocessing.py:37.
-        All eight are the identical set(stopwords.words('english')), so removal is
-        provably inert. Three explanatory comment blocks go stale with them.
+        The payload is more than four lines because a name with no fields is the
+        sibling of the P4 mistake: it records the pipeline NAME (config.name_of)
+        AND fold_dir / preprocess_version / grader, so an edited registry still
+        leaves a true record and `name` degrades to null rather than to a lie.
+        Plus git SHA + dirty (both null, not False, when git cannot be asked),
+        fold_dir_sha256, model key + label, K_FOLD, and platform/python/numpy.
 
-[ ] P17. C4 - DEAD CODE + THE LAST 2 BASELINE DEFECTS
-        Baseline still outstanding: everything from baseline_sent2vec.py:186 to EOF
-        runs AT IMPORT TIME (no run_analysis(), no __main__ guard); and two conflicting
-        PerformanceIndex handles (:279 opened 'w' and never closed, :420 a second
-        handle 'a' to the same path).
-        *** DO NOT DELETE cython_utils.py:353 and :365 - see P4. ***
-        entity/{Admission,Symptom,Drgcodes} are imported by test_reorganization.py:17-19,
-        so deletion needs a same-commit test edit.
+        THE FOLD DIGEST IS ALLOWLISTED TO Constants.TRAIN/TEST, and that was not
+        the first attempt. Hashing every file under the directory pulled in a
+        hidden 105-byte desktop.ini that Windows keeps in every data/folds/Fold*/
+        and git has never tracked, so the byte-identical legacy split hashed to
+        b7554079... on the owner's Windows checkout and 93f0943a... on the Linux
+        pod -- and this project's whole story is Windows dev to RunPod Linux. It
+        failed the other way too: Explorer rewrites desktop.ini when a folder view
+        changes, so an untouched split would start reporting itself as a different
+        one. Silently, in the one field whose entire job is saying whether two runs
+        saw the same data. With the allowlist, local now matches the predicted
+        Linux digest 93f0943a...
 
-[ ] P18. C3 - SALVAGE hf_automodel BEFORE DELETING bert_eval.py
-        Those 545 orphaned lines hold a raw AutoModel + mean-pooling path (genuinely
-        different from sentence-transformers pooling) and the repo's ONLY GPU-aware
-        line (:74). Archive rather than delete; record the SHA.
-        Do NOT carry its three defects across: :106 wrong data path, :121 the unbound
-        `entity` NameError, :367 an os.getcwd() output root.
+        CONSUMER LANDED IN THE SAME COMMIT, as P35's rule requires:
+        compare_models.resolve_pipeline prefers run_metadata.json and demotes
+        dirname inference to a [WARN] fallback.
 
-[ ] P19. C6 - A REAL CLI
-        There is no main.py and no [project.scripts]. bert_models.py:80 still calls
-        input("Select model [1-3, Q]: ") interactively, which blocks automation.
-        Needs a stdin-closed test over every subcommand.
+[x] P15. C2 - UNIFY OUTPUT PATHS AND THE FIVE GLOBS   DONE 2026-08-11
+        Writer half 9d08c94, reader half 7927a88.
 
-[ ] P20. C7 - ONE PerformanceIndex PARSER REPLACING THREE
-        analyze_performance.py:73, build_readme_plots.py:37, build_dashboard_data.py:29
-        - the latter two are near-identical clones that disagree only on emitting "FS"
-        vs "F1". Plus one discovery rule. Gate on an equivalence test.
+        Was: five discovery sites disagreed four ways about the base directory,
+        AND the baseline wrote "Prediction Output_" with a SPACE, so NO glob in
+        the repo matched baseline output at all. Fix direction was FORCED by
+        test_golden.py:115's hard-coded \d{8}_\d{2}-\d{2}-\d{2}.
+
+        SHIPPED: src/aicds/runs.py owns both halves. run_dirs() gives the flat
+        cwd layout for out=None (frozen by the golden) or ROOT/{key}/{stamp}/ for
+        --out ROOT. discover() has exactly ONE rule -- a directory is a run iff it
+        contains PerformanceIndex.txt -- with no marker= parameter, because making
+        the marker configurable would turn "this run predates rank metrics" and
+        "this directory is not a run" into the same silence. It REFUSES rather
+        than skips a PerformanceIndex.txt in neither layout: skipping is how a run
+        vanishes from a comparison table without anyone noticing.
+
+        TWO EXCEPTIONS SURVIVE AND ARE NOT DRIFT. tests/test_golden.py keeps its
+        own tmp-dir glob and its timestamp regex -- that regex is what forced the
+        underscore direction, and the golden must not depend on the code it
+        audits. test_reorganization.py:75 keeps a recursive ** because it asserts
+        that committed results exist at all, not that a run can be discovered.
+
+        See docs/findings/10-output-path-fragmentation.md, which now carries a
+        dated Closed section.
+
+[x] P16. C1 - DELETE THE stop_words MONKEYPATCHES    DONE 2026-08-11 (7400eff)
+        THE COUNT WAS 11. This line used to say 8 and the roadmap said 4; both
+        were wrong, and the four nobody had counted were in NON-TEST code
+        (bert_models, baseline_sent2vec, bert_eval, analyze_score_distributions).
+        All eleven were the identical set(stopwords.words('english')), which is
+        what made removal provably inert -- the patch always assigned the value
+        cython_utils had already computed. It feeds tokenization -> embeddings ->
+        every number, so it got its own commit with nothing else in it and its
+        own golden gate: BYTE-EXACT, 52:35.
+
+[x] P17. C4 - DEAD CODE + THE LAST 2 BASELINE DEFECTS   DONE 2026-08-11
+        Dead code 94b4e24; baseline 9c9e251. The baseline half is [UNVERIFIED]
+        until the pod byte-compare against results/baseline/05082026_18-55-32
+        (decision 3) -- the baseline arm has no golden, so a Linux run is the
+        only verification available.
+
+        THE OLD DESCRIPTION OF THE TWO HANDLES WAS WRONG, AND INSTRUCTIVELY SO.
+        This file said ":279 opened 'w' and never closed, :420 a second handle
+        'a' to the same path", which reads as though the 'w' handle was opened
+        and abandoned. It was not. THE 'w' HANDLE WROTE THE ENTIRE BODY. What it
+        never got was an explicit close: rebinding performance_out_file to the
+        'a' handle dropped the last reference to the 'w' object, so CPython
+        flushed and closed it right there -- BEFORE the trailer's first write,
+        which O_APPEND then placed at the true end of file. The emitted sequence
+        was [everything written through 'w'][trailer], which is exactly what one
+        with-block produces. It worked by refcount accident, not by design, and
+        establishing that is WHY collapsing the pair to a single with-block is
+        byte-safe rather than merely tidier. Same path, same 'w' truncation, same
+        encoding and newline translation, same write order, trailer still last,
+        and generate_timing_pdf's try/except still inside the block.
+
+        Also shipped: run_analysis(encoder=None, config=LEGACY, out=None) and a
+        __main__ guard that passes from_env() explicitly, so
+        AICDS_PIPELINE=corrected python -m aicds.models.baseline_sent2vec keeps
+        working -- a bare run_analysis() would have defaulted to LEGACY and
+        silently dropped the variable on the one entry point with no flag.
+
+        cython_utils' two encoder-independent graders were KEPT, as P4 required.
+        entity/{Admission,Symptom,Drgcodes} and their test_reorganization.py
+        import were deleted in the same commit, as this item said they must be.
+
+[-] P18. C3 - SALVAGE hf_automodel BEFORE DELETING bert_eval.py
+        RETIRED 2026-08-10 by owner decision 2; executed as a plain deletion in
+        5ca7f64 (bert_eval.py and the entire evaluation/ package).
+
+        The salvage instruction stood in three documents for months and pointed
+        at a target that NEVER EXISTED IN ANY BRANCH: git log --all
+        --diff-filter=A is empty for encoders/ and hf_automodel*. The GPU-aware
+        line it was meant to preserve is worthless given finding 08 (a GPU buys
+        under 0.5% for these arms), and mean-pooling can be rebuilt behind the
+        P38 encoder registry if it is ever actually wanted. Deleting 545 orphaned
+        lines also removed the third ensure_nltk_data/format_time copy and one of
+        the 11 stop_words patches.
+
+[ ] P19. C6 - A REAL CLI                         MOVED TO P38 by decision 1
+        There is no main.py and no [project.scripts]. bert_models.py:87 still
+        calls input("Select model [1-3, Q]: "). NOTE it is DEAD on the supported
+        path -- run_bert_analysis.py always passes --model and select_model()
+        returns before prompting -- but live via
+        python -m aicds.models.bert_models. Needs a stdin-closed test over every
+        subcommand.
+
+[x] P20. C7 - ONE PerformanceIndex PARSER REPLACING FOUR   DONE 2026-08-11
+        1f69e11 added src/aicds/analysis/performance_index.py and proved it
+        reproduces all FOUR private parsers (compare_models, analyze_performance,
+        build_dashboard_data, build_readme_plots) on the committed goldens BEFORE
+        anything was deleted. 7927a88 then deleted them, rewired five consumers,
+        and converted the equivalence test into pinned literals in
+        tests/test_performance_index.py -- the old form compared new against old,
+        which stops meaning anything once old is gone.
+
+        The count in the original line ("three") was already stale when written;
+        compare_models had added a fourth. The FS-vs-F1 divergence between the
+        two near-identical clones is preserved as an explicit choice rather than
+        an accident of which clone a caller reached.
 
 [ ] P21. C5 - SentenceEncoder PROTOCOL + ENCODER REGISTRY
         embed_sentence(text) -> seq[seq[float]], with readable names and 1|2|3 aliases.
@@ -733,10 +1007,12 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
 [ ] P23. C9 - CONVERT scripts/ TO DEPRECATION SHIMS
 
 [ ] P24. C12 - PER-CASE OUTPUT FILES ARE ALL EMPTY
-        The baseline emits 258 zero-byte files; cython_utils.py:65-66 opens the two
-        handles and :170-171 closes them with NOTHING written in between. The BERT arm
-        never opens them but still creates the Fold*/ dirs (bert_models.py:451-456).
-        Neither arm has EVER produced per-case output. Decide: implement or delete.
+        SUPERSEDED BY P40, which decided it: implement, as a NEW SIBLING FILE.
+        The baseline emits 258 zero-byte files; cython_utils.py:203-204 opens the two
+        handles and :308-309 closes them with NOTHING written in between. The BERT arm
+        never opens them but still creates the Fold*/ dirs (bert_models.py:539-540).
+        Neither arm has EVER produced per-case output. (Line numbers re-resolved
+        2026-08-11.)
 
 [ ] P25. C13 - FOLD PARALLELISATION
         The 10 folds are embarrassingly parallel and the loop is 93%+ of runtime.
@@ -941,9 +1217,11 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         baseline prints its pipeline at all for the first time -- it writes to a
         timestamp-only directory, so the run log is the ONLY record of config.
 
+        DONE 2026-08-11: run_metadata.json (P14) landed in 5a52d26 -- and it
+        landed WITH its consumer in the same commit (compare_models prefers it
+        over the dirname), which is this item's own rule applied to itself.
+
         STILL TO DO:
-          - run_metadata.json (P14) is the real fix: no output directory
-            currently records which config produced it. Fold this in.
           - The same audit for any FUTURE field. The rule: a config field and
             its consumer land in the SAME commit, and the field appears in the
             banner in that commit too.
@@ -1060,9 +1338,9 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         but it is a cross-arm divergence with no defensible reason to exist.
 
         The two arms rank candidates with different sorts:
-          BERT     bert_models.py:179  similarities.sort(key=..., reverse=True)
+          BERT     bert_models.py:177  similarities.sort(key=..., reverse=True)
                    Python's sort is STABLE -> ties break by training-set order
-          baseline cython_utils.py:279  np.argsort(-1 * similarity_array)
+          baseline cython_utils.py:278  np.argsort(-1 * similarity_array)
                    defaults to quicksort, which is NOT stable -> ties break
                    arbitrarily, and not reproducibly across numpy versions
 
@@ -1140,10 +1418,11 @@ P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
      WHY IT IS BLOCKED. The test needs the per-case relevance vector for each
      (arm, HADM_ID). RankMetrics.txt carries only per-fold and 10-FOLD
      aggregates. The per-case files that would carry it are ALL EMPTY:
-       cython_utils.py:65-66   opens the two handles
-       cython_utils.py:170-171 closes them
+       cython_utils.py:203-204 opens the two handles
+       cython_utils.py:308-309 closes them
        ... with NOTHING written in between
-       bert_models.py:451-456  never opens them at all, yet still mkdir's Fold*/
+       bert_models.py:539-540  never opens them at all, yet still mkdir's Fold*/
+     (line numbers re-resolved 2026-08-11; they had drifted ~140 lines)
      The baseline emits 258 zero-byte files. Neither arm has EVER produced
      per-case output.
 

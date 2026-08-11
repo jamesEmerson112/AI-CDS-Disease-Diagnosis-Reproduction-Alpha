@@ -1,5 +1,10 @@
 # 10 — Nothing in the repo can find the baseline's output
 
+> **Status: the naming and discovery defects are CLOSED as of 2026-08-11 (`9d08c94`, `1f69e11`,
+> `7927a88`) — see the dated section at the end. The empty per-case files are still open, as
+> P40. Everything between here and that section is written in the present tense of 2026-08-05
+> and describes the defect, not the current tree.**
+
 > **In plain words.** The two halves of the project write their results into folders with
 > *almost* the same name — one says `Prediction_Output_...`, the other `Prediction Output_...`
 > with a space. Every tool that goes looking for results searches for the underscore spelling,
@@ -160,8 +165,67 @@ contains `PerformanceIndex.txt`*) and the parsers onto one implementation.
 **This is refactor-safe.** It changes where bytes land and what reads them, not what the
 pipeline computes, so it sits inside the roadmap's scope rule (*"if a change moves the numbers
 it is out of scope; if it fixes something that crashes, blocks, or writes to the wrong place it
-is in scope"*). The golden must still pass byte-for-byte afterward. It is Phase 3 work, and as
-of 2026-08-08 it has not been started.
+is in scope"*). The golden must still pass byte-for-byte afterward.
+
+---
+
+## Closed — 2026-08-11
+
+**The naming half and the discovery half are both fixed. The empty-file half (P40) is not**, and
+it is the one that turned out to matter; it keeps its own section above.
+
+**Writers unified — `9d08c94`.** `src/aicds/runs.py` owns the run-directory shape for both arms.
+`run_dirs()` returns the flat, cwd-relative `Prediction_Output_{Name}_{stamp}/` for `out=None`
+— the layout `test_golden.py` pins, unchanged down to the `os.getcwd() + '/'` string
+concatenation and the double slash in `root + '/PerformanceIndex.txt'` that reaches the console
+— or `ROOT/{key}/{stamp}/` for `--out ROOT`. **The baseline's space spelling is retired**: it now
+emits `Prediction_Output_BioSentVec_{stamp}`, so the direction this finding said was forced is
+the direction taken. `cython_utils.current_time()` itself is untouched; its `"%d/%m/%Y %H:%M:%S"`
+format was only ever wrong as a *filesystem* identifier and still feeds log lines correctly.
+`.gitignore` keeps **both** spellings on purpose — checking out a pre-rename SHA and running it
+must not leave unignored clinical data behind.
+
+**Readers unified — `7927a88`.** `runs.discover()` replaces **three of the five sites in the table
+above** — `build_dashboard_data.py`, `build_readme_plots.py` and `analyze_performance.py` — together
+with the extra rules the 2026-08-08 update counted, giving **five calling consumers** in all:
+`analyze_performance.py:71`, `analyze_rank_metrics.py:149`, `build_dashboard_data.py:156`,
+`build_readme_plots.py:302` and `compare_models.py:282`/`:355`. The table's remaining two entries are
+exactly the two exceptions described below, so "five sites" and "five consumers" are **different
+fives** — an easy and tempting conflation, which is why both lists are spelled out. One rule: *a
+directory is a run iff it contains `PerformanceIndex.txt`*. There is deliberately no `marker=` parameter — a caller wanting
+`RankMetrics.txt` asks a discovered `Run` for it and gets `None` if absent, because making the
+marker configurable would collapse "this run predates rank metrics" and "this directory is not a
+run" into one silence. It **refuses rather than skips** a `PerformanceIndex.txt` in neither
+layout, since skipping is precisely the failure this document is about.
+
+Two sites keep their own rule, and neither is drift. `tests/test_golden.py` keeps its tmp-dir
+glob and the `\d{8}_\d{2}-\d{2}-\d{2}` regex quoted above — **that regex is what forced the fix
+direction, so the golden must not come to depend on the code it audits.**
+`tests/test_reorganization.py:75` keeps its recursive `**` because it asserts that committed
+results exist at all, which is a different question from discovering a run.
+
+**The parsers collapsed too — `1f69e11` + `7927a88`.** All four listed above are gone, replaced by
+`src/aicds/analysis/performance_index.py`. Equivalence against all four was proved on the
+committed goldens *before* any deletion; the assertions then became pinned literals in
+`tests/test_performance_index.py`, because a new-versus-old comparison stops meaning anything the
+moment old is deleted. The `FS`/`F1` divergence is now an explicit choice rather than an accident
+of which clone a caller happened to reach.
+
+**The closing evidence is that nothing moved.** Re-running the rewired scripts reproduced their
+committed outputs exactly: `build_readme_plots.py` — which had raised `FileNotFoundError` on
+*every* invocation since it was written, and so had never been checked against anything —
+regenerated **all six committed SVGs byte-identical**, and `build_dashboard_data.py` produced
+byte-identical JSON (sha `0638b6c5…`). `compare_models.py`'s 16 sanity checks still pass on
+`results/`, `results_corrected/` and `results_drg/`. Both golden gates were byte-exact.
+
+**One cost, accepted knowingly.** `analyze_performance.py`'s auto-detect is bounded to `depth=1`,
+the flat layout an arm writes with no `--out`. It has to be: "refuse, don't skip" makes the
+depth-2 walk unusable on a root that merely *contains* runs it was not pointed at, and the
+repository root is exactly that root — `docs/` holds three committed flat runs at depth 2, where
+only the nested shape is legal, so an unbounded `discover(repo_root)` raises no matter what else
+is there. The bound fixes the crash and costs auto-detection of a nested `results*/` tree, which
+must now be named explicitly. Softening `discover` instead would have traded a loud error for the
+silent disappearance this finding exists to document.
 
 ---
 

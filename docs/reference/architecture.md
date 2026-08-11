@@ -1,9 +1,10 @@
 # Architecture
 
 This supersedes the now-archived [`ARCHITECTURE.md`](../../archive/stale-docs/ARCHITECTURE.md).
-Everything below was re-checked against the code on **2026-08-08** (the previous revision,
-2026-08-04, predated the `src/aicds` package move, the pipeline-config seam, the rank-metrics
-package, and the baseline's first successful run — all of which changed this document).
+Everything below was re-checked against the code on **2026-08-11** (the previous revision,
+2026-08-08, predated the C1–C8 refactor batch: the deletion of `bert_eval.py` and the orphaned
+entity modules, `aicds/runs.py` as the single run contract, the single `PerformanceIndex` parser,
+and `run_metadata.json` — all of which changed this document).
 
 **The three-sentence version:** Two model arms — the BioSentVec baseline and three BERT
 variants — share a single pure-Python evaluation core (`src/aicds/utils/cython_utils.py`) so
@@ -26,14 +27,13 @@ end-to-end — the BERT arm anywhere, the baseline on Linux only. The committed 
 | Shared core | `src/aicds/utils/cython_utils.py` | Preprocessing, cosine similarity, prediction (`predictS2V`), evaluation math | live, imported by both arms — **pure Python**, see below |
 | Analysis | `src/aicds/analysis/{rank_metrics,populations,rank_report}.py` | Rank-aware metrics (MRR, Hit@K, P@K, nDCG), the three abstention populations, and the `RankMetrics.txt` writer | live; `rank_metrics.py` is deliberately pure — no I/O, no config |
 | Entities | `src/aicds/entity/SymptomsDiagnosis.py` | The one record type actually used: HADM_ID, symptoms, preprocessed diagnosis list | live |
-| Entities | `src/aicds/entity/{Admission,Symptom,Drgcodes}.py` | Field-index constants for raw MIMIC-III tables | **orphaned** — only `tests/test_reorganization.py` imports them |
-| Model arm | `src/aicds/models/baseline_sent2vec.py` | BioSentVec (sent2vec) 700D embeddings, 10-fold CV | **runs since `c2fee6e`, Linux only**; still executes at import time and reads `$AICDS_PIPELINE` |
+| Run contract | `src/aicds/runs.py` | Where an arm writes (`run_dirs`, `check_out_root`, `write_run_metadata`) and how a reader finds it (`discover`, `Run`) | live since `9d08c94`/`7927a88`/`5a52d26`; **the one place run-directory shape is decided** |
+| Model arm | `src/aicds/models/baseline_sent2vec.py` | BioSentVec (sent2vec) 700D embeddings, 10-fold CV | **runs since `c2fee6e`, Linux only**; `run_analysis(encoder, config, out)` behind a `__main__` guard since `9c9e251` |
 | Model arm | `src/aicds/models/bert_models.py` | Bio_ClinicalBERT / BiomedBERT / BlueBERT (sentence-transformers) 768D | live; produced the committed results |
-| Evaluation | `src/aicds/evaluation/bert_eval.py` | Alternative evaluator: raw `AutoModel` + manual mean-pooling | **orphaned**, zero callers; salvage `hf_automodel` before deleting |
-| Scripts | `scripts/run_baseline.py`, `run_bert_analysis.py`, `run_all_bert_models.py`, `make_folds.py` | CLI entry points | live |
-| Scripts | `scripts/analyze_performance.py`, `analyze_score_distributions.py`, `analyze_rank_metrics.py`, `build_dashboard_data.py`, `build_readme_plots.py`, `compare_models.py` | Post-hoc parsing/plotting | mixed — four private `PerformanceIndex` parsers and six-to-seven discovery rules await Phase 3 unification |
-| Output | `Prediction_Output_{model}_{timestamp}/` — `PerformanceIndex.txt`, `RankMetrics.txt`, `timing_report.txt` | Per-admission, per-fold, and 10-fold-mean metric rows | curated legacy copies committed at `docs/Prediction_Output_*/`; all fresh runs land in gitignored `results*/` |
-| Safety net | `tests/` — 264 fast tests + `tests/golden/stub768/PerformanceIndex.txt` | Characterization tests plus a byte-exact 10-fold golden using a sha256-seeded `StubEncoder` | live; `pytest -m golden` ≈ 43–53 min |
+| Scripts | `scripts/run_baseline.py`, `run_bert_analysis.py`, `make_folds.py` | CLI entry points; both run scripts take `--pipeline` and `--out` | live |
+| Scripts | `scripts/analyze_performance.py`, `analyze_score_distributions.py`, `analyze_rank_metrics.py`, `build_dashboard_data.py`, `build_readme_plots.py`, `compare_models.py` | Post-hoc parsing/plotting | live — all discovery goes through `runs.discover` and all parsing through `analysis/performance_index.py`; the four private parsers and six-to-seven private rules are gone |
+| Output | `Prediction_Output_{model}_{timestamp}/` (or `ROOT/{key}/{stamp}/` under `--out`) — `PerformanceIndex.txt`, `RankMetrics.txt`, `timing_report.txt`, `run_metadata.json` | Per-admission, per-fold, and 10-fold-mean metric rows, plus provenance | curated legacy copies committed at `docs/Prediction_Output_*/`; all fresh runs land in gitignored `results*/` |
+| Safety net | `tests/` — 413 fast tests + `tests/golden/stub768/PerformanceIndex.txt` | Characterization tests plus a byte-exact 10-fold golden using a sha256-seeded `StubEncoder` | live; `pytest -m golden` ≈ 43–53 min |
 
 ## The central design constraint: one evaluation core, two embedding arms
 
@@ -90,9 +90,10 @@ A few other things about this module that its name and the old docs get wrong or
 
 ## Data flow, end to end
 
-1. **Select a pipeline.** `--pipeline legacy|corrected|folds-only|preprocess-only|drg` (the
-   baseline reads `$AICDS_PIPELINE`, because it executes at import time). `legacy` is the
-   default everywhere and reproduces the published pipeline bit-for-bit.
+1. **Select a pipeline.** `--pipeline legacy|corrected|folds-only|preprocess-only|drg`, on
+   **both** run scripts since `9c9e251`; `$AICDS_PIPELINE` still works and is what
+   `python -m aicds.models.baseline_sent2vec` reads. `legacy` is the default everywhere and
+   reproduces the published pipeline bit-for-bit.
 2. **Load admissions.** Read `Symptoms-Diagnosis.txt`, split each line on `;` into
    `SymptomsDiagnosis` objects, preprocess the diagnosis field at load time
    (`preprocess_diagnosis`: lowercase, split multi-DRG lines on `--`, strip
@@ -122,8 +123,10 @@ A few other things about this module that its name and the old docs get wrong or
    reads `12.9` (= 129/10) in the committed output.
 7. **Write output.** `PerformanceIndex.txt` (untouched legacy format — the golden's subject),
    `RankMetrics.txt` (additive sibling: MRR/Hit@K/P@K/nDCG on three abstention populations),
-   and `timing_report.txt`, into a timestamped directory under the current working directory
-   (still no `--out` flag — move runs into `results*/` by hand).
+   `timing_report.txt`, and `run_metadata.json` (written last — its presence means the run
+   reached the end). With no `--out` these go into a timestamped directory under the current
+   working directory, the layout the golden pins; `--out ROOT` writes `ROOT/{key}/{stamp}/`
+   directly, which is the `results*/` layout the comparison scripts read.
 
 ```mermaid
 flowchart TB
@@ -144,14 +147,16 @@ flowchart TB
     SD["src/aicds/entity/SymptomsDiagnosis.py"]
 
     subgraph Baseline["Baseline arm (Linux only)"]
-        BL["baseline_sent2vec.py\nBioSentVec, 700D\nruns at import; reads $AICDS_PIPELINE"]
+        BL["baseline_sent2vec.py\nBioSentVec, 700D\nrun_analysis(config, out)"]
     end
 
     subgraph BertArm["BERT arm"]
         BERT["bert_models.py\nBio_ClinicalBERT / BiomedBERT / BlueBERT, 768D\n(golden injects StubEncoder here)"]
     end
 
-    OUT["Prediction_Output_{model}_{timestamp}/\nPerformanceIndex.txt + RankMetrics.txt\n+ timing_report.txt"]
+    RUNS["runs.py\nrun_dirs · check_out_root\nwrite_run_metadata · discover"]
+
+    OUT["Prediction_Output_{model}_{timestamp}/\nor ROOT/{key}/{stamp}/ under --out\nPerformanceIndex.txt + RankMetrics.txt\n+ timing_report.txt + run_metadata.json"]
     DOCS["docs/Prediction_Output_*/\ncommitted legacy oracle — read-only"]
 
     RAW --> BL
@@ -166,14 +171,11 @@ flowchart TB
     ANA --> BERT
     SD --> BL
     SD --> BERT
+    RUNS --> BL
+    RUNS --> BERT
     BL --> OUT
     BERT --> OUT
     OUT -.->|"legacy runs only, curated"| DOCS
-
-    subgraph Dead["Not called by any live pipeline"]
-        ORPHAN1["entity/Admission.py, Symptom.py, Drgcodes.py"]
-        ORPHAN2["evaluation/bert_eval.py"]
-    end
 ```
 
 ## Constants (`src/aicds/utils/Constants.py`)
@@ -186,7 +188,7 @@ flowchart TB
 | `TOP_K_LOWER_BOUND` | 10 | First TOP-K strategy evaluated |
 | `TOP_K_UPPER_BOUND` | 60 | Exclusive bound — with the increment, K = 10, 20, 30, 40, 50 |
 | `TOP_K_INCR` | 10 | Step between TOP-K strategies |
-| classification thresholds | `{1.0, 0.9, 0.8, 0.7, 0.6}` | Not a `Constants.py` name — a literal `set` duplicated at **8 sites**, whose *iteration order* determines output row order; `bert_models.py` hard-codes a matching list kept in sync only by a comment |
+| classification thresholds | `{1.0, 0.9, 0.8, 0.7, 0.6}` | Not a `Constants.py` name — a literal `set` duplicated at **7 sites, all inside `cython_utils.py`** (`:267`, `:296`, `:644`, `:653`, `:668`, `:696`, `:734`; recounted 2026-08-11 — the old figure of 8 counted `bert_eval.py`, now deleted), whose *iteration order* determines the **baseline** arm's output row order. The **BERT** arm gets that order from an ordered list instead: `bert_models.py:511` is `THRESHOLDS = [0.9, 1.0, 0.6, 0.8, 0.7]  # Same order as baseline`, consumed at `:647`, `:662` and `:677`, each of which writes a `PerformanceIndex.txt` row — so that literal *does* set row order, kept in sync with the set by nothing but its trailing comment. Seven further sites spell the same values as an ascending ordered **list** and none of those sets row order: `bert_models.py:638` (debug print), `analysis/performance_index.py:111`, and the reader-side `THRESHOLDS` constants in `analyze_performance.py`, `analyze_score_distributions.py`, `build_dashboard_data.py`, `build_readme_plots.py`, `compare_models.py` (8 ordered-list sites in non-test code in total) |
 | `TRAIN` / `TEST` | `TrainingSet.txt` / `TestSet.txt` | Filenames within each fold directory |
 | `CH_DIR` | four `.parent`s up from the file | Auto-detected repo root — an off-by-one here silently repoints every data path rather than raising |
 
@@ -234,37 +236,47 @@ answered-hit-rate, all-cases-hit-rate, and coverage
 ([13](../findings/13-rank-aware-metrics.md)) — which is exactly why `RankMetrics.txt` reports
 three labelled populations instead of inventing a new shape.
 
-## Known defects (current as of 2026-08-08)
+## Known defects (current as of 2026-08-11)
 
 1. ~~The baseline arm cannot run.~~ **Fixed in `c2fee6e`**, verified by the full 10-fold run of
-   2026-08-05. Two residual defects remain: the module still executes at import time with no
-   `__main__` guard (why it reads `$AICDS_PIPELINE`), and it holds two conflicting
-   `PerformanceIndex` handles (a `'w'` never closed and an `'a'` on the same path — currently
-   `:312`/`:467`). The model file also still loads from `os.getcwd()`, not `data/models/` as
-   that directory's README claims.
-2. **Output discovery is fragmented.** The baseline writes `Prediction Output_` with a space,
-   which no glob matches; the readers disagree about base directories; and there are now four
-   `PerformanceIndex` parsers and six-to-seven discovery rules
-   ([10](../findings/10-output-path-fragmentation.md)). `build_readme_plots.py` and
-   `analyze_performance.py` still glob the wrong place; `build_dashboard_data.py` works.
+   2026-08-05. ~~Two residual defects.~~ **Fixed in `9c9e251`** — `run_analysis()` plus a
+   `__main__` guard, and the two `PerformanceIndex` handles collapsed to one `with`-block —
+   but **`[UNVERIFIED]` until a legacy baseline run on the pod is byte-compared against
+   `results/baseline/05082026_18-55-32`**, since the baseline arm has no golden. Note the
+   handle pair was mis-described for months: the `'w'` handle wrote the *whole* body and was
+   simply never closed explicitly, and the trailer landed correctly only because rebinding the
+   name refcount-closed it first. It worked by accident, which is what makes the collapse
+   byte-safe. The model file does still load from `os.getcwd()`, not `data/models/` as that
+   directory's README claims.
+2. ~~**Output discovery is fragmented.**~~ **Fixed in `9d08c94` (writers) and `7927a88`
+   (readers)** — both arms emit the underscore spelling through `runs.run_dirs`, and one rule
+   (`runs.discover`) replaced the six-to-seven private ones while
+   `analysis/performance_index.py` replaced the four private parsers. `build_readme_plots.py`
+   now runs and reproduces its six committed SVGs byte-identically.
+   See [10](../findings/10-output-path-fragmentation.md), which carries the dated close.
 3. **Every per-case output file is empty** — both arms, always (258 zero-byte files per
    baseline run). Now **P40**, the highest-value open item, because finding 13's untestable
    confound needs per-case relevance. Fix by writing a new sibling file, not by resurrecting
    the dead handles.
 4. **The dashboard 404s** — the committed JSON sits in the stray `dashboard/dashboard/` tree
    while the app fetches from `dashboard/public/data/`; re-run `build_dashboard_data.py`.
+   Still open; the fix moved to P38 with the rest of the Phase 3 polish.
 
 ## Orphaned code
 
-- **`src/aicds/evaluation/bert_eval.py`** (`BioClinicalBERTEvaluator`) has zero callers. It
-  implements a genuinely different embedding path — raw `AutoTokenizer` + `AutoModel` with
-  manual mean-pooling over `last_hidden_state` — worth salvaging as `encoders/hf_automodel.py`
-  for a pooling-strategy ablation, and it holds the repo's only GPU-aware line. Do **not**
-  carry its three known defects across: the wrong data path, the same unbound-`entity`
-  `NameError` fixed in `c2fee6e`, and an `os.getcwd()` output root.
-- **`src/aicds/entity/{Admission,Symptom,Drgcodes}.py`** define field-index constants for raw
-  MIMIC-III tables that predate the `Symptoms-Diagnosis.txt` consolidation. Only
-  `tests/test_reorganization.py` imports them, so deleting them needs a same-commit test edit.
+**None, as of `5ca7f64` and `94b4e24`.** What used to be listed here is gone:
+`src/aicds/evaluation/bert_eval.py` (545 lines, zero callers) was deleted outright with its whole
+package rather than salvaged, because the `encoders/hf_automodel.py` it was being preserved *for*
+had never existed in any branch and its GPU-aware line is worthless given
+[08](../findings/08-runtime-and-cost.md); `src/aicds/entity/{Admission,Symptom,Drgcodes}.py` went
+with their only importer, a line in `tests/test_reorganization.py`; and `print_log`,
+`get_diagnosis_similarity_by_description_max_model` and `scripts/run_all_bert_models.py` went with
+them. `src/aicds/entity/` now holds `SymptomsDiagnosis.py` alone.
+
+Two functions that *look* orphaned are deliberately kept:
+`cython_utils.get_diagnosis_similarity_baseline` and `get_diagnosis_similarity_by_drgcode`. They
+are the encoder-independent graders the DRG work was built on
+([12](../findings/12-drg-grader.md)); zero callers is not the same as dead.
 
 ## What isn't here
 

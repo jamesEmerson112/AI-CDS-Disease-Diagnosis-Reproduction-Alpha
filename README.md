@@ -107,7 +107,7 @@ the newer models are actually better.
 **Action.**
 - Fixed the crash bugs and got the baseline running end-to-end on rented Linux (the BERT extension is
   my own contribution; the baseline was scaffolded from the original authors' code).
-- Built a safety net first: **264 tests**, including a byte-exact 10-fold regression reference. Since
+- Built a safety net first: **413 tests**, including a byte-exact 10-fold regression reference. Since
   nothing is trained, every output number is a pure function of the inputs and the arithmetic — so any
   accidental behaviour change *is* a numerical change, and only a byte-exact comparison catches it.
 - Audited the evaluation and found **four independent defects**, each measured rather than asserted.
@@ -554,10 +554,15 @@ TOP-K curves, the prediction-rate (degeneracy) page, and the full threshold × T
 Its ~16 sanity assertions are the only thing verifying the parser reads the columns correctly, so they
 are **keyed by pipeline rather than deleted** — pointing the script at a directory whose numbers belong
 to a different pipeline makes it **refuse and exit 1** rather than quietly relabel a chart. The
-pipeline is resolved from the directory name and cross-checked against the run's recorded config; an
-unknown directory, a mismatch, and a run with no recorded pipeline are all hard errors, as is a run in
-which zero checks executed. The pipeline is then named on the cover page and in the PDF metadata, so a
-detached chart cannot be misattributed.
+pipeline is resolved from three sources in order — an explicit `--pipeline`, then the run's own
+`run_metadata.json`, then the directory name as a demoted fallback for pre-metadata trees. A run with
+no recorded pipeline prints `[WARN] no run_metadata.json … (pre-C8 runs)` and continues on the dirname;
+a flag/metadata disagreement warns and uses the flag. The **hard** exits are a directory name that
+resolves to nothing, a pipeline with no recorded expectations, and a run in which zero checks executed.
+The pipeline is then named on the cover page and in the PDF metadata, so a detached chart cannot be
+misattributed. Every invocation against the three trees committed before `5a52d26` prints that one
+`[WARN]` line; it is interim noise by design, and it clears once the attribution runs produce the first
+metadata-bearing trees.
 
 ```bash
 python scripts/compare_models.py --results-dir results_drg
@@ -640,11 +645,12 @@ Apple-silicon numbers **bit-for-bit, to all 17 significant figures.**
 ## Visual Summary (README Charts)
 
 > **These charts are from the LEGACY pipeline** — three BERT arms only, no baseline, generated from
-> the committed February 2026 runs under `docs/`. They have not been regenerated under `corrected`,
-> and `scripts/build_readme_plots.py` currently globs the wrong directory
-> ([10-output-path-fragmentation.md](docs/findings/10-output-path-fragmentation.md)). Read them for
-> the *shape* of the saturation and TOP-K artifacts, which `corrected` did not change; do not read
-> the values as current.
+> the committed February 2026 runs under `docs/`. They have not been regenerated under `corrected`.
+> `scripts/build_readme_plots.py` used to glob the wrong directory and crash; since `7927a88` it goes
+> through `aicds.runs.discover` and **runs**, regenerating all six committed SVGs byte-identical
+> ([10-output-path-fragmentation.md](docs/findings/10-output-path-fragmentation.md)). So what is stale
+> here is the *pipeline the numbers came from*, not the tooling. Read them for the *shape* of the
+> saturation and TOP-K artifacts, which `corrected` did not change; do not read the values as current.
 
 ![F1 vs threshold (TOP-10)](docs/readme_plots/f1_vs_threshold_top10.svg)
 *At TOP-10, BiomedBERT stays saturated through 0.9 while BlueBERT drops earlier. The 1.000 region on
@@ -723,7 +729,7 @@ src/aicds/               # Installable package (src layout; pip install -e .)
   analysis/              # rank_metrics (pure, no I/O), populations, rank_report writer
   utils/                 # Constants, runtime helpers, cython_utils (pure Python, shared math)
   entity/                # Data classes
-  evaluation/            # Evaluation modules
+  runs.py                # The one run-directory contract: run_dirs() writes, discover() reads
 scripts/                 # Entry points
   make_folds.py          # GroupKFold on SUBJECT_ID -> data/folds_grouped/
   run_baseline.py        # BioSentVec baseline (Linux only)
@@ -762,7 +768,8 @@ rejects its GCC-only compiler flags. See [docs/guides/setup.md](docs/guides/setu
 procedure, including the macOS/ARM OpenMP conflict and the Linux torch/nltk `LD_LIBRARY_PATH` trap.
 
 **Testing:** `pytest` runs the fast suite in seconds. `pytest -m golden` re-runs the full 10-fold
-pipeline and compares it **byte-for-byte** against a committed reference (~44 min). Nothing here is
+pipeline and compares it **byte-for-byte** against a committed reference (**43–53 min**, measured five
+times: 43:28, 44:32, ~50:00, 52:35, 53:10 — budget for the top of that range, not the bottom). Nothing here is
 trained, so every emitted number is a pure function of the input data and the arithmetic in
 `cython_utils.py` — meaning any behaviour change is a numerical change, and the realistic failure
 mode of refactoring is the numbers moving while every other test stays green. The golden is the only

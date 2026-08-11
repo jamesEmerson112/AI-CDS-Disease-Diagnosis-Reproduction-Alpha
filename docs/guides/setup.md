@@ -96,7 +96,7 @@ Run the fast suite — unit and characterization tests, no model download, no ne
 
 ```bash
 pytest
-# 264 passed, 3 deselected, ~21-52s
+# 413 passed, 3 deselected
 ```
 
 The deselected tests are opt-in. One downloads a model from HuggingFace; the others are slow.
@@ -104,8 +104,10 @@ The one that matters is the **golden regression** — it runs the full 10-fold p
 committed byte-exact reference:
 
 ```bash
-pytest -m golden      # ~43-53 minutes (measured 43:28 and 53:10 — NOT the ~20 min
-                      # an earlier version of this file claimed)
+pytest -m golden      # 43-53 minutes, measured five times: 43:28, 44:32, ~50:00,
+                      # 52:35, 53:10. NOT the ~20 min an earlier version of this file
+                      # claimed — nor the ~20 min tests/test_golden.py's own docstring
+                      # still claims at :68, which is left alone on purpose.
 ```
 
 Run that one before and after any refactoring commit. Nothing else in the suite will notice if
@@ -127,23 +129,35 @@ runs, export it in the shell: `PYTHONHASHSEED=0 pytest`.
 
 ## 4. Running the BERT arm
 
-Every run takes `--pipeline legacy|corrected|folds-only|preprocess-only|drg`; `legacy` is the
-default and is bit-identical to the original published pipeline. For grouped-fold pipelines,
-generate the folds first (they are gitignored, so a fresh clone does not have them):
+Every run takes `--pipeline legacy|corrected|folds-only|preprocess-only|drg` and `--out ROOT`;
+`legacy` is the default and is bit-identical to the original published pipeline. For grouped-fold
+pipelines, generate the folds first (they are gitignored, so a fresh clone does not have them):
 
 ```bash
 python scripts/make_folds.py --verify              # writes data/folds_grouped/
 
 python scripts/run_bert_analysis.py --model 2      # 1=Bio_ClinicalBERT 2=BiomedBERT 3=BlueBERT
-python scripts/run_bert_analysis.py --model all --pipeline drg
+python scripts/run_bert_analysis.py --model all --pipeline drg --out results_drg
 # ~21 min per model on an M-series Mac; ~11.5 min on a 32-vCPU Linux box;
 # ~14 min on a Threadripper 7960X. "all" runs the three sequentially.
 ```
 
-Run from the repository root. Output paths are built from the current working directory, so
-running from elsewhere scatters results into the wrong place (there is still no `--out` flag).
-Each run writes `Prediction_Output_{Model}_{DDMMYYYY_HH-MM-SS}/` containing
-`PerformanceIndex.txt`, `RankMetrics.txt`, and `timing_report.txt`.
+Run from the repository root. With no `--out`, output paths are built from the current working
+directory, so running from elsewhere scatters results — and that flat layout is what the golden
+pins, so it will not change. `--out ROOT` writes `ROOT/{model_key}/{DDMMYYYY_HH-MM-SS}/` instead,
+which is the `results*/` layout `compare_models.py --results-dir` and `analyze_rank_metrics.py`
+read directly, so nothing has to be moved by hand.
+
+Either way a run writes `PerformanceIndex.txt`, `RankMetrics.txt`, `timing_report.txt`, and
+`run_metadata.json` — the last written after everything else, so its presence means the run
+finished. It records the git SHA, the pipeline by name and by all three config fields, and a
+content hash of the fold split, which is how a number gets defended later.
+
+**`--out` is guarded.** A run leaves per-case files *named by* `HADM_ID`, and because those files
+are empty the pre-commit hook cannot see them — the ignore rule is the only defence. So an
+`--out` that resolves inside the repository with no `.gitignore` rule covering it is refused
+outright (`--out scratch`, and note `--out out` too: the ignore entry is `output/`, not `out/`).
+Any `results*` path is fine.
 
 **Model downloads.** The three encoders come from HuggingFace on first use and land in
 `~/.cache/huggingface/hub` (roughly 400–450 MB each). To move them to a new machine without
@@ -174,16 +188,21 @@ What you need:
   — the loader reads it from the working directory, despite what `data/models/README.md`
   says (a known, unfixed defect)
 
-Then (the baseline reads `$AICDS_PIPELINE` instead of a flag, because the module executes at
-import time):
+Then:
 
 ```bash
-AICDS_PIPELINE=drg python scripts/run_baseline.py     # ~13 min on a 32-vCPU box
+python scripts/run_baseline.py --pipeline drg --out results_drg   # ~13 min on a 32-vCPU box
 ```
 
-Note the baseline writes `Prediction Output_...` — with a space — which no discovery glob in
-the repo matches (`docs/findings/10-output-path-fragmentation.md`); move its output into the
-`results*/` layout by hand.
+`AICDS_PIPELINE=drg python scripts/run_baseline.py` still works, and is what
+`python -m aicds.models.baseline_sent2vec` reads, but the flag is the supported form now: the
+module gained a `run_analysis()` and a `__main__` guard in `9c9e251`, so importing it no longer
+executes a pipeline.
+
+The baseline used to write `Prediction Output_...` — with a space — which no discovery glob in
+the repo matched (`docs/findings/10-output-path-fragmentation.md`). Since `9d08c94` it writes
+`Prediction_Output_BioSentVec_{stamp}` like the other arm. Older SHAs still emit the space
+spelling, which is why `.gitignore` keeps both patterns.
 
 ---
 
@@ -209,17 +228,22 @@ python scripts/build_dashboard_data.py    # from the repo root
 
 ## 7. Known broken
 
-Verified as of 2026-08-08. None of these are caused by your machine.
+Verified as of 2026-08-11. None of these are caused by your machine.
 
 | What | Symptom | Cause |
 |---|---|---|
-| `scripts/build_readme_plots.py` | `FileNotFoundError` | Globs `Prediction_Output_*` at the repo root; the committed result directories live under `docs/`. |
 | The dashboard | Blank page / 404 | The committed JSON sits at `dashboard/dashboard/public/data/`, a stray nested directory, while the app fetches from `dashboard/public/data/`. Re-run the builder (section 6). |
-| `scripts/verify_setup.py` | Reports one spurious failure | Checks for an `output/` directory that no longer exists. |
-| Baseline output discovery | No script finds baseline runs | The baseline writes `Prediction Output_` with a space; every glob expects an underscore. |
+| `compare_models.py` on the three existing result trees | One `[WARN] no run_metadata.json …` line per invocation | Those runs predate `5a52d26`, and nothing retrofits provenance onto a run nobody can re-derive. Cosmetic, and it clears itself as new runs land. |
+| Per-case output files | All 258 are zero bytes | Neither arm has ever written them. Tracked as **P40**; the fix is a new sibling file, not a repair of the dead handles. |
+| The BioSentVec model path | Loads from the working directory | `data/models/README.md` says `data/models/`; the loader disagrees. Put the `.bin` at the repository root. |
 
-(`scripts/run_baseline.py` used to head this table with two crash bugs. Fixed in `c2fee6e`,
-verified by the 2026-08-05 run.)
+Four entries left this table on 2026-08-11. `scripts/build_readme_plots.py` raised
+`FileNotFoundError` on every invocation and now runs, reproducing its six committed SVGs
+byte-identically (`7927a88`). `scripts/verify_setup.py` reported a spurious failure for an
+`output/` directory nothing writes; the check is gone and it exits 0 (`7927a88`). No script could
+find baseline runs, because the baseline wrote a space where every glob expected an underscore;
+both arms now go through `aicds.runs` (`9d08c94`). And `scripts/run_baseline.py` headed this table
+with two crash bugs until `c2fee6e`, verified by the 2026-08-05 run.
 
 ---
 

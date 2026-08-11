@@ -31,7 +31,7 @@ A corollary worth knowing: TOP-K scores rise monotonically with K because one hi
 
 **Do not "correct" that 105 to 85.** Both are real and count different things: **85** is occurrence-level singletons over the 297 raw diagnosis entries, **105** is admission-level singletons (document frequency 1) over the 224 entries surviving `preprocess_diagnosis`'s per-admission dedup, and the 85 are a strict subset. **105 is the right figure here**, because this sentence bounds exact-match *retrieval* and a label written twice inside one admission offers a retriever no second admission to find it in. It is also the pipeline-true count — the dedup happens before any label reaches the grader. The 20-label gap exists because **71 of 129 admissions list their APR label twice byte-identically**, an upstream DRGCODES artifact. This was nearly mis-"fixed" during P4; see `docs/findings/12-drg-grader.md`.
 
-**The shared-pipeline constraint is broken under `legacy` and fixed under `corrected`/`drg` — check which pipeline produced a number before comparing arms.** The baseline calls `preprocess_sentence` on diagnosis text (`cython_utils.py:432`, and `:547-548` at scoring time). The BERT path now does too, but **only when the config says so**: `bert_models.py:354` gates it on `use_corrected_preprocessing(config)`, so under `legacy` it still encodes raw text and 119/145 (82.1%) of descriptions reach the two encoders as different strings. Under `corrected` all 145/145 match. The gate exists because the fix moves every BERT number, and `legacy` must stay byte-exact for the golden. **So a `legacy` baseline-vs-BERT delta is still confounded by preprocessing, not just encoder; a `corrected` or `drg` one is not.** Note also that only the *encoded* text changes — the dict keys stay raw under both versions, because `get_diagnosis_similarity_by_description_max` looks up by the raw description and preprocessing the keys would break every lookup.
+**The shared-pipeline constraint is broken under `legacy` and fixed under `corrected`/`drg` — check which pipeline produced a number before comparing arms.** The baseline calls `preprocess_sentence` on diagnosis text at embedding time (`cython_utils.py:431`; the grader derives raw descriptions at `:524`/`:526` and looks those embeddings up by them at `:527-528`). The BERT path now does too, but **only when the config says so**: `bert_models.py:346` gates it on `use_corrected_preprocessing(config)`, so under `legacy` it still encodes raw text and 119/145 (82.1%) of descriptions reach the two encoders as different strings. Under `corrected` all 145/145 match. The gate exists because the fix moves every BERT number, and `legacy` must stay byte-exact for the golden. **So a `legacy` baseline-vs-BERT delta is still confounded by preprocessing, not just encoder; a `corrected` or `drg` one is not.** Note also that only the *encoded* text changes — the dict keys stay raw under both versions, because `get_diagnosis_similarity_by_description_max` looks up by the raw description and preprocessing the keys would break every lookup.
 
 ### What can honestly be claimed
 
@@ -88,40 +88,62 @@ Python 3.9 is pinned only by `sent2vec` (baseline-only). HuggingFace models cach
 
 Always run from the repository root — output paths derive from `os.getcwd()`. (The `sys.path.insert(0, project_root)` hacks are **gone** as of `2a0b77d`; the package is a real src-layout install, so `pip install -e .` is now required.)
 
-**Every run takes `--pipeline legacy|corrected|folds-only|preprocess-only|drg`** (the baseline reads
-`$AICDS_PIPELINE` instead, because it executes at import time and there is no post-import moment at
-which a caller could rebind). `legacy` is the default everywhere, so a command with no pipeline
-argument is bit-identical to the original and the golden is unaffected.
+**Every run takes `--pipeline legacy|corrected|folds-only|preprocess-only|drg` and `--out ROOT`** —
+**both arms, as of `9c9e251`/`9d08c94`.** `$AICDS_PIPELINE` still works and is still what
+`python -m aicds.models.baseline_sent2vec` reads, but the baseline no longer *needs* it: it has a
+`run_analysis()` and a `__main__` guard now, so `scripts/run_baseline.py` carries the same argparse
+the BERT script does. `legacy` is the default everywhere, so a command with no pipeline argument is
+bit-identical to the original and the golden is unaffected.
 
 ```bash
 python scripts/make_folds.py --verify            # regenerate data/folds_grouped/ (gitignored, so
                                                  # required before any grouped-fold run)
 python scripts/run_bert_analysis.py --model 2    # 1=Bio_ClinicalBERT 2=BiomedBERT 3=BlueBERT
-python scripts/run_bert_analysis.py --model all --pipeline drg   # ~11.5 min/model on the RunPod
-                                                 # 32-vCPU box; ~21 on an M-series Mac; ~14 on a
+python scripts/run_bert_analysis.py --model all --pipeline drg --out results_drg
+                                                 # ~11.5 min/model on the RunPod 32-vCPU box;
+                                                 # ~21 on an M-series Mac; ~14 on a
                                                  # Threadripper 7960X
-AICDS_PIPELINE=drg python scripts/run_baseline.py  # BioSentVec — Linux only, 21 GB model, ~13 min
+python scripts/run_baseline.py --pipeline drg --out results_drg
+                                                 # BioSentVec — Linux only, 21 GB model, ~13 min
 python scripts/analyze_rank_metrics.py results_drg  # parses RankMetrics.txt, paired t-test on
                                                  # per-fold MRR across all three populations
 python scripts/compare_models.py --results-dir results_drg   # 4-model comparison PDF
 python scripts/analyze_score_distributions.py    # regenerates docs/score_distribution_analysis/
-python scripts/build_dashboard_data.py           # rebuilds dashboard JSON from docs/Prediction_Output_*/
+python scripts/build_dashboard_data.py           # rebuilds dashboard JSON; default root is docs/
 python scripts/analyze_performance.py [dir]      # PDF report from a PerformanceIndex.txt
-python scripts/verify_setup.py                   # smoke test (reports one spurious output/ failure)
+python scripts/verify_setup.py                   # smoke test — exits 0 on a clean checkout
 ```
+
+**A run now writes four things**, not three: `PerformanceIndex.txt` (the golden's subject),
+`RankMetrics.txt` (P5), `timing_report.txt`, and — since `5a52d26` — `run_metadata.json` (P14),
+written **last**, after the `PerformanceIndex.txt` handle closes. It records the git SHA and dirty
+flag, the pipeline by name *and* by all three `PipelineConfig` fields, a SHA-256 of the fold split's
+`TrainingSet.txt`/`TestSet.txt` contents, the model key and label, `K_FOLD`, and the platform /
+Python / numpy versions. Its presence also means the run reached the end, so a reader can tell a
+completed run from an interrupted one without parsing anything. `write_run_metadata` **never
+raises** — a finished 13-minute run must not be lost to a `git` subprocess call about provenance.
 
 `compare_models.py` **refuses rather than guesses.** Its ~16 sanity assertions are the only thing
 verifying the parser reads the columns correctly, so they are keyed by pipeline; an unknown results
 directory, a pipeline mismatch, or a run in which zero checks executed are all hard exits. Pass
 `--pipeline` explicitly for a directory whose name is not in `_PIPELINE_BY_DIRNAME`.
+**Since `5a52d26` it prefers `run_metadata.json` and demotes the dirname table to a fallback**
+(`compare_models.resolve_pipeline`, `:395-433`), so every invocation on the three *existing* trees prints one
+`[WARN] no run_metadata.json … (pre-C8 runs)` line. That noise is by design and is interim: nothing
+retrofits metadata onto a run nobody can re-derive, so it persists until P29 produces the first
+metadata-bearing trees.
 
 Tests:
 
 ```bash
-pytest                    # 264 passed, 3 deselected, ~21-52s — this is the green baseline
+pytest                    # 413 passed, 3 deselected — this is the green baseline
+                          # (was 264 before the C1-C8 refactor added its tests)
 pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
-                          # byte-exact reference. ~43-53 min (measured 43:28 and
-                          # 53:10, NOT the ~20 min this file used to claim). Run it
+                          # byte-exact reference. ~43-53 min (measured five
+                          # times: 43:28, 44:32, ~50:00, 52:35, 53:10 — NOT
+                          # the ~20 min this file used to
+                          # claim — and NOT the ~20 min tests/test_golden.py's
+                          # own docstring still claims at :68). Run it
                           # before and after any refactor commit; it is the only
                           # thing that catches the numbers moving while every other
                           # test stays green.
@@ -205,16 +227,17 @@ Things that will bite you:
 - **`cython_utils.py` is pure Python** despite the name — a hand-translation of the original Cython, archived at `archive/cython_source/util_cy.c`. No build step.
 - **`sent2vec` is no longer imported at module scope** (as of `c8e4ffd`) — it moved inside `load_model()`, its only consumer, so `cython_utils` now imports with base dependencies alone. `tests/test_bert_symptom_pairwise.py` still AST-loads functions out of `bert_models.py` to dodge the old imports; that workaround is now unnecessary and **new tests should import normally**.
 - **Embedding dicts are keyed by preprocessed *text*, not HADM_ID**, each value wrapped in a one-element list so callers index `emb[0]`. Diverging silently changes results rather than raising.
-- **The `legacy` folds under `data/folds/` are fixed committed files**, not computed at runtime, and no generator for them exists anywhere in the repo or its archive — the original split was produced upstream and only its output was committed. **Never regenerate or overwrite `data/folds/`**: it is the golden's input, and one careless `--out` destroys the only reference. `scripts/make_folds.py` writes `data/folds_grouped/` instead, which is gitignored and regenerated deterministically. `load_dataset` (`cython_utils.py:346`) drops the final character of each line assuming a trailing newline — all 20 committed fold files end in `0x0a`, but a hand-written one without it silently loses its last symptom. `tests/test_characterize_dataset.py` pins this.
-- **`baseline_sent2vec.py` runs at import time**; `bert_models.py` exposes `run_analysis(model_id)` and is the better pattern to follow.
-- `src/aicds/evaluation/bert_eval.py` is orphaned (zero callers, 545 lines) but contains a raw `AutoModel` + mean-pooling path distinct from sentence-transformers pooling, plus the only GPU-aware line in the repo (`:74`). Salvage before deleting — but do **not** carry its three known defects across: `:106` the wrong data path, `:121` the same unbound `entity` NameError fixed in `c2fee6e`, `:367` an `os.getcwd()` output root.
-- `src/aicds/entity/{Admission,Symptom,Drgcodes}.py` have no live callers — **but `tests/test_reorganization.py:17-19` imports them**, so deletion needs a same-commit test edit.
+- **The `legacy` folds under `data/folds/` are fixed committed files**, not computed at runtime, and no generator for them exists anywhere in the repo or its archive — the original split was produced upstream and only its output was committed. **Never regenerate or overwrite `data/folds/`**: it is the golden's input, and one careless `--out` destroys the only reference. `scripts/make_folds.py` writes `data/folds_grouped/` instead, which is gitignored and regenerated deterministically. `load_dataset` (`cython_utils.py:345`) drops the final character of each line assuming a trailing newline — all 20 committed fold files end in `0x0a`, but a hand-written one without it silently loses its last symptom. `tests/test_characterize_dataset.py` pins this.
+- **Both arms now expose `run_analysis(...)` behind a `__main__` guard.** `baseline_sent2vec.py:187` takes `(encoder=None, config=LEGACY, out=None)`; `bert_models.py:372` takes `(model_id=None, encoder=None, config=LEGACY, out=None)`. Importing either module no longer runs a pipeline (fixed in `9c9e251`).
+- **`src/aicds/runs.py` is the one place run-directory shape is decided** — the writer half (`run_dirs`, `check_out_root`, `write_run_metadata`) and the reader half (`discover`, `Run`). Read its module docstring before adding a script that writes or finds runs; a new private glob is the exact drift it exists to stop.
+- **`src/aicds/analysis/performance_index.py` is the one `PerformanceIndex.txt` parser.** The four private ones are gone (`1f69e11` added it, `7927a88` deleted them), and equivalence against all four was proved on the committed goldens before deletion — the assertions now live as pinned literals in `tests/test_performance_index.py`.
+- `src/aicds/entity/` now holds **only** `SymptomsDiagnosis.py`. `Admission`/`Symptom`/`Drgcodes` were deleted in `94b4e24` together with their `test_reorganization.py` import; `src/aicds/evaluation/` and `bert_eval.py` were deleted outright in `5ca7f64`.
 
 ## Outputs
 
-BERT runs write `Prediction_Output_{Model}_{DDMMYYYY_HH-MM-SS}/` into the **current working directory**; the baseline writes `Prediction Output_{DDMMYYYY HH-MM-SS}/` — space, no model name (see Known defects). The three committed result sets under `docs/` are the project's **regression oracle** — the only record of a working pipeline's exact output. Treat them as read-only.
+With no `--out`, **both** arms write `Prediction_Output_{Model}_{DDMMYYYY_HH-MM-SS}/` into the **current working directory** — the baseline as `Prediction_Output_BioSentVec_{stamp}`. That default layout is frozen by the golden and must not move. *(Pre-`9d08c94` baseline runs wrote `Prediction Output_{DDMMYYYY HH-MM-SS}/` — a space, no model name — which is why `.gitignore` still carries both spellings: checking out an older SHA and running it must not leave unignored clinical data behind.)* The three committed result sets under `docs/` are the project's **regression oracle** — the only record of a working pipeline's exact output. Treat them as read-only.
 
-**Every run directory is gitignored by the glob `results*/` (`.gitignore:146`)**, which is what keeps DUA-covered output out of git automatically. **It is a glob on purpose, not a hand-listed set:** the previous version enumerated `results/` and `results_corrected/` by hand, and on 2026-08-06 a third pipeline was about to write `results_drg/` — per-case output keyed by `HADM_ID`, into a public repo. That is the one failure here that cannot be taken back. `.githooks/pre-commit` is the second line of defence, not the first. Layout is pipeline root, then model, then timestamp:
+**Every run directory is gitignored by the glob `results*/` (`.gitignore:160`)**, which is what keeps DUA-covered output out of git automatically. **It is a glob on purpose, not a hand-listed set:** the previous version enumerated `results/` and `results_corrected/` by hand, and on 2026-08-06 a third pipeline was about to write `results_drg/` — per-case output keyed by `HADM_ID`, into a public repo. That is the one failure here that cannot be taken back. `.githooks/pre-commit` is the second line of defence, not the first. Layout is pipeline root, then model, then timestamp:
 
 ```
 results/          <model>/<DDMMYYYY_HH-MM-SS>/   # legacy
@@ -223,25 +246,36 @@ results_drg/      <model>/<DDMMYYYY_HH-MM-SS>/
                   # model ∈ baseline, bio_clinical_bert, biomedbert, bluebert
 ```
 
-**There is still no `--out` flag** (a Phase 2 leftover), so runs write `Prediction_Output_*` into the cwd and are moved into the layout above by hand. `scripts/compare_models.py --results-dir <root>` reads it and emits `<root>/model_comparison.pdf` across all four arms.
+**`--out ROOT` writes that layout directly** (`9d08c94`), so nothing is moved by hand any more:
+`--out results_drg` produces `results_drg/{key}/{stamp}/` with `symptom_details/` *nested* inside
+the run rather than as a sibling — deliberate, because under a shared root a sibling would land next
+to the timestamps and break "every child of the model directory is a run". Omitting `--out` keeps
+the flat cwd layout the golden pins. `runs.check_out_root` **refuses** an `--out` that resolves
+inside the repository with no `.gitignore` rule covering it (`--out scratch`, `--out out` — note the
+ignore entry is `output/`, not `out/`): a run leaves per-case files *named by* `HADM_ID`, and because
+those files are empty the pre-commit hook's 20-distinct-ID content rule scores them 0 and cannot see
+them. It asks git rather than re-implementing ignore semantics, and it distinguishes "not ignored"
+from "could not ask git" — the latter warns and continues.
+`scripts/compare_models.py --results-dir <root>` reads the tree and emits
+`<root>/model_comparison.pdf` across all four arms.
 
 `PerformanceIndex.txt` columns are `threshold TP FP P R FS PR`. The meaningful numbers are the per-fold blocks and the final `10-FOLD` block. Bear the degeneracy finding in mind when reading any of them.
 
-Constants in `src/aicds/utils/Constants.py` (note `CH_DIR` walks **four** parents to reach the repo root — an off-by-one here silently repoints every data path rather than raising): `K_FOLD=10`, `PRUNING_SIMILARITY=0.5`, TOP-K `10..60 step 10` (so K = 10,20,30,40,50). Thresholds are duplicated across 8 sites as set literals `{1, 0.9, 0.8, 0.7, 0.6}`, whose *set iteration order* determines output row order — `bert_models.py` hard-codes a matching list kept in sync only by a comment.
+Constants in `src/aicds/utils/Constants.py` (note `CH_DIR` walks **four** parents to reach the repo root — an off-by-one here silently repoints every data path rather than raising): `K_FOLD=10`, `PRUNING_SIMILARITY=0.5`, TOP-K `10..60 step 10` (so K = 10,20,30,40,50). Thresholds are duplicated as the set literal `{1, 0.9, 0.8, 0.7, 0.6}` at **7 sites, all of them inside `cython_utils.py`** (`:267`, `:296`, `:644`, `:653`, `:668`, `:696`, `:734` — recounted 2026-08-11; the long-standing "8 sites" figure counted `bert_eval.py`, deleted in `5ca7f64`). Their *set iteration order* determines the **baseline** arm's output row order. **The BERT arm reaches the same order by a different route, and that is the trap:** `bert_models.py:511` hard-codes the ordered list `[0.9, 1.0, 0.6, 0.8, 0.7]` — CPython's iteration order for that set, transcribed by hand — and it is consumed at `:647`, `:662` and `:677`, each of which ends in a `performance_out_file.write(...)`. So that one list literally determines the BERT arm's `PerformanceIndex.txt` row order, and its **only** synchronisation with the set is its trailing comment `# Same order as baseline`. Seven *further* sites spell the same values as an ordered list in ascending order; none of those feeds a pipeline row order: `bert_models.py:638` (a debug print, no comment attached), `analysis/performance_index.py:111`, and the reader-side constants in `analyze_performance.py:43`, `analyze_score_distributions.py:62`, `build_dashboard_data.py:199`, `build_readme_plots.py:31` and `compare_models.py:58`. Eight ordered-list sites in non-test code, then — but only `:511` is load-bearing.
 
 ## Known defects
 
-Verified, unfixed, documented. **Line numbers were re-resolved by reading them on 2026-08-06** —
-several had drifted by 100+ lines as `cython_utils.py` and `bert_models.py` grew, so re-check before
+Verified, documented, and **re-resolved by reading the tree on 2026-08-11** after the C1–C8
+refactor moved most of these. Several line numbers had drifted by 100+ lines, so re-check before
 trusting any reference here.
 
-- **Every per-case output file is empty — this is now P40, the highest-value open item.** The baseline emits 258 zero-byte files; `cython_utils.py:205` opens the detail handle and `:309-310` closes both with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:538-539`). Neither arm has ever produced per-case output. **It was a cosmetic wart until finding 13 turned it into the binding constraint**: measuring whether the baseline's 98 self-selected answered cases are simply the easy ones needs per-case relevance vectors, and nothing else in the repo carries them. **Scope rule: write a new sibling file, do not repair the dead handles** — that keeps the golden covering exactly what it covered before, the same reasoning that made P5 additive.
-- **Nothing records which pipeline produced a run (P14, `run_metadata.json`).** Attribution rests entirely on the results-directory name (`compare_models.py:165` says so in a comment). This is why the P29 attribution script harvests into a config-named root *after each batch* rather than at the end: both batches emit identically-named `Prediction_Output_<Model>_<timestamp>` dirs into one cwd, so sorting them afterwards would mean inferring the config from timestamp order alone — in the one experiment whose entire purpose is attribution.
-- ~~**`scripts/run_baseline.py` crashes.**~~ **Fixed in `c2fee6e`** (data path, the unbound `entity` NameError, the discarded `line.replace`) and **verified by a full 10-fold run on 2026-08-05**. Two of the five original baseline defects remain: everything from `baseline_sent2vec.py:186` to EOF still executes **at import time** (no `run_analysis()`, no `__main__` guard — which is *why* the baseline reads `$AICDS_PIPELINE` rather than taking a `--pipeline` flag), and there are still two conflicting `PerformanceIndex` handles (`:312` opened `'w'` and never closed, `:467` a second handle `'a'` to the same path — re-resolved 2026-08-08; they were :279/:420 before the file grew).
-- **Output discovery is broken five ways, not three.** All five sites spell the glob `Prediction_Output_*` — but the **baseline writes `Prediction Output_` with a space** (`baseline_sent2vec.py:272-274`, because `current_time()` returns `"%d/%m/%Y %H:%M:%S"` and only `/` and `:` get scrubbed), so **no glob in the repo matches baseline output at all**. The five sites also disagree four ways about the base directory: `build_dashboard_data.py:172` uses `docs/`, `build_readme_plots.py:30` the repo root (hence its `FileNotFoundError`), `analyze_performance.py:27` the cwd, `test_reorganization.py:75` a recursive `**`, `test_golden.py:259` a pytest tmp dir. **Fix direction is forced**: `test_golden.py:115` hard-codes `\d{8}_\d{2}-\d{2}-\d{2}`, so writers must unify onto the *underscore* spelling. See `docs/findings/10-output-path-fragmentation.md`.
-- **The dashboard 404s.** The tracked JSON sits at `dashboard/dashboard/public/data/` (a stray nested dir), while the builder writes `dashboard/public/data/` and `useData.ts` fetches `./data/dashboard-data.json`.
-- The baseline model loads from cwd (`os.getcwd() + '/BioSentVec_...bin'`) despite `data/models/README.md` saying `data/models/`.
-- `scripts/verify_setup.py` checks for an `output/` directory that no longer exists.
+- **Every per-case output file is empty — this is now P40, the highest-value open item.** The baseline emits 258 zero-byte files; `cython_utils.py:203-204` opens both handles and `:308-309` closes them with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:539-540`). Neither arm has ever produced per-case output. **It was a cosmetic wart until finding 13 turned it into the binding constraint**: measuring whether the baseline's 98 self-selected answered cases are simply the easy ones needs per-case relevance vectors, and nothing else in the repo carries them. **Scope rule: write a new sibling file, do not repair the dead handles** — that keeps the golden covering exactly what it covered before, the same reasoning that made P5 additive.
+- ~~**Nothing records which pipeline produced a run (P14).**~~ **Fixed in `5a52d26`**: both arms write `run_metadata.json` last, and `compare_models.resolve_pipeline` prefers it, demoting dirname inference to a `[WARN]` fallback. The historical context is worth keeping, because it is why the P29 attribution script harvests into a config-named root *after each batch* rather than at the end: both batches emit identically-named `Prediction_Output_<Model>_<timestamp>` dirs into one cwd, so sorting them afterwards would have meant inferring the config from timestamp order alone — in the one experiment whose entire purpose is attribution. **The staged pod script keeps that harvest step**; rewriting it would invalidate its 2026-08-06 pre-flight.
+- ~~**`scripts/run_baseline.py` crashes.**~~ **Fixed in `c2fee6e`**, verified by a full 10-fold run on 2026-08-05. ~~**The last two baseline defects.**~~ **Fixed in `9c9e251` — [UNVERIFIED until the pod byte-compare against `results/baseline/05082026_18-55-32`].** The module now has `run_analysis(encoder=None, config=LEGACY, out=None)` at `:187` and a `__main__` guard at `:543`, and the two `PerformanceIndex` handles are one `with`-block at `:354`. **The old description of that handle pair was wrong in an instructive way, so record the truth rather than just the fix:** the `'w'` handle was not abandoned — it wrote the *entire* body and was simply never closed explicitly; rebinding the name to the `'a'` handle dropped its last reference, so CPython flushed and closed it right there, *before* the trailer's first write, which `O_APPEND` then placed at the true end of file. The emitted byte sequence was `[everything written through 'w'][trailer]`, which is exactly what one `with`-block produces. It worked by refcount accident, not by design, and that is why collapsing it is byte-safe.
+- ~~**Output discovery is broken five ways.**~~ **Closed by `9d08c94` (writers) and `7927a88` (readers).** Both arms emit the underscore spelling via `runs.run_dirs`; **five consumers now call `runs.discover`** — `analyze_performance.py:71`, `analyze_rank_metrics.py:149`, `build_dashboard_data.py:156`, `build_readme_plots.py:302` and `compare_models.py:282`/`:355` — whose single rule is *a directory is a run iff it contains `PerformanceIndex.txt`*. **That is three of finding 10's five tabulated sites plus the two later rules, not all five of the table:** the table's other two entries are the deliberate exceptions named below, so do not read "five sites" and "five consumers" as the same five. (`verify_setup.py:64` imports `discover` as a checkout smoke test without calling it.) It **refuses rather than skips** a directory that holds one in neither layout, because skipping is how a run vanishes from a comparison table unnoticed. Two deliberate exceptions survive and are not drift: `tests/test_golden.py` keeps its own tmp-dir glob and its `\d{8}_\d{2}-\d{2}-\d{2}` regex — that regex is what *forced* the underscore direction, and the golden must not depend on the code it audits — and `tests/test_reorganization.py:75` keeps a recursive `**` because it is asserting that committed results exist at all, not discovering a run. See `docs/findings/10-output-path-fragmentation.md`.
+- **The dashboard 404s.** The tracked JSON sits at `dashboard/dashboard/public/data/` (a stray nested dir), while the builder writes `dashboard/public/data/` and `useData.ts` fetches `./data/dashboard-data.json`. Still open; the fix moved to P38 per the 2026-08-10 phase split.
+- The baseline model loads from cwd (`os.getcwd() + '/BioSentVec_...bin'`) despite `data/models/README.md` saying `data/models/`. Still open.
+- ~~`scripts/verify_setup.py` checks for an `output/` directory that no longer exists.~~ **Fixed in `7927a88`** — the check is gone and the script exits 0 on a clean checkout. It failed for a directory nothing writes, and passed here only because a November 2025 run had left one behind; a smoke test that fails on a correct checkout teaches people to ignore it.
 
 ## Data handling
 
@@ -260,22 +294,28 @@ P1–P5, P7 and P9 are done, which means both metric knobs are gone and four of 
 above are fixed. Still open: **P6** (set-level soft P/R/F1), **P27** (the last nine comma
 fragments), **P29** (the folds-only / preprocess-only attribution runs — staged and ready on the
 pod, unlaunched), **P39** (the two arms break score ties differently), **P40** (per-case output).
-**P38 — a clean public repo — is the hard blocker on publication.**
+**P38 — a clean public repo — is the hard blocker on publication**, and it now also carries the
+Phase 3 polish (CLI, encoder registry, dashboard, the `F1` rename). On the infrastructure track
+**P14, P15, P16, P17 and P20 all landed in C1–C8, and P18 was retired**; P13 (a baseline-arm golden)
+remains, and P31 (the golden's stated runtime) is closed in every doc but not in
+`tests/test_golden.py:68`, which still says "about 20 minutes" and is deliberately left alone —
+touching the file the golden lives in is not worth a docstring.
 
-Refactor status — **re-audited 2026-08-08 against the full git history and every branch**, because
-the owner believed Phases 2–3 had been finished "throughout the last commits". They had not: the
-recent commits went into the correctness/metrics track (`c2115ba` folds, `75b6530` DRG grader,
-`5393cab` rank metrics) and into README/CLAUDE.md prose. **Nothing refactor-shaped landed after
-`c2fee6e`, and nothing is stranded on a branch** — the only unmerged branch,
-`origin/report-production`, is a stale pre-`src/aicds` layout experiment (one commit, `9ad073e`)
-and should not be revived.
+Refactor status — **updated 2026-08-11.** The 2026-08-08 audit found Phases 2–3 unfinished despite
+a belief they had landed; the eight commits `7400eff`…`5a52d26` (C1–C8) closed everything that audit
+listed. Nothing is stranded on a branch: the only unmerged one, `origin/report-production`, is a
+stale pre-`src/aicds` layout experiment (one commit, `9ad073e`) and should not be revived.
 
 - **Phases 0, 1, 4 — done.** Environment repaired, data-use guard, docs reorganised, and the Phase 1 safety net (characterization tests + `StubEncoder` + byte-exact golden).
-- **Phase 2 — 2.5 of 7 items done, merged to `main` via PR #1 (`7da5901`).** Done: the `src/aicds` package move (`d0ecaa9` + `2a0b77d`), real src-layout `pyproject`, `ensure_nltk_data`/`format_time` consolidated into `aicds.utils.runtime` (`bd6fe47`; a third copy survives *by design* inside orphaned `bert_eval.py` and dies with it), `stop_words` defined where it is read (`5ae01a0`), three of the baseline's five crash bugs fixed. **Outstanding, audited 2026-08-08:**
-  - The `stop_words` monkeypatch count is **11, not 7** — the 7 in tests (`test_characterize_dataset.py:196,215`, `test_characterize_preprocessing.py:49`, `test_characterize_similarity.py:46` via `util_cy`, `test_symptom_splitting.py:45,234,246`) **plus 4 in non-test code nobody had counted**: `bert_models.py:225`, `baseline_sent2vec.py:69`, `bert_eval.py:63`, `scripts/analyze_score_distributions.py:46`.
-  - `--out`/results root: **not started** — `scripts/run_baseline.py` is 21 lines with no argparse at all; output roots are still `os.getcwd()` at `baseline_sent2vec.py:306-307` and `bert_models.py:491-492`.
-  - `hf_automodel` salvage: **no `encoders/` dir or `hf_automodel*` file has ever existed in any branch** (`git log --all --diff-filter=A` is empty for those paths). `bert_eval.py` is still 545 orphaned lines.
-  - Dead code: `entity/{Admission,Symptom,Drgcodes}.py` all present and re-exported by `entity/__init__.py:3-5` (only `SymptomsDiagnosis` has a live importer); `print_log` alive at `cython_utils.py:762`.
-  - The baseline's two residual defects both remain, and **the line numbers drifted**: the never-closed `'w'` handle is now `baseline_sent2vec.py:312` and the duplicate `'a'` handle `:467` (was :279/:420); the module still executes at import time with no `__main__` guard (its own comment at `:320` says so).
-- **Phase 3 — 0 of 6 done, and two items REGRESSED since the roadmap was written.** There are now **four** `PerformanceIndex` parsers, not three (`compare_models.py:231`, `analyze_performance.py:73`, `build_dashboard_data.py:46`, `build_readme_plots.py`), and **six-to-seven** run-discovery rules, not five — `compare_models.py:310,327` reads its own `results/<model>/<timestamp>/` layout and `analyze_rank_metrics.py:140` adds a seventh (`<results_dir>/<arm>/*/RankMetrics.txt`). Each new script added a private parser instead of unifying; expect the same drift in any future script until one parser lands. Nuances that change the work: the `input()` at `bert_models.py:89` is **dead on the supported path** — `run_bert_analysis.py` always passes `--model`, and `select_model()` returns at `:79-83` before prompting — but live via `python -m aicds.models.bert_models` (`bert_models.py:834` calls with `model_id=None`). The dashboard's builder and fetcher now **agree** on `dashboard/public/data/` (`build_dashboard_data.py:248-250`, `useData.ts:10` + `base:'./'`), but the JSON is committed only at the stray tracked `dashboard/dashboard/public/data/` path and absent from the real one, so the fix is now: re-run the builder, commit the output, delete the stray tree. Phase 3 is the ship point.
-- **The scope rule still holds where it applies.** Refactor work must not move the numbers; correctness work deliberately does. They cannot run in the same commit, because the refactor's only safety mechanism is that the numbers stay put. P4 and P5 both stayed *additive* — new sibling files, `PerformanceIndex.txt` untouched — which is why they could land without re-minting the golden. Prefer that shape.
+- **Phase 2 — done** (`7da5901` for the first half; `7400eff`, `5ca7f64`, `94b4e24`, `9c9e251`, `9d08c94` for the rest). The `src/aicds` package move (`d0ecaa9` + `2a0b77d`), real src-layout `pyproject`, `ensure_nltk_data`/`format_time` consolidated into `aicds.utils.runtime` (`bd6fe47`), `stop_words` defined where it is read (`5ae01a0`), then:
+  - **All 11 `stop_words` monkeypatches deleted** (`7400eff`) — the count really was 11, not the 7 or 8 earlier docs claimed, because four sat in non-test code nobody had counted. All were the identical `set(stopwords.words('english'))`, so removal was provably inert; the golden came back byte-exact in 52:35 to prove it, on its own gate with nothing else in the commit.
+  - **`--out`/results root landed** (`9d08c94`), plus `aicds.runs` as the one writer contract and `check_out_root` as the DUA guard.
+  - **`bert_eval.py` and the whole `evaluation/` package deleted outright** (`5ca7f64`), no salvage, per owner decision 2 of 2026-08-10. This retires **P18**. The "salvage `hf_automodel` first" instruction that stood here for months pointed at a target that **never existed in any branch** — `git log --all --diff-filter=A` is empty for `encoders/` and `hf_automodel*` — and its GPU-aware line is worthless given finding 08.
+  - **Verified dead code deleted** (`94b4e24`): `entity/{Admission,Symptom,Drgcodes}.py` with their `test_reorganization.py` import, `print_log`, `get_diagnosis_similarity_by_description_max_model`, and `scripts/run_all_bert_models.py`. `get_diagnosis_similarity_baseline` and `get_diagnosis_similarity_by_drgcode` were **kept** — they look dead but are the DRG grader's ancestors.
+  - **The baseline's two residual defects fixed** (`9c9e251`), `[UNVERIFIED]` until the pod byte-compare; see Known defects for what the old description of the handle pair got wrong.
+- **Phase 3 — the drift-stoppers are done in this repo; the polish moved to P38** (owner decision 1 of 2026-08-10, which redefined the ship point accordingly). Done here:
+  - **One `PerformanceIndex` parser** (`1f69e11` + `7927a88`). The four private ones — `compare_models.py`, `analyze_performance.py`, `build_dashboard_data.py`, `build_readme_plots.py` — are gone, deleted only after the new parser was proved equivalent to all four on the committed goldens.
+  - **One run-discovery rule** (`7927a88`), `runs.discover`, replacing the six-to-seven private rules the 2026-08-08 audit counted. Five consumers rewired. Evidence it is inert: `build_readme_plots.py` now *runs* (it used to raise `FileNotFoundError` on every invocation) and regenerated all six committed SVGs **byte-identical**; `build_dashboard_data.py`'s JSON is byte-identical (sha `0638b6c5…`); `compare_models.py`'s 16 sanity checks still pass on `results`, `results_corrected` and `results_drg`. Two costs, both deliberate: `analyze_performance.py`'s auto-detect is bounded to `depth=1` so it no longer crashes from the repo root but also no longer auto-detects a nested `results*/` tree — name it explicitly; and `results_p5` needs `--pipeline drg` because it is not in `_PIPELINE_BY_DIRNAME`, which is the refuse-rather-than-guess rule working, not a bug.
+  - **Run provenance** (`5a52d26`), which is P14 rather than a Phase 3 item but closes the same attribution gap.
+  - Moved to **P38**: the `main.py` CLI, the `SentenceEncoder` protocol + encoder registry, the dashboard fix, and renaming the misleading `F1` key. Note for whoever picks up the CLI: the `input()` at `bert_models.py:87` is **dead on the supported path** — `run_bert_analysis.py` always passes `--model` and `select_model()` returns before prompting — but live via `python -m aicds.models.bert_models`. And the dashboard's builder and fetcher already **agree** on `dashboard/public/data/`; the JSON is merely committed at the stray `dashboard/dashboard/public/data/` path instead, so the fix is re-run the builder, commit the output, delete the stray tree.
+- **The scope rule still holds where it applies.** Refactor work must not move the numbers; correctness work deliberately does. They cannot run in the same commit, because the refactor's only safety mechanism is that the numbers stay put. C1–C8 held to it: two golden gates came back byte-exact (`7400eff` alone, then `9d08c94` covering C2–C5), and every new artifact — `RankMetrics.txt`, `run_metadata.json` — is a *sibling* with `PerformanceIndex.txt` untouched, the same additive shape that let P4 and P5 land without re-minting the golden. Prefer it.
