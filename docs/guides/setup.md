@@ -104,8 +104,8 @@ The one that matters is the **golden regression** — it runs the full 10-fold p
 committed byte-exact reference:
 
 ```bash
-pytest -m golden      # 43-53 minutes, measured six times: 43:28, 43:50, 44:32,
-                      # ~50:00, 52:35, 53:10. NOT the ~20 min an earlier version of this file
+pytest -m golden      # 42-53 minutes, measured seven times: 42:28, 43:28, 43:50,
+                      # 44:32, ~50:00, 52:35, 53:10. NOT the ~20 min an earlier version of this file
                       # claimed — nor the ~20 min tests/test_golden.py's own docstring
                       # still claims at :68, which is left alone on purpose.
 ```

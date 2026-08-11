@@ -9,6 +9,13 @@ Updated 2026-08-11 (later): the whole batch PUSHED (e6bb8e3..a53c84b); C9's SHA
   whose ignore pattern never matched. Next up, per decision 4: P40 code, then
   the ONE combined pod session (P29 staged runs + P40-instrumented run + the
   C4/C5 legacy-baseline byte-compare against results/baseline/05082026_18-55-32).
+Updated 2026-08-11 (post-audit batch): D1-D4 landed and the local track is DONE.
+  86fb118 the audit itself; 8965546 synthetic sample IDs + P41; 9168389 the
+  runtime-count fix reaching the five deferred docs; efa3794 P40's code
+  (RankCases.txt + self-selection consumer); 7e49212 P27 as corrected2
+  (1716/561/0 measured). Shared golden gate at 7e49212: byte-exact, 42:28 --
+  a SEVENTH measurement, which moved the range floor to 42. Suite 413 -> 459
+  passed, 3 deselected. What remains is the pod session (see NEXT).
 Updated 2026-08-11 (audit): a full pass over all 1463 lines against the tree at
   fcc85a8. This file had ACCRETED rather than been updated: five items sat in
   contradictory checkbox states (P34 five ways; P4, P9, P31, P36 three or two
@@ -128,14 +135,14 @@ THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, PUSHED to origin/main 2026-08-11
   metadata for such a run is no metadata -- so the noise persists until P29
   produces the first metadata-bearing trees.
 
-  GOLDEN RUNTIME, MEASURED SIX TIMES: 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10.
+  GOLDEN RUNTIME, MEASURED SEVEN TIMES: 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10.
   (CORRECTED 2026-08-11 (audit): this canonical line said FIVE and omitted 43:50,
   which P1's own evidence block below has recorded since 2026-08-05. The
   "five times" phrasing had been copied to TWO other places in this file -- P1's
   seam note and P31's Tier 3 checklist entry -- not one; the first pass fixed
   only the seam note and the checklist entry was caught on re-grep. All three
   now say six. The RANGE was never wrong, only the count.)
-  Call it 43-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
+  Call it 42-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
   tests/test_golden.py:68 STILL SAYS "about 20 minutes" AND WAS LEFT ALONE ON
   PURPOSE: test_golden.py is the binding constraint on this whole refactor, and
   editing the file that holds the safety net to fix a docstring is not a trade
@@ -294,9 +301,15 @@ STATUS
            P32  all four arms RAN; root README REWRITTEN (e83b5be) and again
                 for P4+P5; comparison PDF BUILDS for all pipelines (P34 fixed);
                 docs/README.md refreshed (2e5c6f3)
-  NEXT     P40 per-case output -- now the highest-VALUE open item, because it
-                is the only thing blocking the self-selection test that P5
-                could not run (see the P40 detail section)
+  NEXT     THE POD SESSION (D5) -- everything local is done as of 2026-08-11:
+                P40's code landed (efa3794, RankCases.txt + the self-selection
+                consumer), P27 landed as corrected2 (7e49212), and the shared
+                golden gate at 7e49212 was byte-exact in 42:28. The pod session
+                runs: the C4/C5 legacy-baseline byte-compare, P29's eight
+                attribution runs, and the 4-arm drg run that produces the first
+                RankCases-bearing trees and executes the self-selection test.
+                Optional riders: a corrected2 4-arm run, the P13 real-model
+                baseline golden mint.
            P38 (clean public repo) is the hard BLOCKER on publication
   NEW      P27 P29 P30 P31 P32 P33 - found while implementing Tier 1
            P34 P35 P36 P37 - found while implementing P4. (P34 MOVED HERE
@@ -473,16 +486,27 @@ TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
   publication path (see DIMINISHED PAYOFF below), and P29 appears here as
   P29-runs only, because its configs are done. The closed items stay as history.
 
-  [ ] P40  Per-case output (new sibling file)     (hours)  <- HIGHEST VALUE
-           The only thing blocking the self-selection test P5 raised and could
-           not run. Additive by design: a new sibling file, not a repair of the
-           dead handles. Detail section at the foot of this file.
-  [ ] P27  Finish the comma rejoin - 9 residual   (hours)  <- fix MEASURED
-           Second-highest. Lands as a THIRD preprocess_version, working name
-           `corrected2` (owner decision 4, 2026-08-11): `corrected` stays FROZEN
-           so every existing results tree, every finding-11 and finding-13
-           number, and the pod byte-compare stay reproducible. The config seam
-           was built for exactly this.
+  [~] P40  Per-case output (new sibling file)     CODE DONE 2026-08-11 (efa3794)
+           RankCases.txt lands as the third after-the-close sibling; the
+           self-selection consumer landed in the same commit and degrades with
+           a [WARN] on pre-P40 runs. What remains is the RUN: the pod's 4-arm
+           `--pipeline drg --out results_p40` pass produces the first
+           RankCases-bearing trees, and the baseline's file is the load-bearing
+           one (the restriction needs both sides). Golden gate at 7e49212:
+           byte-exact in 42:28. Detail section at the foot of this file.
+  [x] P27  Finish the comma rejoin - 9 residual   DONE 2026-08-11 (7e49212)
+           Landed as the THIRD preprocess_version `corrected2` (owner decision
+           4): `corrected` stays FROZEN, so every existing results tree, every
+           finding-11 and finding-13 number, and the pod byte-compare stay
+           reproducible. Measured on the real data: 1716 tokens, 561 unique,
+           ZERO residual fragments, firing exactly 9 times across exactly the
+           4 labels. The rule that shipped is lowercase tail + UPPERCASE
+           accumulated predecessor (the ICD-9 short-title tell) + the 24-char
+           cap; the dataset pins and the predicate pins are separate on
+           purpose -- the counts were measured BLIND to a widening (caps 25-40
+           leave them unmoved), so the cap constant and a 25-char boundary
+           fixture pin the predicate itself. Fresh corrected2 NUMBERS need a
+           pod run (optional D5 step; nothing existing moved).
   [ ] P29-runs  The eight attribution runs        (pod, ~95 min)
            4 arms x 2 configs (folds-only, preprocess-only), simplified
            --pipeline X --out results_X form, on a pod pulled to current main.
@@ -569,7 +593,7 @@ TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared c
            recursive ** because it asserts that committed results exist at all
            rather than discovering a run.
   [~] P31  Correct the golden's stated runtime    MOSTLY DONE 2026-08-11 (C9)
-           Every doc now says 43-53 min; the golden was measured SIX times, not
+           Every doc now says 42-53 min; the golden was measured SEVEN times (42:28 arrived with the D3+D4 gate), not
            the five this line claimed until 2026-08-11 (audit) -- it was the
            third count-bearing site in this file and the one the first pass
            missed. Only tests/test_golden.py:68 still says "about 20 minutes",
@@ -692,9 +716,10 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
   [ ] P35  No config axis may be unannounced      (minutes) <- NEW, partly done
   [x] P36  bert_models' private containGreaterOrEqualsValue    DONE 2026-08-06 (1d68df9)
   [ ] P37  analyze_score_distributions.py re-implements the grader   (hours)
-  [ ] P41  `python -m aicds.models.bert_models` ignores AICDS_PIPELINE (minutes)
-           Found 2026-08-11 (audit). A P35-class hole, and ASYMMETRIC BETWEEN
-           THE ARMS. Fix lands in the very next commit; see its detail block.
+  [x] P41  `python -m aicds.models.bert_models` ignores AICDS_PIPELINE
+           DONE 2026-08-11 (8965546). Found by the audit as a P35-class hole,
+           asymmetric between the arms; the -m path now resolves via from_env()
+           with the same explanatory comment as the baseline twin.
 
 WHY THIS ORDER
   P1-P3 and P7 are DONE (2026-08-05, commits c2115ba + 31bea66). P8 is partial.
@@ -754,8 +779,8 @@ TIER 1 DETAIL
         P2/P3/P7/P8 landed - 43:50 on the default seed, 44:32 under
         PYTHONHASHSEED=12345. Fast suite 122 passed, 2 deselected.
 
-        NOTE FOR ANY DOC EDIT: the golden takes 43-53 MINUTES, measured SIX
-        times (43:28, 43:50, 44:32, ~50:00, 52:35, 53:10). Every doc says the
+        NOTE FOR ANY DOC EDIT: the golden takes 42-53 MINUTES, measured SEVEN
+        times (42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10). Every doc says the
         RANGE correctly as of C9, and as of the commit after the audit
         (2026-08-11) the COUNT is six everywhere too: CLAUDE.md, README.md,
         docs/guides/setup.md, docs/plans/revival-roadmap.md and pyproject.toml
@@ -1125,7 +1150,7 @@ TIER 2 DETAIL
         ABOUT THE WORK. Centring MOVES THE NUMBERS, so by P1's rule it cannot
         ride an existing pipeline name: it needs its own PipelineConfig field
         with a legacy-preserving default, its consumer and banner line in the
-        same commit (P35), and a 43-53 minute golden gate. Budget that, not one
+        same commit (P35), and a 42-53 minute golden gate. Budget that, not one
         line.
         Effort: ONE LINE of arithmetic, plus a config seam and a golden run.
         Impact: unknown, worth measuring.
@@ -1504,9 +1529,18 @@ TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
 NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
 ===============================================================================
 
-[ ] P27. FINISH THE COMMA REJOIN - NINE OCCURRENCES REMAIN
-        Effort: hours. The fix is already MEASURED; what is missing is the commit.
-        SECOND-HIGHEST-VALUE OPEN ITEM (P40 is first).
+[x] P27. FINISH THE COMMA REJOIN - DONE 2026-08-11 (7e49212)
+        The measured fix landed as `corrected2` exactly as this block planned:
+        1716 / 561 / ZERO on the real data, firing 9 times across the 4 labels.
+        One deviation from the sketch below, found by adversarial verify and
+        worth keeping: the shipped predicate also requires the accumulated
+        predecessor to start UPPERCASE (the ICD-9 short-title tell), because
+        the 24-char cap alone would have joined a bare lowercase pair like
+        "fever,cough" -- the cap does NOT prevent that, contrary to what this
+        block's first draft assumed. And the dataset counts were measured to be
+        BLIND to a widening of the rule (caps 25-40 change nothing), so the
+        predicate is pinned separately from the counts. The rest of this block
+        stands as the plan that was executed.
 
         IT LANDS AS A THIRD preprocess_version, working name `corrected2` --
         owner decision 4, 2026-08-11. NOT as an edit to `corrected`. The reason
@@ -1605,13 +1639,17 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         does. Same defence-in-depth reasoning that added rule 2 originally.
         Verified end to end: staging a grouped fold file now exits 1.
 
-[~] P31. THE GOLDEN TAKES 43-53 MINUTES, NOT 20-26
+[~] P31. THE GOLDEN TAKES 42-53 MINUTES, NOT 20-26
         MOSTLY DONE 2026-08-11 (C9). REWRITTEN TO RESIDUE-ONLY 2026-08-11
         (audit); state corrected from [ ] to [~] to match the Tier 3 checklist
         entry, which has said MOSTLY DONE since C9 landed.
 
-        MEASURED SIX TIMES, not the twice this block used to claim: 43:28,
-        43:50, 44:32, ~50:00, 52:35, 53:10. Call it 43-53 minutes.
+        MEASURED SEVEN TIMES, not the twice this block used to claim: 42:28,
+        43:28, 43:50, 44:32, ~50:00, 52:35, 53:10. Call it 42-53 minutes.
+        (42:28 arrived 2026-08-11 with the D3+D4 gate and moved the range's
+        floor -- the third time a new measurement has invalidated a count or
+        range in these docs, which is the argument for quoting the range
+        loosely and the list exactly.)
 
         WHAT IS LEFT ON THE RANGE IS EXACTLY ONE LINE: tests/test_golden.py:68
         still says "about 20 minutes". C9 corrected the RANGE in every other
@@ -2021,12 +2059,18 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         construction, not by an impact bound that happens to be small this time.
 
 --------------------------------------------------------------------------------
-[ ] P40  PER-CASE OUTPUT - the only thing blocking the test P5 could not run
-     Priority: HIGHEST of the open non-blocker items. Found 2026-08-06 while
-     writing up P5. Checkbox added and cross-linked from TIER 2 on 2026-08-11
-     (audit): this block existed for five days with no entry in the ranked
-     checklist at all, which is how the file's declared top item stayed
-     invisible to anyone reading the checklist. It supersedes P24 (retired).
+[~] P40  PER-CASE OUTPUT - CODE DONE 2026-08-11 (efa3794); the RUN remains
+     RankCases.txt ships from RankAccumulator exactly as sketched below -- a
+     projection of state the accumulator already held, written after the close
+     by both arms, consumer in the same commit. Golden gate at 7e49212 was
+     byte-exact (42:28). What remains is the pod's 4-arm drg run to produce
+     the first RankCases-bearing trees and actually execute the
+     self-selection test; the baseline's file is the load-bearing one.
+     Found 2026-08-06 while writing up P5. Checkbox added and cross-linked
+     from TIER 2 on 2026-08-11 (audit): this block existed for five days with
+     no entry in the ranked checklist at all, which is how the file's declared
+     top item stayed invisible to anyone reading the checklist. It supersedes
+     P24 (retired).
 
      WHY IT IS SUDDENLY VALUABLE. It has been on the known-defects list for
      months as a cosmetic wart. P5 turned it into the binding constraint on the
@@ -2101,11 +2145,10 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
      README. There is no outcome in which this measurement is wasted.
 
 --------------------------------------------------------------------------------
-[ ] P41  `python -m aicds.models.bert_models` SILENTLY IGNORES AICDS_PIPELINE
-     Effort: minutes. Found 2026-08-11 by the C1-C9 audit. A P35-class hole,
-     and the FIX LANDS IN THE VERY NEXT COMMIT -- this item is recorded as [ ]
-     because it is open at the moment this file is committed, not because it is
-     expected to stay open. Flip it to [x] in that commit, not later.
+[x] P41  `python -m aicds.models.bert_models` SILENTLY IGNORES AICDS_PIPELINE
+     DONE 2026-08-11 (8965546), the very next commit after the audit, exactly
+     as this block demanded. Found by the C1-C9 audit; a P35-class hole. The
+     -m path now resolves via from_env() with the baseline twin's comment.
 
      THE DEFECT. bert_models.py's `__main__` calls a bare `run_analysis()`,
      which takes `config=LEGACY` by default, and the module imports no
@@ -2137,5 +2180,5 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
      the comment that explains why, so the next person to read either module
      finds the same reasoning. NOT ON THE GOLDEN PATH -- test_golden.py injects
      the config through run_analysis directly and never reaches __main__ -- so
-     it needs the fast suite, not a 43-53 minute gate. Say that in the commit
+     it needs the fast suite, not a 42-53 minute gate. Say that in the commit
      message rather than leaving a reader to wonder why no golden ran.
