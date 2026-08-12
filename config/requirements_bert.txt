@@ -4,11 +4,17 @@
 # Core BERT and Transformer dependencies
 sentence-transformers>=2.2.0
 transformers>=4.21.0  
-torch>=1.12.0
+# >=2.3 is the numpy-2-compatible line; below it torch is built against the
+# numpy 1.x ABI and will not import beside the numpy pin below.
+torch>=2.3
 accelerate>=0.12.0
 
 # Scientific computing (likely already installed)
-numpy>=1.21.0
+# finding 14 / P42: the numpy MAJOR version changes GroupKFold's tie-breaking, so a
+# numpy-1.x install builds a DIFFERENT data/folds_grouped/ split that no committed
+# result is comparable with. Same pin as config/environment.yml -- and the reason
+# torch is floored at 2.3 above.
+numpy>=2.0,<3
 scipy>=1.7.0
 scikit-learn>=1.1.0
 

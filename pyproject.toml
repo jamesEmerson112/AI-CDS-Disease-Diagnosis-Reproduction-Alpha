@@ -10,7 +10,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 dependencies = [
-    "numpy>=1.19.0",
+    # finding 14 / P42: the numpy MAJOR version changes GroupKFold's tie-breaking
+    # (np.argsort became unstable-sort-different between 1.x and 2.x), so a
+    # numpy-1.x install builds a DIFFERENT data/folds_grouped/ split that no
+    # committed result is comparable with. Same pin as config/environment.yml --
+    # this is the pip path to the same requirement, not hygiene.
+    "numpy>=2.0,<3",
     "scipy>=1.5.0",
     "scikit-learn>=0.23.0",
     "nltk>=3.9.0",
@@ -20,7 +25,9 @@ dependencies = [
 [project.optional-dependencies]
 bert = [
     "transformers>=4.21.0",
-    "torch>=1.12.0",
+    # >=2.3 is the numpy-2-compatible line; below it torch is built against the
+    # numpy 1.x ABI and will not import beside the numpy pin above.
+    "torch>=2.3",
     "sentence-transformers>=2.2.0",
     "accelerate>=0.12.0",
 ]
