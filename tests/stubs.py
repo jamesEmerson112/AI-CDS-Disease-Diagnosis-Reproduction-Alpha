@@ -1,11 +1,28 @@
 """
-Deterministic test doubles for the BERT pipeline.
+Deterministic test doubles for both arms' pipelines.
 
 StubEncoder stands in for ``sentence_transformers.SentenceTransformer`` so the
 full 10-fold pipeline can run with no model download, no torch load and no
 network. It implements exactly the three attributes
 ``src/models/bert_models.py`` touches: ``.device`` and ``.max_seq_length``
 (printed only, never used in control flow) and ``.encode(...)``.
+
+It also stands in for ``sent2vec.Sent2vecModel`` (added 2026-08-12 for P13, the
+baseline-arm golden), which is a *different* contract reached through a
+*different* method: the baseline arm never touches ``.encode``/``.device``, and
+``cython_utils.embending_symptoms``/``embending_diagnosis`` call
+``model.embed_sentence(text)`` instead -- see ``embed_sentence`` below for the
+shape rule that goes with it. One class serves both because every vector comes
+from the same ``sha256(text)`` construction, so a change to that construction
+breaks *both* goldens loudly rather than one silently. The addition is purely
+additive: ``bert_models`` calls no method that did not already exist, so the
+stub768 BERT golden is untouched by it.
+
+``dim`` is a constructor argument for the same reason: the real encoders differ
+in width. BioSentVec is 700-D and the three transformers are 768-D, so the two
+goldens are minted at ``StubEncoder(dim=700)`` and ``StubEncoder(dim=768)``
+respectively, each matching the width of the arm it protects. The default stays
+768 -- changing it would move the BERT golden.
 
 Note that the stub removes model-loading and encoding time, not the pipeline's
 own cost: ``cython_utils.cosine_similarity`` is a pure-Python element-wise loop
@@ -140,6 +157,26 @@ class StubEncoder:
         vector = vector.astype(np.float32)
         self._cache[text] = vector
         return vector
+
+    def embed_sentence(self, text):
+        """sent2vec's contract: one string in, a ``(1, dim)`` matrix out.
+
+        NOT interchangeable with ``embed``, and the difference is the whole
+        point of having a separate method. ``sent2vec.Sent2vecModel.embed_sentence``
+        returns a 2-D array with a single row, and ``cython_utils`` stores that
+        return value in its embedding dicts unchanged -- which is why every
+        consumer indexes ``emb[0]`` (``cython_utils.py:335``, ``:642``).
+        Returning the 1-D vector here would make ``emb[0]`` a scalar and
+        ``cosine_similarity`` would compare two floats element-wise, so the
+        pipeline would produce numbers rather than raise. Hence the explicit
+        reshape and this note.
+
+        ``batch_size`` and friends have no analogue: sent2vec's call is
+        per-string by construction, which is also how the baseline arm calls it
+        -- one ``embed_sentence`` per unique preprocessed string, in a Python
+        loop.
+        """
+        return self.embed(text).reshape(1, self.dim)
 
     def encode(
         self,
