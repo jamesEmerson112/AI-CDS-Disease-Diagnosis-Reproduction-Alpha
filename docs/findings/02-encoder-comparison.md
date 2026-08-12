@@ -297,10 +297,11 @@ BiomedBERT is still perfectly saturated. Bio_ClinicalBERT drops fractionally, on
 | TOP-50 | 0.953 | **1.000** | 0.572 |
 
 BiomedBERT is *still* perfectly saturated at 0.9, across every K. This is the clearest single
-number in the whole comparison, and it is explained, not mysterious: 99.71% of BiomedBERT's
+number in the whole comparison, and it is explained, not mysterious: 99.06% of BiomedBERT's
 per-patient MAX similarities already exceed 0.9 **regardless of whether the retrieved diagnosis
-is correct** (`score_distribution_summary.txt`, Section 2). The metric is rewarding
-embedding-space compression, not skill.
+is correct** (`score_distribution_summary.txt`, Section 2; 99.71% under `legacy`, re-measured
+under `corrected` on 2026-08-12 — the figure moved by 0.65 points and the point it makes does
+not). The metric is rewarding embedding-space compression, not skill.
 
 ### Threshold = 1.0 (exact cosine match)
 
@@ -374,15 +375,25 @@ The three BERT encoders are not interchangeable — they differ sharply in how *
 embedding space is, and that compactness is what determines where each one saturates. From
 [`score_distribution_summary.txt`](../score_distribution_analysis/score_distribution_summary.txt)
 (all 10,440 unique-diagnosis-pair cosine similarities over the 145 unique diagnosis
-descriptions, computed independently of the fold evaluation, and cross-checked to 2e-7–9e-7
-against the pipeline's own `cosine_similarity()`):
+descriptions, computed independently of the fold evaluation, using the pipeline's own
+`cosine_similarity()` directly since 2026-08-12 — it used to be a separate numpy implementation
+cross-checked against that one to 2e-7–9e-7, which is TODO P37):
+
+**Re-measured 2026-08-12 under `corrected`** (the `legacy` figures this table used to carry are in
+the row beneath each model, struck through):
 
 | Model | Min | Mean | Median | Std | % of pairs ≥ 0.6 | % ≥ 0.9 |
 |-------|:---:|:----:|:------:|:---:|:----------------:|:-------:|
-| BiomedBERT | 0.7246 | 0.9282 | 0.9341 | 0.0303 | 100.00% | 87.62% |
-| Bio_ClinicalBERT | 0.6454 | 0.8348 | 0.8371 | 0.0450 | 100.00% | 5.58% |
-| BlueBERT | 0.4810 | 0.7170 | 0.7176 | 0.0652 | 96.35% | 0.59% |
+| BiomedBERT | 0.6834 | 0.9267 | 0.9348 | 0.0338 | 100.00% | 84.89% |
+| *(legacy)* | ~~0.7246~~ | ~~0.9282~~ | ~~0.9341~~ | ~~0.0303~~ | ~~100.00%~~ | ~~87.62%~~ |
+| Bio_ClinicalBERT | 0.5856 | 0.8253 | 0.8283 | 0.0489 | 99.98% | 4.59% |
+| *(legacy)* | ~~0.6454~~ | ~~0.8348~~ | ~~0.8371~~ | ~~0.0450~~ | ~~100.00%~~ | ~~5.58%~~ |
+| BlueBERT | 0.4736 | 0.7160 | 0.7164 | 0.0648 | 96.15% | 0.71% |
+| *(legacy)* | ~~0.4810~~ | ~~0.7170~~ | ~~0.7176~~ | ~~0.0652~~ | ~~96.35%~~ | ~~0.59%~~ |
 | **BioSentVec** | **not measured** | **not measured** | **not measured** | **not measured** | **not measured** | **not measured** |
+
+The compactness *ordering* — BiomedBERT ≫ Bio_ClinicalBERT ≫ BlueBERT — is identical under both,
+which is the part this section's argument rests on.
 
 The BioSentVec row is empty because `scripts/analyze_score_distributions.py` only loads the
 three HuggingFace models. **This is still, as of 2026-08-08, the single most useful missing

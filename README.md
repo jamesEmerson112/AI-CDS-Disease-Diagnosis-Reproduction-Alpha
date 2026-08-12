@@ -147,7 +147,7 @@ the newer models are actually better.
 | 3 | **Self-grading** — each model both retrieved candidates *and* judged its own answers, so a compact embedding space could mark its own work leniently | mean cosine between *unrelated* diagnoses is 0.72–0.93 | **fixed** — a DRG-string grader with no cosine reproduces it bit-exactly, so the bias was possible but never actual |
 | 4 | **Rank discarded** — a hit at rank 1 and a hit at rank 50 scored identically, so the score rose with `K` by construction | 8,407 strictly-decreasing Precision@K steps once rank is scored | **fixed** — MRR has no `K` |
 | 5 | **Abstention decides the ranking** — score a declined case as a failure and the transformers lead; exclude it and the baseline leads | every sign inverts; baseline goes 4th → 1st | **open, and not closable** — abstention belongs to the model, not the metric |
-| 6 | **Saturation** — at the paper's own threshold, ~100% of patient pairs count as a match, so all three BERT models score a perfect 1.000 | 99.96–100% of pairs above 0.6 | **open**, but confined to cosine grading below threshold 1.0 |
+| 6 | **Saturation** — at the paper's own threshold, ~100% of patient pairs count as a match, so all three BERT models score a perfect 1.000 | 99.65–100% of pairs above 0.6 (`corrected`, re-measured 2026-08-12; 99.96–100% under `legacy`) | **open**, but confined to cosine grading below threshold 1.0 |
 | 7 | **Degeneracy** — the metric labelled "F1" is arithmetically just accuracy | all 12,600 + 90 rows, zero exceptions | **explained** — it is coverage = 1.0, i.e. those arms never abstain, so two denominators coincide |
 | 8 | **No statistical power** — with 129 patients and per-split scores ranging 0.00–0.67, this design cannot resolve the differences it reports | largest paired \|*t*\| anywhere is 1.718 vs 2.262 needed | applies to the original paper equally |
 
@@ -648,13 +648,20 @@ Apple-silicon numbers **bit-for-bit, to all 17 significant figures.**
 
 ## Visual Summary (README Charts)
 
-> **These charts are from the LEGACY pipeline** — three BERT arms only, no baseline, generated from
-> the committed February 2026 runs under `docs/`. They have not been regenerated under `corrected`.
-> `scripts/build_readme_plots.py` used to glob the wrong directory and crash; since `7927a88` it goes
-> through `aicds.runs.discover` and **runs**, regenerating all six committed SVGs byte-identical
-> ([10-output-path-fragmentation.md](docs/findings/10-output-path-fragmentation.md)). So what is stale
-> here is the *pipeline the numbers came from*, not the tooling. Read them for the *shape* of the
-> saturation and TOP-K artifacts, which `corrected` did not change; do not read the values as current.
+> **Five of these six charts are from the LEGACY pipeline** — three BERT arms only, no baseline,
+> generated from the committed February 2026 runs under `docs/`. They have not been regenerated under
+> `corrected`. `scripts/build_readme_plots.py` used to glob the wrong directory and crash; since
+> `7927a88` it goes through `aicds.runs.discover` and **runs**, regenerating the committed SVGs
+> byte-identical ([10-output-path-fragmentation.md](docs/findings/10-output-path-fragmentation.md)).
+> So what is stale there is the *pipeline the numbers came from*, not the tooling. Read them for the
+> *shape* of the saturation and TOP-K artifacts, which `corrected` did not change; do not read the
+> values as current.
+>
+> **The sixth — the saturation chart — is `corrected` as of 2026-08-12 (TODO P37), and says so in
+> its own title.** It is drawn from `score_distribution_summary.txt` rather than from a run
+> directory, and that file was re-measured against the shipped grader under `--pipeline corrected`.
+> Its four siblings still describe legacy runs; regenerating the set again reproduces those five
+> byte-for-byte and only this one moves, which is how the mixture was verified rather than assumed.
 
 ![F1 vs threshold (TOP-10)](docs/readme_plots/f1_vs_threshold_top10.svg)
 *At TOP-10, BiomedBERT stays saturated through 0.9 while BlueBERT drops earlier. The 1.000 region on
@@ -681,9 +688,13 @@ suffices and the other K−1 predictions are unpenalised, so the upward slope is
 The perfect F1 scores are an artifact of **embedding space compactness** combined with the
 **MAX-over-Cartesian-product** evaluation strategy, not genuine diagnostic accuracy.
 
-> **Measured under legacy preprocessing.** The statistics below have not been recomputed since
-> diagnosis-text handling was unified, so the exact figures apply to the legacy text. The mechanism
-> is unaffected — saturation persists identically under `corrected`, as the tables above show.
+> **Re-measured 2026-08-12 under `corrected`, against the shipped grader (TODO P37).** These figures
+> used to be measured under `legacy` preprocessing by a script that *simulated* the grader in its own
+> numpy cosine. Both halves of that are fixed: `scripts/analyze_score_distributions.py` now calls
+> `cython_utils.get_diagnosis_relevance(..., config)` and takes `--pipeline`, and the committed
+> summary names the pipeline in its header. **The conclusion did not change and the headline range
+> did not move** — the mean cosine between unrelated diagnoses is still 0.72–0.93. What moved is
+> given below each table.
 
 **Why the metric saturates:**
 
@@ -692,9 +703,14 @@ The perfect F1 scores are an artifact of **embedding space compactness** combine
 
    | Model | Mean Pairwise Sim | Min Pairwise Sim | Std |
    |-------|:-----------------:|:----------------:|:---:|
-   | BiomedBERT | 0.93 | 0.72 | 0.03 |
-   | Bio_ClinicalBERT | 0.83 | 0.65 | 0.05 |
-   | BlueBERT | 0.72 | 0.48 | 0.07 |
+   | BiomedBERT | 0.93 | 0.68 | 0.03 |
+   | Bio_ClinicalBERT | 0.83 | 0.59 | 0.05 |
+   | BlueBERT | 0.72 | 0.47 | 0.06 |
+
+   *Moved by the re-measurement: the minima, which fall under `corrected` (0.72 → 0.68, 0.65 → 0.59,
+   0.48 → 0.47). The means are unchanged to two decimals. The claim this table used to support in
+   [finding 03](docs/findings/03-metric-saturation.md) — that no two diagnoses in the dataset embed
+   further apart than the 0.6 threshold — now holds for BiomedBERT alone.*
 
 2. **MAX operator amplification** — Taking the maximum similarity across all diagnosis pairs inflates
    scores further. Per-patient MAX similarity exceeds 0.6 for virtually all patient pairs:
@@ -703,7 +719,20 @@ The perfect F1 scores are an artifact of **embedding space compactness** combine
    |-------|:----------------------------------:|
    | Bio_ClinicalBERT | 100.00% |
    | BiomedBERT | 100.00% |
-   | BlueBERT | 99.96% |
+   | BlueBERT | 99.65% |
+
+   *Moved: BlueBERT 99.96% → 99.65%. Saturation at 0.6 persists — which the README used to assert
+   and now measures.*
+
+   At the other end of the scale the re-measurement **corrected a wrong number rather than moving
+   one.** The fraction of patient pairs scoring an exact 1.0 was reported as 1.49% / 1.62% / 1.31%,
+   three values that looked like an encoder property. It is **1.89% for all three**, because a pair
+   scores exactly 1.0 iff the two patients share a diagnosis description — 312 of 16,512 ordered
+   pairs, counted from the data with no model involved. The old spread came from the simulated
+   scorer, which returns exactly 1.0 for a vector against itself in only 1,356 of 2,000 float32
+   trials where the shipped kernel returns it in 2,000 of 2,000. That same 1.89% is what
+   `--pipeline drg` scores, which is the mechanism behind the DRG grader reproducing threshold-1.0
+   cosine bit-exactly.
 
 3. **Conclusion** — The evaluation metric is saturated at threshold 0.6 for BERT models. The F1
    scores cannot discriminate between models or meaningfully compare against the baseline.
@@ -721,8 +750,12 @@ Visualizations and full statistics are in
 *Per-patient MAX similarity distributions showing saturation behavior.*
 
 ```bash
-python scripts/analyze_score_distributions.py
+python scripts/analyze_score_distributions.py --pipeline corrected
 ```
+
+`--pipeline` is required reading rather than optional garnish: it selects which text reaches the
+encoder and which grader scores the pairs, and the three output files have fixed names, so a run
+under a different pipeline replaces the committed set. Pass `--out` for anything exploratory.
 
 ## Project Structure
 

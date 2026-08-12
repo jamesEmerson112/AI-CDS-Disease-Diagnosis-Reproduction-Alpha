@@ -173,9 +173,20 @@ Recorded because each would silently produce a wrong or unnoticed result:
 - **`bert_models.py` keeps its own copy of `containGreaterOrEqualsValue`**, and no test
   exercises it — the tests import the `cython_utils` original or define a third. Change the
   threshold semantics and the baseline gets the new rule while the BERT arm keeps the old one.
-- **`scripts/analyze_score_distributions.py` re-implements the grader** against its own cosine
+- ~~**`scripts/analyze_score_distributions.py` re-implements the grader** against its own cosine
   (a fourth in the repo) and imports no config, so it will keep generating saturation evidence
-  for a retired ruler. Its self-check guards only the cosine kernel, not the aggregator.
+  for a retired ruler. Its self-check guards only the cosine kernel, not the aggregator.~~
+  **FIXED 2026-08-12 (TODO P37).** It calls `get_diagnosis_relevance(..., config)` behind a
+  `--pipeline` flag now, and the summary names the pipeline in its header. **The concern was
+  justified in a way nobody predicted:** the simulated scorer had been *undercounting exact
+  matches*. Normalising in float32 and taking a dot product returns exactly 1.0 for a vector
+  against itself in only 1,356 of 2,000 trials, where `cython_utils.cosine_similarity` returns it
+  in 2,000 of 2,000 — so the script reported 1.49% / 1.62% / 1.31% of patient pairs at an exact
+  1.0 where the shipped grader gives **1.89% for all three**. That 1.89% is exactly 312/16,512,
+  the ordered patient pairs sharing a diagnosis description, and it is also what `--pipeline drg`
+  scores. **Which is the mechanism behind this document's headline result**: threshold-1.0 cosine
+  and DRG-exact reproduce each other bit-for-bit because, at that threshold, they are counting the
+  same 312 pairs.
 - **A future mean-based aggregator would reintroduce nondeterminism.** Three tier constants
   summed in hash-varying order differ in the last ULP for 7 of 56 combinations, and the one
   admission with three descriptions (`HADM 178513`) is a *test* case in both fold sets. `MAX`

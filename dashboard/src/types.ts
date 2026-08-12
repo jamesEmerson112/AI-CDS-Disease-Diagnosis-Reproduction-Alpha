@@ -36,6 +36,12 @@ export interface DashboardMeta {
   folds: number;
   meanDiagnosesPerPatient: number;
   totalPatientPairs: number;
+  /**
+   * Pipeline the scoreDistribution/saturation blocks were measured under
+   * ("legacy" | "corrected" | "drg" | ... | "unlabelled"). Not necessarily the
+   * pipeline behind `performance`, which comes from a different source.
+   */
+  saturationPipeline?: string;
   models: string[];
   methods: string[];
   thresholds: number[];

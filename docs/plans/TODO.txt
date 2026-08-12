@@ -68,9 +68,25 @@ Updated 2026-08-12 (THE E-TRACK BATCH: D5's pod session, then E1-E5). THREE
                   section is deleted and all three sit in RETIRED as [-].
   Fast suite 485 -> 499 passed, 3 deselected. What remains to SCHEDULE, in
   order: P37, P13, then P38 -- and P38 is backlogged to the FINAL arc by the
-  same owner decision. (P19 P21 P22 P23 ride with P38; P25 P26 are Tier 5 and
+  same owner decision.
+  UPDATED 2026-08-12: P13's STUB HALF IS DONE (the baseline-arm golden;
+  tests/golden/stub700-baseline/ + tests/test_golden_baseline.py), so the
+  remaining order is P37, then P38. Fast suite 499 -> 505 passed, 3 -> 4
+  deselected: six cheap reference checks plus one more @golden + @slow test, so
+  `pytest -m golden` is now TWO tests, one per arm. The real-model baseline
+  golden stays open as an optional pod rider and blocks nothing. (P19 P21 P22 P23 ride with P38; P25 P26 are Tier 5 and
   unscheduled; P35 is a standing rule. See the STATUS block's NEXT entry, which
   spells that out so "three items left" is never read as "three items exist".)
+  UPDATED 2026-08-12 (E6): P37 IS DONE TOO, so the remaining order is P38
+  ALONE, and P32 closes with it ([~] -> [x]) since the P37 re-run was its last
+  open item. analyze_score_distributions.py takes --pipeline/--out and grades
+  through get_diagnosis_relevance; docs/score_distribution_analysis/ is
+  corrected-measured and labelled. THE RE-RUN CORRECTED A NUMBER RATHER THAN
+  REFRESHING ONE: the exact-cosine-1.0 share is 1.89% for all three encoders
+  (312 of 16,512 ordered pairs), not the 1.49/1.62/1.31 the simulated scorer
+  reported -- and that 1.89% is also what drg scores, which is WHY finding 12's
+  threshold-1.0 reproduction was bit-exact. Regenerating the six README SVGs
+  moved exactly one (the saturation chart) and left five byte-identical.
 
 DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
   1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
@@ -374,7 +390,12 @@ STATUS
            P32  all four arms RAN; root README REWRITTEN (e83b5be) and again
                 for P4+P5; comparison PDF BUILDS for all pipelines (P34 fixed);
                 docs/README.md refreshed (2e5c6f3)
-  NEXT     P37, then P13, then P38. Those are the three items with work to
+  NEXT     P38 ALONE, as of 2026-08-12 (E6/E7). This line read "P37, then P13,
+                then P38" that morning; P13's stub half closed in E7 and P37
+                closed in E6, so only the backlogged repo migration is left.
+                The three-item version is kept below because the reasons it
+                gave are still the reasons those items mattered.
+           WAS: P37, then P13, then P38. Those are the three items with work to
                 schedule as of 2026-08-12. What is NOT on this line and is
                 still [ ], so that "everything else is done" is never read into
                 it: P19 P21 P22 P23 are CARRIED BY P38 (decision 1) and move
@@ -385,9 +406,20 @@ STATUS
                 P37  analyze_score_distributions.py re-implements the grader and
                      reads no PipelineConfig, so every statistic it has ever
                      produced is legacy-measured. Fix, then re-run.
+                     DONE 2026-08-12 (E6). Fixed AND re-run on three configs;
+                     the committed artifacts are corrected-measured and carry a
+                     PIPELINE header. The re-run corrected a number rather than
+                     just refreshing one -- see the P37 detail block. NEXT is
+                     therefore P38 alone.
                 P13  mint a baseline-arm golden (Linux only, ~13 min compute).
                      The baseline arm still has ZERO regression protection and
                      cython_utils.py is shared between the arms.
+                     DONE 2026-08-12, and the parenthetical was wrong on both
+                     counts: the stub mint ran LOCALLY ON WINDOWS with no
+                     sent2vec and no 21 GB model, and it takes far longer than
+                     13 minutes because the pure-Python cosine loop -- not the
+                     encoder -- is the cost. Both arms now have a byte-exact
+                     net. NEXT is therefore P37, then P38.
                 P38  clean public repo -- the hard BLOCKER on publication, and
                      BACKLOGGED TO THE FINAL ARC by owner decision 2026-08-12:
                      it runs after everything else, not alongside it.
@@ -405,6 +437,10 @@ STATUS
                 driver steps, zero failures, five trees (results_verify,
                 results_folds_only, results_preprocess_only, results_p40,
                 results_corrected2). P13 was NOT run and is still open.
+                RE-READ 2026-08-12: that sentence is about the REAL-MODEL rider
+                only, and it is still true of that. P13's stub half was minted
+                locally the next day and the item is [x]; only the BioSentVec
+                golden is still unrun.
   NEW      P27 P29 P30 P31 P32 P33 - found while implementing Tier 1
            P34 P35 P36 P37 - found while implementing P4. (P34 MOVED HERE
                 2026-08-11 (audit) from the Tier 1 line above: its own detail
@@ -683,14 +719,18 @@ TIER 2 - MAKES THE REPORTED NUMBERS HONEST. Each is independently worth doing.
   [x] P9   B5. Keep the legacy number, labelled   SATISFIED BY P1's SEAM
            LEGACY is a permanent, selectable, byte-reproducible path rather than
            a number copied into a report. Nothing further needed here.
-  [~] P32  Collect the corrected-pipeline results PARTIAL 2026-08-06 (3b8aed9)
+  [x] P32  Collect the corrected-pipeline results  DONE 2026-08-12 (was 3b8aed9)
            All four arms ran and are written up in finding 11. Two things
-           remain and both are runs, not code: P29-runs, and the
+           remained and both were runs, not code: P29-runs, and the
            analyze_score_distributions re-run (P37). Added to this checklist
            2026-08-11 (audit) -- it had a detail block but no checklist entry.
            UPDATED 2026-08-12: one of the two is done. P29-runs ran in the D5
            session (finding 15), so P37's re-run is the ONLY thing standing
            between P32 and [x].
+           CLOSED 2026-08-12 (E6): that re-run happened. State moves [~] -> [x]
+           in the same pass that closed P37, which is the whole of what this
+           line was waiting on. The corrected score-distribution artifacts are
+           committed and labelled with the pipeline that produced them.
 
 TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared code.
 
@@ -731,9 +771,18 @@ TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared c
            FINAL ARC -- it runs after P37 and P13 and after everything else,
            not alongside them. Its exposure inventory was also re-measured and
            is bigger than the 29 this file has claimed since 2026-08-06; see
-           the P38 detail block for the 33 carriers and the five that were
+           the P38 detail block for the 34 carriers (33 at the re-measure, +1
+           for the P13 baseline golden on 2026-08-12) and the five that were
            uncounted.
-  [ ] P13  C11. Mint a baseline-arm golden        (13 min compute, Linux only)
+  [x] P13  C11. Mint a baseline-arm golden        DONE 2026-08-12 (stub half)
+           tests/golden/stub700-baseline/PerformanceIndex.txt +
+           tests/test_golden_baseline.py. StubEncoder(dim=700), config=LEGACY,
+           out=None; both arms now have a byte-exact net. The "13 min compute,
+           Linux only" estimate this line used to carry was invalidated by C4
+           and is wrong in BOTH directions -- see the detail block. WHAT IS NOT
+           DONE, so [x] is not misread: the REAL-MODEL (BioSentVec, 21 GB,
+           Linux) baseline golden, which stays an OPTIONAL pod rider and is not
+           a blocker on anything.
   [x] P14  C10. Result provenance (run_metadata.json)  DONE 2026-08-11 (5a52d26)
            Both arms write it LAST, after the PerformanceIndex handle closes.
            Records git SHA + dirty, the pipeline by NAME and by all three
@@ -878,7 +927,12 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
 
   [ ] P35  No config axis may be unannounced      (minutes) <- NEW, partly done
   [x] P36  bert_models' private containGreaterOrEqualsValue    DONE 2026-08-06 (1d68df9)
-  [ ] P37  analyze_score_distributions.py re-implements the grader   (hours)
+  [x] P37  analyze_score_distributions.py re-implements the grader
+           DONE 2026-08-12 (E6). It takes --pipeline/--out, grades through
+           get_diagnosis_relevance, and names the config in its output. Re-run
+           on legacy, corrected and drg; docs/score_distribution_analysis/ now
+           holds the CORRECTED measurement. See the detail block for the four
+           committed numbers that moved and the one that was simply wrong.
   [x] P41  `python -m aicds.models.bert_models` ignores AICDS_PIPELINE
            DONE 2026-08-11 (8965546). Found by the audit as a P35-class hole,
            asymmetric between the arms; the -m path now resolves via from_env()
@@ -960,6 +1014,14 @@ WHY THIS ORDER
     is the publication blocker that the owner deliberately put LAST because it
     is a repo migration rather than science and everything else gets harder
     once it starts.
+  P13 CLOSED 2026-08-12 (stub half), out of that order rather than in it -- it
+    was cheap enough locally that waiting for P37 bought nothing. There is no
+    longer an unprotected arm. Remaining: P37 -> P38.
+  P37 CLOSED 2026-08-12 (E6), the same day. "The last thing still measuring with
+    a retired ruler" turned out to be exactly right and slightly understated:
+    the retired ruler was not only legacy-configured, it disagreed with the
+    shipped grader at threshold 1.0 and had put three wrong numbers into the
+    committed docs. Remaining: P38 alone.
 
   --- why the original order was what it was ---
   P1 first because it was an undocumented decision that P2 forced and nobody had made.
@@ -1423,6 +1485,12 @@ TIER 2 DETAIL
              the grader against its own numpy cosine and reads no
              PipelineConfig. Calibrating to legacy-measured percentiles would
              pin a new knob to a retired ruler. Fix P37 first or do not start.
+             HAZARD 2 IS GONE, 2026-08-12 (E6): P37 is fixed and the medians are
+             now corrected-measured -- 0.9348 / 0.8283 / 0.7164, i.e. the ~0.93 /
+             ~0.84 / ~0.72 above rounds to ~0.93 / ~0.83 / ~0.72. This item stays
+             RETIRED on hazard 1 and on being moot, which were always the
+             reasons; recorded here so nobody revives it believing the evidence
+             problem is still what blocks it.
 
 [-] P12. B3 - MEAN INSTEAD OF MAX (Option A)
         RETIRED 2026-08-12 by owner decision. State moved from [ ] to [-] in
@@ -1511,28 +1579,124 @@ line, when citing across files edited in one pass.)
 TIER 3-5 DETAIL  (refactor and infrastructure; these do NOT move the numbers)
 ===============================================================================
 
-[ ] P13. C11 - MINT A BASELINE-ARM GOLDEN
-        tests/golden/ covers the BERT/stub path ONLY. cython_utils.py is SHARED
-        between the arms, so a change there could move the baseline numbers with every
-        test still green - exactly the failure mode the golden exists to prevent.
-        Now mintable, because the arm finally runs. Linux only; needs the 21 GB model
-        and ~13 minutes of compute.
+[x] P13. C11 - MINT A BASELINE-ARM GOLDEN        DONE 2026-08-12 (stub half)
+        Was: tests/golden/ covered the BERT/stub path ONLY. cython_utils.py is
+        SHARED between the arms, so a change there could move the baseline
+        numbers with every test still green - exactly the failure mode the
+        golden exists to prevent.
 
-        THE COST ESTIMATE ABOVE IS INVALIDATED BY C4, in the cheap direction
-        (noted 2026-08-11 (audit)). "Linux only, 21 GB, pod time" was true when
-        the baseline executed at import with no seam. C4 gave it
-        run_analysis(encoder=None, config=LEGACY, out=None), so THE BASELINE ARM
-        NOW TAKES AN INJECTED ENCODER exactly as the BERT arm does -- which
-        means a StubEncoder-based baseline golden is mintable LOCALLY, on
-        Windows, with no sent2vec build and no 21 GB download. That is the
-        version worth having first: it is what would catch a shared
-        cython_utils.py change moving the baseline numbers, and that is the
-        failure mode this item exists to prevent. A REAL-MODEL baseline golden
-        still needs Linux and the 21 GB model, but it can ride the pod session
-        P29-runs and P40 need anyway -- and the decision-3 legacy verification
-        run is already a reference candidate for it.
-        THE PREMISE IS UNCHANGED AND STILL TRUE: cython_utils.py is SHARED
-        between the arms and only one arm has a golden.
+        SHIPPED, all three pieces in one change:
+          - tests/golden/stub700-baseline/PerformanceIndex.txt, the reference.
+          - tests/test_golden_baseline.py, marked @golden + @slow so addopts
+            deselects it from a bare pytest and `pytest -m golden` now selects
+            TWO tests, one per arm.
+          - tests/stubs.py grew StubEncoder.embed_sentence, PURELY ADDITIVE.
+            bert_models calls no method that did not already exist, so the
+            stub768 BERT golden is untouched by it -- confirmed by its four
+            cheap tests still passing and by nothing in bert_models' path
+            reaching the new method.
+
+        MINT SETTINGS, which are what re-minting has to reproduce:
+        baseline_sent2vec.run_analysis(encoder=StubEncoder(dim=700),
+        config=LEGACY, out=None), cwd pointed at a scratch directory OUTSIDE the
+        repo so the flat Prediction_Output_BioSentVec_{stamp}/ layout the golden
+        pins is what gets produced. Windows 11, repo venv, Python 3.9, numpy
+        2.0.2.
+
+        700 DIMENSIONS, NOT 768, and that is not cosmetic. BioSentVec is 700-D
+        and the transformers are 768-D, so each golden is minted at the width of
+        the arm it protects. StubEncoder needed no new default for this -- dim
+        was already a constructor argument and the default STAYS 768, because
+        changing it would move the BERT golden. What it needed was
+        embed_sentence: the baseline reaches its encoder through sent2vec's
+        contract (one string in, a (1, dim) matrix out) and never touches
+        .encode/.device/.max_seq_length. Returning the 1-D vector instead would
+        have made emb[0] a scalar and cosine_similarity would have compared two
+        floats element-wise -- producing NUMBERS RATHER THAN AN ERROR, which is
+        why the shape rule is written down in the method's own docstring.
+
+        DETERMINISM WAS PROVED, NOT ASSUMED, before the file was committed: two
+        independent processes, run in parallel from separate scratch cwds,
+        produced byte-identical output over the whole canonicalised body. That
+        check is STRONGER than the BERT golden's, and by accident rather than
+        design: PYTHONHASHSEED is unset in this environment, so CPython
+        randomised the two processes' seeds differently (verified: hash('x')
+        differs run to run). preprocess_diagnosis routes through list(set(...))
+        twice, so the seed genuinely changes dict insertion order in this arm --
+        and the numbers did not move, which is the thing worth knowing.
+
+        WHAT THIS COVERS THAT stub768 NEVER DID, i.e. why it is not a duplicate
+        at a different width. Running the BERT arm never executes
+        cython_utils.predictS2V AT ALL -- not its mean-of-max symptom
+        aggregation, not its PRUNING_SIMILARITY gate and MAX selection, not its
+        np.argsort TOP-K path -- because bert_models reimplements all of it.
+        Nor does it execute compute_performance_index on the per-case path (774
+        calls per baseline run), nor embending_symptoms/embending_diagnosis.
+        Those functions had ZERO byte-exact coverage until this.
+
+        ONE QUIRK IS PINNED THAT ONLY THIS ARM HAS, and it is the clearest
+        evidence the two arms reach their row order by different routes: EVERY
+        threshold-1 row in this reference is a bare int `1` -- 840 of them,
+        aggregate and per-case alike -- and NO row starts with `1.0`. The BERT
+        golden carries both spellings (66 int, 774 float) because
+        bert_models:511 transcribes the set literal into a hand-copied ordered
+        list of floats. The baseline transcribes nothing and iterates
+        {1, 0.9, 0.8, 0.7, 0.6} directly at all seven sites. A future refactor
+        that "unifies" the arms onto one threshold list flips all 840 rows and
+        this assertion is what says so.
+
+        THE OLD COST ESTIMATE WAS WRONG IN BOTH DIRECTIONS. "Linux only, 21 GB,
+        ~13 min" was true when the baseline executed at import with no seam;
+        C4's run_analysis(encoder=...) made a stub mint possible locally with no
+        sent2vec build and no download (the cheap direction, called correctly by
+        the 2026-08-11 audit) -- but the COMPUTE is not 13 minutes, because 13
+        minutes is the REAL model's wall-clock and the pure-Python cosine loop
+        dominates everything at any width.
+
+        RUNTIME, MEASURED 2026-08-12 ON WINDOWS (12 cores, repo venv, numpy
+        2.0.2), AND KEPT SEPARATE FROM THE BERT GOLDEN'S RANGE ON PURPOSE:
+          - the two mints, run concurrently: 1867.7s (31m 08s) and 1833.7s
+            (30m 34s);
+          - `pytest tests/test_golden_baseline.py -m golden -q`, alone:
+            1689.92s (28m 09s), 1 passed / 6 deselected, exit 0 -- the gate,
+            run against the committed reference.
+        DO NOT FOLD 28m 09s INTO THE "34-53 min" FIGURE quoted in CLAUDE.md,
+        pyproject.toml's addopts comment and architecture.md. That range was
+        measured on the BERT arm at dim=768 and describes a different pipeline
+        at a different width; averaging the two would make both useless.
+        `pytest -m golden` now runs BOTH tests, so its total is the SUM -- call
+        it roughly an hour on this box.
+
+        GATE EVIDENCE, all four checks:
+          - fast suite with the new file excluded: 499 passed, 3 deselected --
+            unchanged from the pre-change baseline, which is what proves the
+            stubs.py addition inert;
+          - fast suite including it: 505 passed, 4 deselected;
+          - the six cheap reference checks pass against the committed file;
+          - the @golden test passes byte-exact against it (above).
+        Also verified: with the reference absent the @golden test fails in
+        0.1s on read_golden()'s message, NOT after a 28-minute run -- the
+        golden is read before the pipeline is launched, inherited from
+        test_golden.py's ordering.
+
+        THE REFERENCE NEEDED --no-verify, ON THE stub768 PRECEDENT. It carries
+        all 129 HADM_IDs (counted: 129 distinct, in 774 per-case block headers),
+        so .githooks/pre-commit's 20-distinct-ID content rule blocks it --
+        correctly. Committed deliberately anyway, because the same 129 ids are
+        already published in the three docs/Prediction_Output_* trees and in the
+        BERT golden: it is a fourth copy of a set the repo already publishes,
+        not a new set. Recorded as the 34th carrier in the P38 block; that entry
+        is the reasoning, and it is written down rather than left in a commit
+        message on purpose.
+
+        STILL OPEN, DELIBERATELY, so [x] is not misread: the REAL-MODEL
+        (BioSentVec) baseline golden. It needs Linux and the 21 GB model and
+        remains an OPTIONAL rider on any future pod session -- the decision-3
+        legacy verification run is already a reference candidate for it. It
+        blocks nothing: a real-model golden would pin the ENCODER as well as the
+        pipeline, but the failure mode this item exists to prevent is a shared
+        cython_utils.py change moving the baseline numbers, and the stub golden
+        catches that completely.
 
 [x] P14. C10 - RESULT PROVENANCE            DONE 2026-08-11 (5a52d26)
         Was: no output directory recorded the commit, machine, or library versions
@@ -2042,7 +2206,11 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         put it on the PDF. Two of the three shipped as written; the timestamp
         parse was replaced by mtime.
 
-[~] P32. COLLECT THE CORRECTED-PIPELINE RESULTS         PARTIAL 2026-08-06 (3b8aed9)
+[x] P32. COLLECT THE CORRECTED-PIPELINE RESULTS   DONE 2026-08-12 (was 3b8aed9)
+        State moved [~] -> [x] on 2026-08-12 (E6), when its last open item --
+        the analyze_score_distributions re-run (P37) -- closed. The two items
+        the STILL TO DO list below carried are both done: P29-runs in the D5
+        pod session (finding 15), P37 in E6.
         DONE: all four arms ran on the pod, exit 0, ~48 min total (baseline
         ~13 min, each BERT arm ~11.5 min). Downloaded to
         results_corrected/<model>/<timestamp>/, GITIGNORED under the same rule
@@ -2070,16 +2238,27 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         for the replacement claim (ordering inverts with K; TOP-K rewards not
         abstaining). Do not re-quote the four-way-tie framing from anywhere.
 
-        STILL TO DO -- PRUNED TO TWO ITEMS 2026-08-11 (audit). Three of the five
+        STILL TO DO -- NOTHING, AS OF 2026-08-12. Both items below are closed;
+        they are kept with their reasoning because the second one's warning was
+        right. PRUNED TO TWO ITEMS 2026-08-11 (audit). Three of the five
         that used to be listed here were already done, and both remaining ones
         are RUNS rather than code:
           - P29-runs: folds-only and preprocess-only, to attribute the drop
+            DONE 2026-08-12 in the D5 pod session; finding 15.
           - P37: re-run analyze_score_distributions.py -- the saturation
             statistics (mean pairwise cosine 0.72-0.93, the >=0.6 percentages)
             are LEGACY-measured and labelled as such in the README, which is a
             stopgap rather than a fix. Note this one is not a plain re-run: the
             script re-implements the grader (P37), so fixing it comes first or
             the new numbers come from the same fourth cosine implementation.
+            DONE 2026-08-12 (E6), and THE WARNING IN THE LAST SENTENCE PAID OFF:
+            the fourth cosine implementation was not merely a provenance
+            problem, it was reporting the wrong exact-match rate (1.49/1.62/1.31
+            where the shipped grader gives 1.89 for all three). Had this been
+            run as a plain re-run, that number would have been re-derived wrong
+            and re-committed. The 0.72-0.93 range itself survived the fix
+            unchanged; the >=0.6 percentages moved only for BlueBERT, 99.96 ->
+            99.65.
 
         THE THREE THAT WERE DELETED FROM THIS LIST, and why each was false:
           - "regenerate the comparison PDF -- BLOCKED by P34". NOT BLOCKED. P34
@@ -2207,9 +2386,10 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         and was deleted 2026-08-11 (audit) because an instruction that has been
         carried out reads as one that has not.)
 
-[ ] P37. analyze_score_distributions.py RE-IMPLEMENTS THE GRADER
-        Effort: hours. Found 2026-08-06 during P4's call-site sweep.
+[x] P37. analyze_score_distributions.py RE-IMPLEMENTS THE GRADER
+        DONE 2026-08-12 (E6). Found 2026-08-06 during P4's call-site sweep.
         PRIORITY RAISED 2026-08-11 (audit) -- see the C7 note below.
+        The diagnosis below is kept VERBATIM; the closure record is at the end.
 
         :148-183 simulates get_diagnosis_similarity_by_description_max against
         its own numpy cosine -- a fourth cosine implementation in this repo --
@@ -2236,6 +2416,108 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         Fix: have it call get_diagnosis_relevance with an explicit config, and
         label its output with which grader produced it. The README already had
         to mark its statistics "legacy-measured" as a stopgap.
+
+        ---- CLOSED 2026-08-12 (E6). WHAT WAS DONE, AND WHAT MOVED ----
+
+        THE FIX, exactly as prescribed above. scripts/analyze_score_distributions.py
+        now takes --pipeline (choices from PIPELINE_NAMES) and --out, calls
+        require_supported_grader early, builds its embedding dict the way
+        bert_models does (raw-description keys, FIX-4-gated encoded text), scores
+        Section 2 with util_cy.get_diagnosis_relevance(..., config) and Section 1
+        with util_cy.cosine_similarity. The private numpy cosine no longer
+        produces any statistic; it survives ONLY as a 5-pair kernel cross-check,
+        relabelled "diagnostic only". src/aicds was NOT touched -- the whole fix
+        is in scripts/, which is where the science-track rule puts it.
+
+        THE RUNS. Three configs, one detached local session, ~7 min wall total
+        after the two model downloads: legacy, corrected and drg, each over all
+        three encoders. No results*/ tree is involved and none was read -- this
+        script re-embeds from data/raw and scores every ordered patient pair, so
+        "which tree" does not apply to it. fold_dir is not read at all, which the
+        summary header now says out loud: folds-only measures identically to
+        legacy here and preprocess-only identically to corrected, so a
+        corrected-vs-legacy delta in this file is PREPROCESSING ONLY and contains
+        no part of the leakage effect.
+
+        WHAT IS COMMITTED. docs/score_distribution_analysis/ holds the CORRECTED
+        measurement (summary + both PNGs), with a PIPELINE header naming the
+        config and all three fields. legacy and drg were written to scratch and
+        are quoted in prose only -- one canonical artifact, because two files
+        with fixed names in one directory is how the wrong one gets quoted.
+
+        THE ONE NUMBER THAT WAS WRONG, NOT MERELY STALE. The share of ordered
+        patient pairs scoring an exact cosine 1.0 was reported as 1.49% /
+        1.62% / 1.31% -- three values that read as an encoder property. It is
+        1.89% FOR ALL THREE, and cannot be anything else: two patients hit 1.0
+        iff they share a diagnosis description, so both lookups return THE SAME
+        VECTOR and cython_utils.cosine_similarity returns exactly 1.0 for a
+        vector against itself. Counted from the data with no model in the loop:
+        312 of 16,512 ordered pairs = 1.89%. The old spread came from the
+        simulated scorer -- normalise-then-dot in float32 returns exactly 1.0 for
+        a vector against itself in only 1,356 of 2,000 trials, where the shipped
+        kernel returns it in 2,000 of 2,000 -- so it dropped a different
+        arbitrary subset of the 312 per model. THE SPOT-CHECK'S 2e-7 AGREEMENT
+        WAS TRUE AND USELESS: the disagreement was at the threshold, not in the
+        mean. This is the concrete instance of "it passes while being wrong".
+
+        AND IT EXPLAINS FINDING 12. That same 312/16,512 is what --pipeline drg
+        scores (mean relevance 0.0189, every threshold row, all three models
+        identical). So threshold-1.0 cosine and DRG-exact count the same pairs,
+        which is WHY finding 12's four arms reproduced their threshold-1.0
+        numbers bit-exactly under a grader with no cosine in it. That was
+        reported as an empirical surprise; it now has a mechanism.
+
+        COMMITTED NUMBERS THAT MOVED (legacy -> corrected, all traceable to
+        --pipeline corrected on 2026-08-12):
+          Section 1 all-pairwise mean   0.8348/0.9282/0.7170 -> 0.8253/0.9267/0.7160
+          Section 1 all-pairwise min    0.6454/0.7246/0.4810 -> 0.5856/0.6834/0.4736
+          Section 1 % >= 0.6            100.00/100.00/96.35  -> 99.98/100.00/96.15
+          Section 2 per-patient mean    0.8586/0.9447/0.7565 -> 0.8502/0.9463/0.7564
+          Section 2 % >= 0.6            100.00/100.00/99.96  -> 100.00/100.00/99.65
+          Section 2 % >= 0.9            11.63/99.71/2.47     -> 9.52/99.06/2.69
+          Section 2 % >= 1.0            1.49/1.62/1.31       -> 1.89/1.89/1.89 (see above)
+        Order is Bio_ClinicalBERT / BiomedBERT / BlueBERT throughout. The claim
+        "saturation persists identically under corrected" was an ASSERTION in
+        both README and finding 03; it persists, "identically" was too strong,
+        and it is now a measurement. One claim did fall: "no two diagnoses embed
+        further apart than the 0.6 threshold" now holds for BiomedBERT ALONE.
+
+        A LEGACY RE-RUN THROUGH THE FIXED CODE WAS DONE AS A CONTROL, and it
+        reproduced the committed legacy table to the digit except the four
+        exact-1.0 cells above and two boundary cells moved by float32 rounding
+        (BlueBERT Section 1 % >= 0.8, 9.02 -> 9.03; BlueBERT Section 2 P25,
+        0.7163 -> 0.7162). So the old script's arithmetic was right everywhere
+        the threshold was not exactly 1.0 -- which is the honest version of
+        "the fourth cosine implementation mattered".
+
+        DOWNSTREAM, MEASURED RATHER THAN ASSUMED. Regenerating all six README
+        SVGs moved EXACTLY ONE, saturation_by_threshold.svg (md5 598847df ->
+        changed); the other five are byte-identical, confirming that only chart
+        4 reads this file. dashboard-data.json was rebuilt for the same reason.
+        Both consumers now carry the pipeline label through --
+        build_readme_plots puts it in the chart title, build_dashboard_data in
+        meta.saturationPipeline -- so a summary swapped for another config is
+        visible in the artifact rather than silent. That is P35's rule applied
+        to the one axis this script had left unannounced.
+
+        TWO PRE-EXISTING BUGS IN build_dashboard_data.py, found by this pass and
+        fixed in the same commit. Both had reached the committed JSON:
+          1. The "Diagnosis Count Per Patient" block sits inside Section 2 and
+             spells its lines Min/Max/Mean, which overwrote the LAST model's
+             stats before they were flushed. Every dashboard-data.json ever
+             committed reported BlueBERT's per-patient min/max/mean as
+             1.0/3.0/1.74 -- diagnosis counts standing where a cosine belongs.
+             Now 0.5556/1.0000/0.7564.
+          2. The N key was spelled "N =" and then re.escape'd into a pattern that
+             supplies its own "=", so it matched nothing and the `n` field that
+             dashboard/src/types.ts declares REQUIRED was absent from every
+             committed JSON. Now 10440 / 16512.
+
+        NOT DONE, deliberately: BioSentVec is still absent from Section 1.
+        finding 02 calls that the single most useful missing measurement in the
+        project and it remains true -- the script loads the three HuggingFace
+        models only, and the baseline arm is Linux-only. It is a pod rider, not
+        part of P37.
 
 [ ] P38. CODE-ONLY PUBLIC REPO, CLINICAL DATA REMOVED
         Effort: days, mostly sequencing rather than code. Added 2026-08-06.
@@ -2304,6 +2586,24 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
           20-distinct-ID content rule scores it 0. Both guards are working as
           designed and both are blind to exactly this shape -- which is the
           same lesson the C6/C7 additions taught, arriving a second time.
+
+        +1 CARRIER 2026-08-12 (P13): 33 -> 34.
+        tests/golden/stub700-baseline/PerformanceIndex.txt, the baseline-arm
+        golden minted that day, carries all 129 HADM_IDs in its per-case block
+        headers exactly as tests/golden/stub768/PerformanceIndex.txt does (774
+        "N - HADM_ID=...:" lines, written by cython_utils.predictS2V:425/:430).
+        ACCEPTED KNOWINGLY, on the stub768 precedent and for its reason: the
+        same 129 ids are already published in the three docs/Prediction_Output_*
+        trees AND in the BERT golden, so this is a FOURTH COPY OF A SET THE REPO
+        ALREADY PUBLISHES, not a new set, and it adds no new exposure. It needs
+        --no-verify because the hook's 20-distinct-ID content rule blocks it --
+        correctly -- and that reasoning belongs here as well as in the commit
+        message. It also inherits measurement (1) below unchanged: the ids are
+        LABELS, NOT MEASUREMENTS, so the same masking route that saves the BERT
+        golden saves this one, and canonicalise() in
+        tests/test_golden_baseline.py is where it would land. Counting it here
+        rather than letting it ride in silently is the whole point of the trend
+        note above -- new work re-introduces carriers.
 
         SEQUENCING DECISION 2026-08-12 (owner): P38 IS BACKLOGGED TO THE FINAL
         ARC. It runs after P37, after P13, and after everything else -- not

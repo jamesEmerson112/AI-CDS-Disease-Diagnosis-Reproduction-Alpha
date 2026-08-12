@@ -81,13 +81,28 @@ def parse_score_distribution(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         lines = [l.rstrip() for l in f.readlines()]
 
-    result: Dict[str, Any] = {"pairwise": {}, "perPatientMax": {}, "diagnosisCount": {}}
+    result: Dict[str, Any] = {
+        "pairwise": {},
+        "perPatientMax": {},
+        "diagnosisCount": {},
+        # Which PipelineConfig produced the file. "unlabelled" is the honest
+        # answer for a summary written before TODO P37 added the header: those
+        # were produced by a script that read no config at all, so the reader
+        # cannot know. Carried into meta.saturationPipeline because the
+        # saturation block and the performance blocks come from different
+        # sources and can disagree about which pipeline they describe.
+        "pipeline": "unlabelled",
+    }
     current_section = None
     current_model = None
     current_stats: Dict[str, Any] = {}
 
     for line in lines:
         stripped = line.strip()
+        if current_section is None:
+            m_pipeline = re.match(r"^PIPELINE:\s+(\S+)", stripped)
+            if m_pipeline:
+                result["pipeline"] = m_pipeline.group(1)
         if "SECTION 1:" in stripped:
             current_section = "pairwise"
             continue
@@ -103,7 +118,22 @@ def parse_score_distribution(path: str) -> Dict[str, Any]:
             if current_model and current_stats:
                 result["perPatientMax"][current_model] = current_stats
             current_section = None
+            current_model = None
             continue
+
+        # BUG, found 2026-08-12 while doing TODO P37 and fixed here: the
+        # "Diagnosis Count Per Patient" block sits INSIDE section 2, after the
+        # last model, and spells its lines "Min = 1 / Max = 3 / Mean = 1.74".
+        # Those matched the per-model keys below and overwrote the LAST model's
+        # min/max/mean before it was flushed at SECTION 3 -- so every
+        # dashboard-data.json ever committed reported BlueBERT's per-patient
+        # mean as 1.74, a diagnosis count standing where a cosine belongs.
+        # Closing the model here ends the block that owns those keys.
+        if stripped.startswith("Diagnosis Count Per Patient"):
+            if current_model and current_stats:
+                result[current_section][current_model] = current_stats
+            current_model = None
+            current_stats = {}
 
         if current_section in ("pairwise", "perPatientMax"):
             m = re.match(r"^Model:\s+(.+)$", stripped)
@@ -115,7 +145,13 @@ def parse_score_distribution(path: str) -> Dict[str, Any]:
                 continue
 
             if current_model:
-                for key, json_key in [("N =", "n"), ("Min", "min"), ("Max", "max"),
+                # "N", not "N =": the key is re.escape'd into a pattern that
+                # already supplies its own "=", so the old spelling built
+                # ``^\s*N\ =\s*=\s*(...)`` and matched nothing. Every committed
+                # dashboard-data.json is therefore missing the `n` field that
+                # dashboard/src/types.ts declares as required. Found and fixed
+                # 2026-08-12 with the diagnosis-count leak above (TODO P37).
+                for key, json_key in [("N", "n"), ("Min", "min"), ("Max", "max"),
                                        ("Mean", "mean"), ("Median", "median"), ("Std", "std"),
                                        ("P5", "p5"), ("P25", "p25"), ("P75", "p75"), ("P95", "p95")]:
                     pat = re.match(rf"^\s*{re.escape(key)}\s*=\s*([0-9.]+)", stripped)
@@ -205,6 +241,12 @@ def build_dashboard_data(runs_dir: str | None = None) -> Dict[str, Any]:
             "folds": 10,
             "meanDiagnosesPerPatient": 1.74,
             "totalPatientPairs": dist["diagnosisCount"].get("totalPatientPairs", 16512),
+            # Which pipeline the scoreDistribution/saturation blocks were
+            # measured under. It is NOT necessarily the pipeline of the runs in
+            # `performance` -- those come from --runs-dir. Two sources, two
+            # possible configs; naming one of them is what stops a reader
+            # assuming they match (TODO P37).
+            "saturationPipeline": dist.get("pipeline", "unlabelled"),
             "models": models,
             "methods": methods,
             "thresholds": thresholds,

@@ -3,8 +3,11 @@
 > **In plain words.** The paper's scoring rule says a predicted diagnosis counts as correct if
 > its similarity to the true diagnosis is at least 0.6, on a 0-to-1 scale. The problem: to a
 > biomedical BERT model, *all* medical phrases look alike. In this dataset, even completely
-> unrelated diagnoses score above 0.64 for two of the three models — meaning the 0.6 bar sits
-> **below the lowest score any pair can produce**. Everything passes. Every model gets a perfect
+> unrelated diagnoses score above 0.68 for one of the three models and above 0.59 for a second —
+> meaning the 0.6 bar sits at or **below the lowest score any pair can produce**. (Re-measured
+> 2026-08-12 under `corrected`: this sentence used to say "above 0.64 for two of the three", which
+> was the `legacy` measurement. The 0.6 bar is now clear of *every* pair for BiomedBERT alone; for
+> Bio_ClinicalBERT two pairs of 10,440 fall below it.) Everything passes. Every model gets a perfect
 > 1.000, and the perfect score means nothing: it is a limbo contest with the bar lying on the
 > ground. Two things stack to cause it: the models crowd every diagnosis into a small corner of
 > their embedding space, and the scorer then takes the single *best*-matching pair of (true,
@@ -40,12 +43,35 @@ real; what it measures is not diagnostic accuracy.
 
 All figures below come from `scripts/analyze_score_distributions.py`, whose full output is
 [`docs/score_distribution_analysis/score_distribution_summary.txt`](../score_distribution_analysis/score_distribution_summary.txt).
-The script re-implements the scoring path in numpy and spot-checks it against the pipeline's own
-`cython_utils.cosine_similarity()`; the two agree to within 2e-7–9e-7 (float32 rounding), so the
-numbers below describe the actual production scoring function, not an approximation of it. The
-statistics were measured under `legacy` preprocessing and have not been recomputed since the
-text handling was unified; the mechanism is unaffected — saturation persists identically under
-`corrected`, as the README's tables show.
+
+> **RE-MEASURED 2026-08-12 (TODO P37). Every table below now carries `corrected` numbers; the
+> `legacy` ones it used to carry are kept beside them.** Two things changed at once and they must
+> not be confused.
+>
+> 1. **The script stopped simulating the grader.** It used to re-derive the scoring path in its own
+>    numpy cosine — a fourth cosine implementation in this repository — and imported no
+>    `PipelineConfig` at all. Section 2 now calls `cython_utils.get_diagnosis_relevance(..., config)`,
+>    the same dispatch point both arms grade with, and Section 1 calls
+>    `cython_utils.cosine_similarity`. **The old spot-check said the two agreed to 2e-7–9e-7 and
+>    that was true of the kernel — but not of the answer at threshold 1.0.** For a vector against
+>    itself the shipped kernel returns exactly 1.0 in 2000 of 2000 trials while numpy
+>    normalise-then-dot does so in only 1356, so the simulated path *undercounted exact matches*.
+>    Corrected below.
+> 2. **The measurement moved off `legacy` text handling.** The canonical artifact is now measured
+>    under `--pipeline corrected`. Note that `fold_dir` is **not read** by this analysis — it scores
+>    every ordered patient pair, not fold test cases — so a corrected-vs-legacy delta here is a
+>    *preprocessing* delta and contains no part of the patient-leakage effect.
+>
+> **The claim this paragraph used to make — "saturation persists identically under `corrected`" —
+> was an assertion, and is now a measurement. It persists; "identically" was too strong.** At the
+> paper's 0.6 threshold the three arms move 100.00 → 100.00, 100.00 → 100.00 and 99.96 → 99.65;
+> the largest movement in either table is Bio_ClinicalBERT's all-pairwise ≥ 0.8 row, 79.26% →
+> 72.95% (6.31 points), with its per-patient ≥ 0.8 row second at 93.81% → 89.47%.
+>
+> The mechanism is untouched and the document's conclusion — that F1 = 1.000 at 0.6 is a ceiling
+> effect rather than a result — is untouched. **Two supporting claims did change**, and both are
+> marked where they appear: the "no two diagnoses embed further apart than 0.6" observation now
+> holds for BiomedBERT alone, and the exact-1.0 share was not stale but *wrong*.
 
 **This is a different problem from the one in [04-metric-degeneracy.md](04-metric-degeneracy.md),
 and fixing one does not fix the other.** Saturation means the 0.6 threshold is too lenient for
@@ -62,22 +88,56 @@ Each model embeds all 145 unique diagnosis descriptions in the dataset, and ever
 self-pairs, N = 10,440) is scored by cosine similarity. All three models push the bulk of that
 mass above 0.6 before any patient-level aggregation happens at all:
 
+**`corrected` — the canonical measurement, 2026-08-12:**
+
+| Model | Mean | Median | Std | Min | % ≥ 0.6 | % ≥ 0.7 | % ≥ 0.8 | % ≥ 0.9 |
+|---|---|---|---|---|---|---|---|---|
+| Bio_ClinicalBERT | 0.8253 | 0.8283 | 0.0489 | 0.5856 | 99.98% | 98.43% | 72.95% | 4.59% |
+| BiomedBERT | 0.9267 | 0.9348 | 0.0338 | 0.6834 | 100.00% | 99.98% | 98.95% | 84.89% |
+| BlueBERT | 0.7160 | 0.7164 | 0.0648 | 0.4736 | 96.15% | 60.73% | 8.40% | 0.71% |
+
+**`legacy` — what this table used to hold, retained for comparison:**
+
 | Model | Mean | Median | Std | Min | % ≥ 0.6 | % ≥ 0.7 | % ≥ 0.8 | % ≥ 0.9 |
 |---|---|---|---|---|---|---|---|---|
 | Bio_ClinicalBERT | 0.8348 | 0.8371 | 0.0450 | 0.6454 | 100.00% | 99.55% | 79.26% | 5.58% |
 | BiomedBERT | 0.9282 | 0.9341 | 0.0303 | 0.7246 | 100.00% | 100.00% | 99.32% | 87.62% |
-| BlueBERT | 0.7170 | 0.7176 | 0.0652 | 0.4810 | 96.35% | 60.98% | 9.02% | 0.59% |
+| BlueBERT | 0.7170 | 0.7176 | 0.0652 | 0.4810 | 96.35% | 60.98% | 9.02%¹ | 0.59% |
 
-(Source: `score_distribution_summary.txt`, Section 1.)
+(Source: `score_distribution_summary.txt`, Section 1 — the committed file now holds the
+`corrected` numbers and names that pipeline in its header. ¹ Re-running `legacy` through the fixed
+code path reproduced its own table to the digit except for **three** boundary cells — all of them
+BlueBERT's, all moved by float32 rounding rather than by anything structural: this one,
+9.02% → 9.03%; its per-patient P25 in the next table, 0.7163 → 0.7162; and its per-patient
+% ≥ 0.8, 18.87% → 18.88%, marked ² below. The three ≥ 1.0 cells moved too, but those are the
+grader correction described further down, not rounding.
+*Corrected 2026-08-12: this note read "two boundary cells" and omitted the third, which had been
+substituted into the Section 2 table unmarked instead of recorded here. Verified by re-running
+`--pipeline legacy` and diffing against the committed summary at `34d6d43`.*)
 
-Two things stand out. First, the *minimum* pairwise similarity across all 10,440 diagnosis pairs
-is 0.6454 for Bio_ClinicalBERT and 0.7246 for BiomedBERT — meaning **no two diagnoses in the
-entire dataset embed further apart than the paper's 0.6 threshold** for those models, whether or
-not they are clinically related. BlueBERT is the outlier: a noticeably wider spread (std 0.0652
-vs. 0.0303–0.0450) and a minimum of 0.4810, which is why it is the only model where saturation is
-incomplete even before the MAX operator is applied. Second, BiomedBERT is the most compact by a
-wide margin: mean 0.9282, with 87.62% of all diagnosis pairs already above 0.9 before any
-patient-level aggregation.
+Two things stand out, and one of them **changed under `corrected`**. First, the *minimum* pairwise
+similarity across all 10,440 diagnosis pairs. Under `legacy` it was 0.6454 for Bio_ClinicalBERT and
+0.7246 for BiomedBERT, which supported a striking claim: **no two diagnoses in the entire dataset
+embed further apart than the paper's 0.6 threshold** for those models. **That claim is now true of
+BiomedBERT only** — under `corrected` Bio_ClinicalBERT's minimum falls to 0.5856 and 0.02% of its
+pairs (2 of 10,440) sit below 0.6. The correct statement is that BiomedBERT still has no pair below
+0.6 (min 0.6834) and Bio_ClinicalBERT has essentially none. BlueBERT remains the outlier: the
+widest spread (std 0.0648 vs 0.0338–0.0489) and a minimum of 0.4736, the only model where
+saturation is incomplete before the MAX operator is applied. Second — unchanged — BiomedBERT is the
+most compact by a wide margin: mean 0.9267, with 84.89% of all diagnosis pairs already above 0.9
+before any patient-level aggregation.
+
+**One new row appears under `corrected`: `Max = 1.0000`, `% ≥ 1.0 = 0.01%`.** That is not an
+encoder property. Under `corrected` the *encoded* text is preprocessed (`bert_models`' FIX 4), and
+exactly one pair of distinct raw descriptions preprocesses to the same string — `"respiratory
+system diagnosis w/ ventilator support 96+ hours"` and `"...w ventilator support 96+ hours"` —
+so their vectors are identical and their cosine is exactly 1.0. It is 1 pair of 10,440 for all
+three models, which is why the figure is the same 0.01% in all three rows. Under `legacy` the
+encoder sees raw text, all 145 descriptions are distinct strings, and the row reads 0.00%.
+Measured the same day: `legacy` preprocessing produces **two** such collisions rather than one,
+the extra being `w/o extensive procedure` collapsing onto `w extensive procedure` — finding
+[06](06-preprocessing-defects.md)'s headline defect, visible here as a geometry artifact. It does
+not reach the `legacy` numbers only because `legacy` never hands preprocessed text to the encoder.
 
 ## Cause 2: MAX-operator amplification
 
@@ -106,23 +166,56 @@ Patients in this dataset average 1.74 diagnoses each (min 1, max 3, 129 patients
 descriptions — `score_distribution_summary.txt`, diagnosis-count block), so a typical patient
 pair contributes roughly a 1.74 × 1.74 ≈ 3-cell Cartesian product. Taking the max over even a
 handful of already-compact similarities is a one-sided operation: it can only push the score up
-from the pairwise mean, never down. Simulating this over all 129 × 128 = 16,512 ordered patient
-pairs shows exactly that shift:
+from the pairwise mean, never down. Calling that function — the real one, once per pair, since
+2026-08-12 — over all 129 × 128 = 16,512 ordered patient pairs shows exactly that shift:
+
+**`corrected` — the canonical measurement, 2026-08-12:**
 
 | Model | Pairwise mean → Per-patient MAX mean | % ≥ 0.6 | % ≥ 0.7 | % ≥ 0.8 | % ≥ 0.9 | % ≥ 1.0 |
 |---|---|---|---|---|---|---|
-| Bio_ClinicalBERT | 0.8348 → 0.8586 | 100.00% | 100.00% | 93.81% | 11.63% | 1.49% |
-| BiomedBERT | 0.9282 → 0.9447 | 100.00% | 100.00% | 100.00% | 99.71% | 1.62% |
-| BlueBERT | 0.7170 → 0.7565 | 99.96% | 84.16% | 18.87% | 2.47% | 1.31% |
+| Bio_ClinicalBERT | 0.8253 → 0.8502 | 100.00% | 100.00% | 89.47% | 9.52% | **1.89%** |
+| BiomedBERT | 0.9267 → 0.9463 | 100.00% | 100.00% | 100.00% | 99.06% | **1.89%** |
+| BlueBERT | 0.7160 → 0.7564 | 99.65% | 82.92% | 19.45% | 2.69% | **1.89%** |
 
-(Source: `score_distribution_summary.txt`, Section 2.)
+**`legacy` — what this table used to hold, retained for comparison:**
 
-At threshold 0.6 — the paper's own operating point — all three models are effectively saturated:
-100.00%, 100.00%, and 99.96% of all 16,512 possible patient pairs clear it. Even at 0.7, two of
-three models are still at 100.00%. Note also that 1.3–1.6% of patient pairs hit an *exact* 1.0000
-similarity even though the underlying diagnosis text differs — a direct consequence of MAX
-picking out shared or near-duplicate diagnosis strings (e.g. two patients who share one identical
-diagnosis code but differ on the other), not any property of the model's semantic resolution.
+| Model | Pairwise mean → Per-patient MAX mean | % ≥ 0.6 | % ≥ 0.7 | % ≥ 0.8 | % ≥ 0.9 | % ≥ 1.0 |
+|---|---|---|---|---|---|---|
+| Bio_ClinicalBERT | 0.8348 → 0.8586 | 100.00% | 100.00% | 93.81% | 11.63% | ~~1.49%~~ 1.89% |
+| BiomedBERT | 0.9282 → 0.9447 | 100.00% | 100.00% | 100.00% | 99.71% | ~~1.62%~~ 1.89% |
+| BlueBERT | 0.7170 → 0.7565 | 99.96% | 84.16% | 18.87%² | 2.47% | ~~1.31%~~ 1.89% |
+
+(Source: `score_distribution_summary.txt`, Section 2. The struck values are what the *simulated*
+grader reported; the corrections are the shipped grader's answer on the same `legacy` inputs — see
+the ≥ 1.0 paragraph below. ² The third boundary cell of footnote ¹: the `legacy` re-run reports
+**18.88%** here. The committed `legacy` value is kept in the table, as 9.02% is in Section 1, because
+this table is what the document *used to hold*. *Corrected 2026-08-12: the cell read an unmarked
+18.88%, the only cell in either `legacy` table not matching the committed summary at `34d6d43`.*)
+
+At threshold 0.6 — the paper's own operating point — all three models remain effectively saturated:
+100.00%, 100.00%, and 99.65% of all 16,512 possible patient pairs clear it. Even at 0.7, two of
+three models are still at 100.00%.
+
+**The ≥ 1.0 column was wrong, in a way worth understanding, and it is the clearest thing P37 found.**
+It used to read 1.49% / 1.62% / 1.31%, three different values that invited an encoder-level reading:
+*this model resolves near-duplicates more finely than that one*. The true value is **1.89% for all
+three**, and it cannot be anything else: two patients score exactly 1.0 iff they share a diagnosis
+description, in which case the two lookups return **the same vector**, and
+`cython_utils.cosine_similarity` returns exactly 1.0 for a vector against itself. Counted directly
+from the data with no model involved, **312 of the 16,512 ordered patient pairs share a description
+— 1.89%.** The old spread was an artifact of the simulated scorer: normalising in float32 and then
+taking a dot product returns exactly 1.0 for a vector against itself in only **1,356 of 2,000**
+random trials (the shipped kernel: 2,000 of 2,000), so the simulation dropped a different arbitrary
+subset of the 312 for each model. The three-way tie is the measurement; the spread was rounding.
+
+**A consequence worth stating, because it corroborates [finding 12](12-drg-grader.md) from a
+different direction.** That same 312/16,512 = 1.89% is *also* what `--pipeline drg` returns for the
+fraction of ordered patient pairs it scores 1.0 (measured: mean relevance 0.0189 = 312/16,512, on
+every threshold row and identical across all three models, because the DRG grader consults no
+embedding at all). So at
+threshold 1.0 the cosine grader and the DRG grader are counting the same pairs — which is exactly
+why finding 12's four arms reproduced their threshold-1.0 cosine numbers *bit-exactly* under the
+DRG grader. That result was reported as an empirical surprise; this is the mechanism behind it.
 
 ### The pipeline's own K compounds this further
 
@@ -193,13 +286,27 @@ changing what a "test case" is counted as, not how similarity is aggregated.
 
 ```bash
 conda activate disease-diagnosis
-python scripts/analyze_score_distributions.py
+python scripts/analyze_score_distributions.py --pipeline corrected     # the committed artifact
+python scripts/analyze_score_distributions.py --pipeline legacy --out /tmp/sd_legacy --no-plots
+python scripts/analyze_score_distributions.py --pipeline drg    --out /tmp/sd_drg    --no-plots
 ```
 
-This regenerates `docs/score_distribution_analysis/score_distributions.png`,
+The first command regenerates `docs/score_distribution_analysis/score_distributions.png`,
 `per_patient_max_distributions.png`, and `score_distribution_summary.txt` in place. It does not
 touch any prediction pipeline or write to `Prediction_Output_*`; it only re-embeds the 145 unique
-diagnosis descriptions and replays the scoring math offline. Caveat from
-[finding 12](12-drg-grader.md): this script re-implements the grader against its own cosine and
-imports no config, so it keeps generating saturation evidence for the retired cosine ruler —
-true, but describing a grader the `drg` pipeline no longer uses.
+diagnosis descriptions and replays the scoring math offline — against the *shipped* grader, since
+2026-08-12.
+
+**Always pass `--out` for a pipeline whose numbers are not the committed ones.** The three
+artifacts have fixed names, so a second pipeline written into the default directory silently
+replaces the canonical set with numbers nobody quotes. The header inside the summary names the
+pipeline, and both consumers (`build_readme_plots.py`, `build_dashboard_data.py`) now carry that
+name through — into the saturation chart's title and into `meta.saturationPipeline` — so a swap is
+visible rather than silent, but it is still a swap.
+
+The caveat that used to close this section — that the script re-implements the grader against its
+own cosine and imports no config, so it keeps generating saturation evidence for a retired ruler —
+**was TODO P37 and is closed as of 2026-08-12.** What replaces it is narrower and still worth
+knowing: under `--pipeline drg` there is no distribution to plot. Relevance is 0/1, every threshold
+row reads the same 1.89%, and all three models are identical by construction. Saturation is a
+property of the cosine grader, not of the encoders.

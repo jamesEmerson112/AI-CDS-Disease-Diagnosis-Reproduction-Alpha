@@ -249,6 +249,27 @@ def draw_stacked_runtime_chart(
         f.write(svg_footer(svg))
 
 
+def parse_summary_pipeline(path: str) -> str:
+    """The pipeline name ``analyze_score_distributions.py`` recorded in its header.
+
+    Returns ``"unlabelled"`` for a summary written before TODO P37 added the
+    header, which is the honest answer rather than a guess: those files were
+    produced by a script that read no ``PipelineConfig`` at all. The value is
+    drawn into the saturation chart's title, so that an SVG regenerated from a
+    ``corrected`` summary cannot sit in the README looking like the ``legacy``
+    one it replaced -- which is exactly what P37 was raised about.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if line.startswith("SECTION 1:"):
+                break
+            m = re.match(r"^PIPELINE:\s+(\S+)", line)
+            if m:
+                return m.group(1)
+    return "unlabelled"
+
+
 def parse_saturation_summary(path: str) -> Dict[str, Dict[float, float]]:
     with open(path, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -381,14 +402,19 @@ def main() -> None:
     # Chart 4: saturation diagnostic.
     summary_path = os.path.join(root, "docs", "score_distribution_analysis", "score_distribution_summary.txt")
     saturation = parse_saturation_summary(summary_path)
+    summary_pipeline = parse_summary_pipeline(summary_path)
     sat_series: Dict[str, List[float]] = {}
     for model in models:
         points = saturation.get(model, {})
         sat_series[model] = [points.get(t, 0.0) for t in THRESHOLDS]
 
+    # The pipeline goes in the title because this chart's input comes from a
+    # DIFFERENT source than charts 1-3: those are read from the discovered runs,
+    # this one from score_distribution_summary.txt, and the two can be measured
+    # under different configs. An unlabelled chart is how that goes unnoticed.
     draw_line_chart(
         os.path.join(out_dir, "saturation_by_threshold.svg"),
-        "Per-Patient Saturation: % MAX Similarity >= Threshold",
+        "Per-Patient Saturation: %% MAX Similarity >= Threshold (%s)" % summary_pipeline,
         THRESHOLDS,
         [str(t) for t in THRESHOLDS],
         sat_series,

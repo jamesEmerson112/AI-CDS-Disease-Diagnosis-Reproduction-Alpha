@@ -9,11 +9,13 @@
 > and P39 (tie-breaks) closed on measurement without a code change. Embedding centring (item 5) was
 > never attempted and is now **retired**, with P11 and P12, by owner decision. **The set-level
 > metric (P6) was RETIRED on 2026-08-11** — findings 04 and 13 dissolved its motivation instead of
-> satisfying it. What is left on the wider plan is P37, P13, then P38.
-> *(Updated 2026-08-11 by the TODO audit; rewritten 2026-08-12 after the pod session. The
-> superseded sentence read: "What remains: per-case output (P40), the last nine comma fragments
-> (P27), and the attribution runs (P29). Embedding centring (item 5) was never attempted and is now
-> optional rather than pending.")*
+> satisfying it. **P37 and P13 both closed later the same day**, so what is left on the wider plan
+> is **P38 alone**.
+> *(Updated 2026-08-11 by the TODO audit; rewritten 2026-08-12 after the pod session, and again
+> 2026-08-12 when P37 and P13 landed. The superseded sentences read: "What remains: per-case output
+> (P40), the last nine comma fragments (P27), and the attribution runs (P29). Embedding centring
+> (item 5) was never attempted and is now optional rather than pending." and, after the pod session,
+> "What is left on the wider plan is P37, P13, then P38.")*
 
 This is the ordered TODO for making the encoder comparison valid. It is separate from
 [revival-roadmap.md](revival-roadmap.md), which is about code organisation. Nothing here is a
@@ -250,10 +252,26 @@ ladder was not.)
 
 ## Still open, in priority order
 
-**Updated 2026-08-12: this table is empty of science.** Every item it listed has closed, and the
-remaining work on this track is `P37` (fix `analyze_score_distributions.py`, which re-implements the
-grader and reads no `PipelineConfig`, then re-run it) and `P13` (mint a baseline-arm golden).
-`P38` — the clean public repo — is backlogged to the final arc by owner decision.
+**Updated 2026-08-12: this table is empty of science, and so is the track.** Every item it listed
+has closed, and `P37` and `P13` — the last two — closed later the same day. `P38`, the clean public
+repo, is all that remains on the wider plan, and it is backlogged to the final arc by owner
+decision.
+*(Superseded the same day; the earlier sentence read "the remaining work on this track is `P13`
+(mint a baseline-arm golden)".)*
+
+**`P13` closed later the same day** (mint a baseline-arm golden). `tests/golden/stub700-baseline/`
+and `tests/test_golden_baseline.py` byte-compare a full 10-fold BioSentVec-arm run at dim 700,
+giving `predictS2V`, the per-case `compute_performance_index` path and the `embending_*` builders
+their first regression coverage — all of them in `cython_utils.py`, which is shared, so they could
+previously move with the whole suite green. `pytest -m golden` is two tests now; budget ~1 hour.
+
+**`P37` closed later the same day** (fix `analyze_score_distributions.py`, which re-implemented the
+grader and read no `PipelineConfig`, then re-run it). It now takes `--pipeline`, calls
+`get_diagnosis_relevance`, and its committed artifacts are `corrected`-measured and labelled. The
+re-run corrected a number rather than merely refreshing one: the fraction of patient pairs at an
+exact cosine 1.0 is **1.89% for all three encoders** (312 of 16,512 ordered pairs — those sharing a
+diagnosis description), not the 1.49% / 1.62% / 1.31% the simulated scorer reported. See
+[../findings/03-metric-saturation.md](../findings/03-metric-saturation.md).
 
 | Item | What | Outcome |
 |---|---|---|

@@ -17,7 +17,7 @@ cannot be closed by any amount of code. Three of the seven were found only *beca
 was fixed — removing a knob keeps revealing the one it was masking, so expect the list to grow again
 rather than treating it as complete.
 
-- **Saturation. OPEN, but confined.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. **It does not arise under `--pipeline drg` at all**, which has no threshold. So it bounds the cosine-graded tables below 1.0 and nothing else. See `docs/findings/03-metric-saturation.md`.
+- **Saturation. OPEN, but confined.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. **It does not arise under `--pipeline drg` at all**, which has no threshold. So it bounds the cosine-graded tables below 1.0 and nothing else. **Re-measured 2026-08-12 under `corrected` and against the shipped grader (P37): the 0.72–0.93 range survives unchanged and so does the conclusion**; what moved is the minima (Bio_ClinicalBERT 0.65 → 0.59, so it is now BiomedBERT *alone* that has no diagnosis pair below the 0.6 threshold) and BlueBERT's ≥ 0.6 share, 99.96% → 99.65%. See `docs/findings/03-metric-saturation.md`.
 - **Degeneracy. EXPLAINED 2026-08-06, not open.** Across **all 12,600 rows of committed BERT results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow`, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" in the committed BERT results is accuracy.** Threshold-*independent*. **Do not extend this to the baseline** — `archive/stale-docs/Reproduce_w_transformers.md:134-143` reports P=0.621/R=0.412/F1=0.489 at TOP-10, i.e. P≠R, meaning that run abstained on cases with no candidate above `PRUNING_SIMILARITY`. The baseline run supplied the missing artifact: P ≠ R in every row, because `PR` (prediction rate) is 0.7679 throughout — **30 of 129 cases (23.3%) abstain** when nothing clears `PRUNING_SIMILARITY`. The tell is one column: `TP+FP` sums to exactly 12.9 (the mean fold test size) for all three BERT arms, forcing `tp+fp == nrow`, but to 9.9 for the baseline — still the fastest diagnostic available. **What finding 13 settled is the label: `P == R` is `PR == 1.0`, i.e. the answered and all-cases populations being the *same set* because those arms never abstain. It was never the metric collapsing — the columns were unlabelled, not wrong.** `RankMetrics.txt` reproduces legacy `P`/`R`/`PR` bit-exactly from an independent code path, which is what proves it. See `docs/findings/04-metric-degeneracy.md`, `09-baseline-first-run.md` and `13-rank-aware-metrics.md`.
 - **Patient leakage. FIXED 2026-08-05 (`c2115ba`), 41 → 0.** The legacy folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15), so **41 of 129 test cases (31.8%) had another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0 was **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination was ~10× the effect under study. Tell: on leaked cases all three encoders scored *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverged. **It affected both arms**, so the published 0.489/0.512/0.521 carry it too. Fixed by `GroupKFold` on `SUBJECT_ID` (`scripts/make_folds.py` → `data/folds_grouped/`), recounted independently rather than trusting `--verify`. **`legacy` still uses the leaky folds on purpose**, so the golden never moves. **Attributed per arm 2026-08-12 (finding 15), which is what turns "it affected both arms" from an inference into a measurement:** closing the leak alone costs **+0.027 (Bio_ClinicalBERT) to +0.070 (BioSentVec)** of TOP-10 F at threshold 1.0, and it is the **larger term in all four rows** — 3.5× to 6.3× the preprocessing term, and unboundedly so for BiomedBERT, whose preprocessing term is exactly zero. At the cell Comito et al. publish (threshold 0.6) leakage is **54.3% of the 0.0902 baseline drop**, against 43.8% preprocessing and 1.9% interaction. See `docs/findings/05-patient-leakage.md` and `15-leakage-preprocessing-attribution.md`.
 - **Preprocessing defects. FIXED 2026-08-05 (`c2115ba`); the last nine of 89 fragments closed 2026-08-11 (`7e49212`, P27) under a *third* variant `corrected2`, so `corrected` — the pipeline every headline number comes from — still carries those nine.** `preprocess_sentence` padded `/` then dropped `o` as an NLTK stopword, so **`w/o` became `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both became `tracheostomy w extensive procedure`. Negation destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) were orphan fragments** (`" organism NOS"` ×26) embedded as if they were symptoms, creating spurious 1.0 matches. Under `corrected`, `w/o` survives as `without` and 80 of 89 fragments are rejoined. **Its effect has a sign, and the sign varies by arm — measured 2026-08-12 (finding 15), TOP-10 at threshold 1.0.** The text fix *raises* BioSentVec (−0.0124) and BlueBERT (−0.0077), *costs* Bio_ClinicalBERT (+0.0077), and moves BiomedBERT by **exactly +0.000000** — a bit-identical cell, recorded as measurement with no mechanism asserted. So "a defect fix must cost score" is not what happened here: it costs one arm, pays two, and is invisible to a fourth on the same 129 admissions. **P27 closed 2026-08-11 (`7e49212`) as a third variant `corrected2`** — `corrected` stays frozen — and its first four-arm run moved BioSentVec 0.2163→0.1856 and Bio_ClinicalBERT 0.2491→0.2424 while leaving BiomedBERT and BlueBERT **bit-identical in that cell** (they move in other rows; the bit-identity is cell-local). See `docs/findings/06-preprocessing-defects.md`, whose addendum carries the corrected2 run.
@@ -143,7 +143,12 @@ python scripts/run_baseline.py --pipeline drg --out results_drg
 python scripts/analyze_rank_metrics.py results_drg  # parses RankMetrics.txt, paired t-test on
                                                  # per-fold MRR across all three populations
 python scripts/compare_models.py --results-dir results_drg   # 4-model comparison PDF
-python scripts/analyze_score_distributions.py    # regenerates docs/score_distribution_analysis/
+python scripts/analyze_score_distributions.py --pipeline corrected
+                                                 # regenerates docs/score_distribution_analysis/
+                                                 # (P37: takes --pipeline/--out, grades through
+                                                 # get_diagnosis_relevance, names the pipeline in
+                                                 # the summary header. Fixed output names, so pass
+                                                 # --out for any non-canonical pipeline.)
 python scripts/build_dashboard_data.py           # rebuilds dashboard JSON; default root is docs/
 python scripts/analyze_performance.py [dir]      # PDF report from a PerformanceIndex.txt
 python scripts/verify_setup.py                   # smoke test — exits 0 on a clean checkout
@@ -174,20 +179,29 @@ their pipeline from provenance (`[INFO]`) instead of the directory name; `result
 Tests:
 
 ```bash
-pytest                    # 499 passed, 3 deselected — this is the green baseline
-                          # (measured 2026-08-12; 413 after C1-C8, 264 before it.
-                          # The D and E commits added the rest: P40's RankCases
-                          # tests, P27's corrected2 pins, attribute_effects.)
-pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
-                          # byte-exact reference. ~34-53 min (measured eight
-                          # times: 34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 —
-                          # 34:12 is 2026-08-12, Windows, numpy-2.0.2 venv — NOT
-                          # the ~20 min this file used to
-                          # claim — and NOT the ~20 min tests/test_golden.py's
-                          # own docstring still claims at :68). Run it
-                          # before and after any refactor commit; it is the only
-                          # thing that catches the numbers moving while every other
-                          # test stays green.
+pytest                    # 505 passed, 4 deselected — this is the green baseline
+                          # (measured 2026-08-12; 499/3 before P13, 413 after
+                          # C1-C8, 264 before it. The D and E commits added the
+                          # rest: P40's RankCases tests, P27's corrected2 pins,
+                          # attribute_effects, then P13's baseline golden — which
+                          # is what moved 3 deselected to 4.)
+pytest -m golden          # THE SAFETY NET, and it is now TWO tests, not one —
+                          # one golden per arm, each a full 10-fold pipeline run
+                          # byte-compared against its own committed reference.
+                          # Budget ~1 hour for the pair, run serially:
+                          #   BERT arm (tests/test_golden.py, stub768) ~34-53 min,
+                          #     measured eight times: 34:12, 42:28, 43:28, 43:50,
+                          #     44:32, ~50:00, 52:35, 53:10 — 34:12 is 2026-08-12,
+                          #     Windows, numpy-2.0.2 venv. NOT the ~20 min this
+                          #     file used to claim, and NOT the ~20 min
+                          #     tests/test_golden.py's own docstring still claims
+                          #     at :68.
+                          #   baseline arm (tests/test_golden_baseline.py,
+                          #     stub700-baseline) ~28-34 min, measured twice:
+                          #     28:09 solo, 34:06 under contention (2026-08-12).
+                          # Run both before and after any refactor commit; they
+                          # are the only thing that catches the numbers moving
+                          # while every other test stays green.
 pytest -m network         # opt in to the HuggingFace download test
 pytest tests/test_bert_symptom_pairwise.py::TestComputePatientSimilarityPairwise -v
 ```
@@ -200,13 +214,32 @@ Dashboard (React 19 + Vite 7 + Tailwind 4 + d3), from `dashboard/`: `npm install
 
 ## The safety net — read this before changing any code
 
-`tests/golden/stub768/PerformanceIndex.txt` is a full 10-fold run of the real pipeline, minted
-from a known-good tree. `pytest -m golden` re-runs the pipeline and compares **byte-for-byte**.
+**There are two goldens, one per arm** — as of P13 (2026-08-12); before it, only the BERT arm was
+covered. Each is a full 10-fold run of the real pipeline, minted from a known-good tree, and
+`pytest -m golden` re-runs both and compares **byte-for-byte**:
+
+| Reference | Arm | Test | Dim |
+|---|---|---|---|
+| `tests/golden/stub768/PerformanceIndex.txt` | BERT (`bert_models`) | `tests/test_golden.py` | 768 |
+| `tests/golden/stub700-baseline/PerformanceIndex.txt` | baseline (`baseline_sent2vec`) | `tests/test_golden_baseline.py` | 700 |
+
+**The second one is not the first at a different width.** Running the BERT arm never executes
+`predictS2V`, `compute_performance_index` on the per-case path, or the `embending_*` dict builders
+— the BERT arm reimplements all of that — so the baseline golden is the first byte-exact coverage
+those `cython_utils.py` functions have ever had. Since `cython_utils.py` is *shared*, a change there
+could previously move the baseline numbers with the entire suite green. The two tests are
+deliberately standalone and share no helpers, so one file's refactor cannot move the other's
+verdict; `tests/test_golden.py` is not to be edited.
 
 Nothing is trained here, so every number the pipeline emits is a pure function of the input data
 and the arithmetic in `cython_utils.py`. That means **any behaviour change is a numerical change**,
 and the realistic failure mode of refactoring this repo is not a crash — it is the numbers moving
-while every other test stays green. The golden is the only thing that catches that.
+while every other test stays green. The goldens are the only thing that catches that.
+
+**Read no science out of `stub700-baseline`.** Every aggregate row carries `PR 1.0` and
+`P == R == FS` — the shape the degeneracy finding says the *BERT* arms have and the baseline does
+not. That is the stub's cosine distribution never pruning to empty, not a result: the real
+BioSentVec run abstains on ~24% of cases (`PR` 0.7679, `TP+FP` 9.9 against 12.9 here).
 
 - **`tests/stubs.py` `StubEncoder`** derives each vector from `sha256(text)`, so it needs no model
   download, no network, and no GPU, and is immune to batch-composition and hash-seed variation.
@@ -356,10 +389,21 @@ batch closed the rest:
 - **P10, P11 and P12 — removed** by owner decision 2026-08-12; all three are retired with their
   reasoning in `docs/plans/TODO.txt`. **P6 was retired 2026-08-11.**
 
-**Still open, in order: P37** (`analyze_score_distributions.py` re-implements the grader and reads
-no `PipelineConfig`, so every statistic it produces is legacy-measured), **P13** (mint a
-baseline-arm golden — that arm still has zero regression protection and `cython_utils.py` is
-shared), **then P38** — a clean public repo, the hard blocker on publication, **deliberately
+- **P37 — done** (2026-08-12). `analyze_score_distributions.py` no longer re-implements the grader:
+  it takes `--pipeline`/`--out`, scores through `get_diagnosis_relevance`, and labels its output
+  with the config that produced it. The committed `docs/score_distribution_analysis/` artifacts are
+  `corrected`-measured now, and the re-run **corrected a wrong number**: the share of ordered
+  patient pairs at an exact cosine 1.0 is **1.89% for all three encoders** (312 of 16,512 — the
+  pairs sharing a diagnosis description), not the encoder-looking 1.49/1.62/1.31% the simulated
+  numpy cosine reported. The same 1.89% is what `drg` scores, which is *why* finding 12's
+  threshold-1.0 reproduction was bit-exact.
+
+- **P13 — done** (2026-08-12). `tests/golden/stub700-baseline/` plus `tests/test_golden_baseline.py`:
+  the baseline arm had zero regression protection while `cython_utils.py` is shared between the
+  arms, so `predictS2V`, the per-case `compute_performance_index` path and the `embending_*` dict
+  builders were unguarded. They are byte-exact now. See the safety-net section above.
+
+**Still open: P38 alone** — a clean public repo, the hard blocker on publication, **deliberately
 backlogged to the final arc** and carrying the Phase 3 polish (CLI, encoder registry, dashboard,
 the `F1` rename). On the infrastructure track **P14, P15, P16, P17 and P20 all landed in C1–C8, and
 P18 was retired**; P31 (the golden's stated runtime) is closed in every doc but not in

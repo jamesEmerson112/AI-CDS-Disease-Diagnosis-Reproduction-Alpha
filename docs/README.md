@@ -156,9 +156,10 @@ rank-awareness (P5, done — finding 13). **Updated 2026-08-12: the science side
 P27 landed as the third variant `corrected2`, P29's eight attribution runs produced
 [finding 15](findings/15-leakage-preprocessing-attribution.md), P40 shipped `RankCases.txt` and
 produced [finding 16](findings/16-self-selection.md), and P39 (tie-breaks) closed on measurement
-with no code change. P6 was retired 2026-08-11 and P10/P11/P12 on 2026-08-12. What remains on the
-wider plan is **P37** (the score-distribution script still measures with a retired ruler),
-**P13** (a baseline-arm golden), then **P38** (the clean public repo, backlogged to the final arc).
+with no code change. P6 was retired 2026-08-11 and P10/P11/P12 on 2026-08-12. **P37** (the
+score-distribution script measured with a retired ruler) and **P13** (a baseline-arm golden) both
+closed later the same day, so what remains on the wider plan is **P38** alone — the clean public
+repo, backlogged to the final arc.
 
 ## Reference
 
@@ -195,7 +196,7 @@ Do not hand-edit anything below; regenerate it instead.
 | Path | What | Regenerate with |
 |---|---|---|
 | `readme_plots/*.svg` | Charts embedded in the root README | `python scripts/build_readme_plots.py` (**currently broken** — globs the repo root, but the run directories are under `docs/`) |
-| `score_distribution_analysis/` | Saturation study: plots and summary statistics | `python scripts/analyze_score_distributions.py` |
+| `score_distribution_analysis/` | Saturation study: plots and summary statistics, measured under `corrected` since 2026-08-12 (P37) and labelled with the pipeline in the summary's header | `python scripts/analyze_score_distributions.py --pipeline corrected` |
 | `Prediction_Output_*/` | Raw output of the three committed BERT runs, 15 Feb 2026 | `python scripts/run_bert_analysis.py --model all` |
 | `bert_model_comparison.md` | The original comparison write-up | superseded by [findings/02](findings/02-encoder-comparison.md); kept for provenance |
 

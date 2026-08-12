@@ -19,21 +19,29 @@ The current evaluation metric — **MAX cosine similarity** over the Cartesian p
 
    | Model | All-Pairwise Mean | All-Pairwise Min | % >= 0.6 |
    |---|---|---|---|
-   | Bio_ClinicalBERT | 0.8348 | 0.6454 | 100.00% |
-   | BiomedBERT | 0.9282 | 0.7246 | 100.00% |
-   | BlueBERT | 0.7170 | 0.4810 | 96.35% |
+   | Bio_ClinicalBERT | 0.8253 | 0.5856 | 99.98% |
+   | BiomedBERT | 0.9267 | 0.6834 | 100.00% |
+   | BlueBERT | 0.7160 | 0.4736 | 96.15% |
 
 2. **MAX operator amplification.** With ~1.74 diagnoses per patient, the Cartesian product contains ~3 pairs. Taking the MAX over these pairs inflates the per-patient similarity further:
 
    | Model | Per-Patient MAX Mean | % >= 0.6 |
    |---|---|---|
-   | Bio_ClinicalBERT | 0.8586 | 100.00% |
-   | BiomedBERT | 0.9447 | 100.00% |
-   | BlueBERT | 0.7565 | 99.96% |
+   | Bio_ClinicalBERT | 0.8502 | 100.00% |
+   | BiomedBERT | 0.9463 | 100.00% |
+   | BlueBERT | 0.7564 | 99.65% |
 
 At threshold 0.6, virtually every patient pair is classified as a true positive — the metric cannot discriminate between models.
 
-*Data source: `docs/score_distribution_analysis/score_distribution_summary.txt`*
+> **Both tables re-measured 2026-08-12 (TODO P37).** They previously held `legacy`-preprocessing
+> figures produced by a script that simulated the grader in its own numpy cosine; they now hold
+> `corrected` figures produced by `cython_utils.get_diagnosis_relevance`. The superseded values
+> were 0.8348/0.6454/100.00%, 0.9282/0.7246/100.00%, 0.7170/0.4810/96.35% and
+> 0.8586/0.9447/0.7565 with 100.00%/100.00%/99.96%. No proposal below changes as a result; see
+> [../findings/03-metric-saturation.md](../findings/03-metric-saturation.md) for what moved and why.
+
+*Data source: `docs/score_distribution_analysis/score_distribution_summary.txt`, whose header names
+the pipeline it was measured under.*
 
 ---
 

@@ -36,17 +36,20 @@ Patients carry 1.74 diagnoses on average, so the Cartesian product holds ~3 pair
 MAX means *if any true diagnosis is close to any predicted diagnosis, the whole case counts as
 correct.* Nothing penalises the predictions that were wrong.
 
-Measured: Bio_ClinicalBERT's mean pairwise diagnosis similarity is 0.8348, but the per-patient
-MAX mean is 0.8586 — the MAX operator alone moves the distribution up
-(`docs/score_distribution_analysis/score_distribution_summary.txt`).
+Measured: Bio_ClinicalBERT's mean pairwise diagnosis similarity is 0.8253, but the per-patient
+MAX mean is 0.8502 — the MAX operator alone moves the distribution up
+(`docs/score_distribution_analysis/score_distribution_summary.txt`). *Re-measured 2026-08-12 under
+`corrected` and against the shipped grader (TODO P37); the `legacy` pair was 0.8348 → 0.8586, so
+the gap the argument rests on is 0.0249 rather than 0.0238.*
 
 ### Defect 2 — the grader is the model being graded
 
 The same encoder both retrieves the candidate patients and decides whether the retrieved
 diagnosis counts as a match. A model with a more compressed embedding space therefore marks its
 own work more leniently. This is why BiomedBERT — the most compressed of the three, mean
-pairwise 0.9282 — "wins" at threshold 0.9 with a perfect 1.000 while 99.71% of its patient
-pairs clear 0.9 *regardless of whether the diagnosis is right*.
+pairwise 0.9267 — "wins" at threshold 0.9 with a perfect 1.000 while 99.06% of its patient
+pairs clear 0.9 *regardless of whether the diagnosis is right*. (`legacy`: 0.9282 and 99.71%;
+re-measured 2026-08-12, P37.)
 
 A fixed absolute threshold cannot be fair across encoders whose similarity distributions differ
 this much:
