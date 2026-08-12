@@ -519,7 +519,11 @@ Start at [docs/](docs/README.md); the synthesis is
 [07-comparison-validity.md](docs/findings/07-comparison-validity.md), the corrected results are
 [11-corrected-pipeline-first-results.md](docs/findings/11-corrected-pipeline-first-results.md), and the
 two knob-removal results are [12-drg-grader.md](docs/findings/12-drg-grader.md) and
-[13-rank-aware-metrics.md](docs/findings/13-rank-aware-metrics.md).
+[13-rank-aware-metrics.md](docs/findings/13-rank-aware-metrics.md). The two 2026-08-12 follow-ups are
+[15-leakage-preprocessing-attribution.md](docs/findings/15-leakage-preprocessing-attribution.md) —
+which part of the corrected-pipeline drop was leakage and which was preprocessing — and
+[16-self-selection.md](docs/findings/16-self-selection.md) — whether the baseline's answered cases
+are simply its easy ones.
 
 ---
 

@@ -60,7 +60,10 @@ Whether the constraint actually held is pipeline-dependent, and this is the sing
 important thing to know before comparing arms: **under `legacy` the two arms preprocess
 diagnosis text differently (119/145 descriptions differ), so a legacy cross-arm delta is
 confounded; under `corrected`/`drg` they match 145/145**
-([06-preprocessing-defects](../findings/06-preprocessing-defects.md)).
+([06-preprocessing-defects](../findings/06-preprocessing-defects.md); how much of the corrected
+pipeline's score drop the text-handling changes account for — this unification among them — is
+measured per arm in [15](../findings/15-leakage-preprocessing-attribution.md): less than the fold
+regrouping in every arm, and with a sign that varies by arm).
 
 A few other things about this module that its name and the old docs get wrong or omit:
 
@@ -234,7 +237,9 @@ precision and recall are algebraically the same number, and the F-score collapse
 P ≠ R ([09](../findings/09-baseline-first-run.md)); and the three columns' true names are
 answered-hit-rate, all-cases-hit-rate, and coverage
 ([13](../findings/13-rank-aware-metrics.md)) — which is exactly why `RankMetrics.txt` reports
-three labelled populations instead of inventing a new shape.
+three labelled populations instead of inventing a new shape. What the answered population's
+self-selection is worth is measured in [16](../findings/16-self-selection.md), from the per-case
+`RankCases.txt` sibling P40 added.
 
 ## Known defects (current as of 2026-08-11)
 

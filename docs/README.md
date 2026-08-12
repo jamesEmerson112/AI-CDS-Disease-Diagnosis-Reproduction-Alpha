@@ -85,6 +85,22 @@ and it says what the comparison would need in order to mean anything. Otherwise,
     digest too (P42 closed); the winnable total 76/129 is
     split-invariant, but finding 12's per-fold range was measured on the wrong split and is
     corrected in place.
+15. [findings/15-leakage-preprocessing-attribution.md](findings/15-leakage-preprocessing-attribution.md)
+    — **the corrected-pipeline drop, split into its two causes.** Two more trees, each fixing
+    exactly one thing: `folds-only` (leakage) and `preprocess-only` (text). **Leakage dominates
+    every arm** (+0.027 to +0.070 at threshold 1.0); preprocessing is small and its *sign varies*
+    — it raises two arms' scores and leaves BiomedBERT bit-identical — and the interaction is
+    real, positive and sometimes larger than a main effect. The published 0.0902 baseline drop
+    is 54.3% leakage, 43.8% preprocessing, 1.9% interaction. **Read its banner: the
+    `preprocess-only` column still leaks patients and is an attribution input, never a result.**
+16. [findings/16-self-selection.md](findings/16-self-selection.md) — **the confound finding 13
+    could not test.** With per-case output (P40) every arm can be scored on exactly the 98 cases
+    the baseline chose to answer. Two results: those cases really are easier — every arm gains
+    +0.032 to +0.038 MRR, *including the three that had no say in choosing them* — but the gain
+    is nearly identical across arms, so it is a property of the cases and not an advantage the
+    baseline's pruning confers on itself. On the matched set the ordering **inverts** and the
+    baseline finishes last, so its answered-only lead was mismatched denominators. Still no pair
+    separates; abstention remains open, now measured rather than merely suspected.
 
 ## If you are setting up on a new machine
 

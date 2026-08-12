@@ -25,6 +25,8 @@ Ordered by (impact / effort). Metric details live in [metric-redesign.md](metric
 correction available — and it measured as predicted: every arm's score fell, the baseline's
 headline by 18.4% (0.4824 → 0.3922). Leaked cases went **41 → 0**, recounted independently.
 Results: [../findings/11-corrected-pipeline-first-results.md](../findings/11-corrected-pipeline-first-results.md).
+How much of that drop was this fix rather than item 4, measured per arm (P29):
+[../findings/15-leakage-preprocessing-attribution.md](../findings/15-leakage-preprocessing-attribution.md).
 
 The 10 folds split on `HADM_ID` (admission), but 129 admissions come from only **100
 patients**. One patient has 15 admissions — 11.6% of the dataset by itself.
@@ -90,6 +92,8 @@ derived from these 146 strings. See [metric-redesign.md](metric-redesign.md) and
 `PerformanceIndex.txt` untouched, golden still byte-exact.** **Effort:** days. **Impact:**
 removed the K knob; exposed the third knob (abstention). Full story:
 [../findings/13-rank-aware-metrics.md](../findings/13-rank-aware-metrics.md).
+The self-selection question it spawned is measured in
+[../findings/16-self-selection.md](../findings/16-self-selection.md) (P40).
 
 The problem as diagnosed: rank *is* computed (the candidate list is sorted by similarity) and
 then discarded — the scorer returns true if **any** of the K retrieved clears the threshold, so
@@ -115,7 +119,9 @@ item.
 
 **Status: DONE 2026-08-05 (`c2115ba`) under `--pipeline corrected`, except nine fragments
 (P27).** **Effort:** hours. **Impact:** moderate, but two were clinically severe. Full story:
-[../findings/06-preprocessing-defects.md](../findings/06-preprocessing-defects.md).
+[../findings/06-preprocessing-defects.md](../findings/06-preprocessing-defects.md). Its share of
+the corrected-pipeline drop, isolated from item 1's:
+[../findings/15-leakage-preprocessing-attribution.md](../findings/15-leakage-preprocessing-attribution.md).
 
 ### 4a. `w/o` collapses to `w` — negation is destroyed — FIXED
 

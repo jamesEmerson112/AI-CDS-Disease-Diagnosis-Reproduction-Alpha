@@ -220,7 +220,9 @@ history.
 
 *Added 2026-08-06, from measurement. This turned out to be exactly right — it became the
 abstention-asymmetry finding, the third knob, and the one that cannot be closed
-([13](../findings/13-rank-aware-metrics.md)).*
+([13](../findings/13-rank-aware-metrics.md)). Its self-selection half was then measured in
+[16](../findings/16-self-selection.md): the answered population is genuinely easier, by nearly the
+same margin for every arm, and the matched-case ordering inverts.*
 
 The baseline **abstains** on ~24% of cases; every BERT arm answers all of them. So every metric
 has to declare which denominator it uses, and there are three honest choices:
@@ -308,4 +310,6 @@ being studied.
 
 The fix — regrouping the folds by `SUBJECT_ID` with `GroupKFold` — landed in `c2115ba` before
 any rank-aware number was produced, exactly as this prerequisite demanded. The write-up is
-[../findings/05-patient-leakage.md](../findings/05-patient-leakage.md).
+[../findings/05-patient-leakage.md](../findings/05-patient-leakage.md), and what removing the
+leakage cost each arm — separated from the preprocessing fix it shipped with — is
+[../findings/15-leakage-preprocessing-attribution.md](../findings/15-leakage-preprocessing-attribution.md).

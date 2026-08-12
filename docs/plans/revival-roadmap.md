@@ -29,7 +29,10 @@
 >
 > Phase 5's metric work was **removed from this roadmap** and tracked in
 > [correctness-fixes.md](correctness-fixes.md) and [metric-redesign.md](metric-redesign.md) —
-> where, unlike the refactor, **most of it has since landed** (P1–P5, P7, P9; findings 11–13).
+> where, unlike the refactor, **most of it has since landed** (P1–P5, P7, P9; findings 11–13, and
+> the 2026-08-12 pair — [15](../findings/15-leakage-preprocessing-attribution.md), which splits the
+> corrected-pipeline drop into leakage and preprocessing, and
+> [16](../findings/16-self-selection.md), the matched-case-set test of the baseline's abstention).
 >
 > The scope rule for Phases 2–3: **if a change moves the numbers it is out of scope; if it fixes
 > something that crashes, blocks, or writes to the wrong place it is in scope.**
