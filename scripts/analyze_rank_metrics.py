@@ -19,8 +19,12 @@ The baseline abstains; all three BERT arms never do. So:
   winnable / all-cases  PENALISE abstention -- declining scores the same as
                         answering wrongly
   answered              EXCLUDE abstention -- but those cases are self-selected,
-                        the arm chose which to answer, and n is not matched
-                        (baseline 98 vs BERT 129)
+                        the arm chose which to answer, and n is NOT matched. It
+                        was 98 against 129 on results_corrected, measured
+                        2026-08-06; that gap is a property of the TREE, not a
+                        constant, because folds and preprocessing both move
+                        pruning and pruning decides who abstains. So the report
+                        prints the counts it measured, never these.
 
 **Neither population is neutral, and there is no third one that is.** Abstention
 is a property of the arm, not of the metric, so every convention takes a side.
@@ -47,6 +51,7 @@ import collections
 import math
 import re
 import sys
+import textwrap
 
 from aicds import runs
 from aicds.analysis.rank_metrics import reciprocal_rank
@@ -54,6 +59,10 @@ from aicds.analysis.rank_report import RANK_CASES_FILENAME
 
 POPULATIONS = ["winnable", "all-cases", "answered"]
 ARM_ORDER = ["baseline", "bio_clinical_bert", "biomedbert", "bluebert"]
+# The aggregate block every summary reads. RankMetrics.txt writes it with TWO
+# spaces before the parenthesis; one space here, because parse_rank_metrics
+# collapses internal whitespace before keying the block.
+AGG_BLOCK = "10-FOLD (mean of per-fold rates)"
 LABELS = {
     "baseline": "BioSentVec",
     "bio_clinical_bert": "Bio_ClinicalBERT",
@@ -272,12 +281,43 @@ def main(argv=None):
     _self_selection(cases)
 
 
+def _answered_vs_all(parsed, arms):
+    """``[(label, answered_n, all_cases_n), ...]`` for arms carrying both blocks.
+
+    The size of the n mismatch is a property of the TREE, not a constant. Pruning
+    decides who abstains, and both the fold split and the preprocessing version
+    move pruning, so "98 vs 129" is true of results_corrected and of nothing
+    else. It was hard-coded into the caveat, which meant the one line whose job
+    is to say how unmatched the comparison is asserted a specific wrong number on
+    every other tree -- worse than saying nothing, because a reader has no way to
+    tell it was not measured here.
+
+    An arm missing either block is omitted rather than defaulted: the per-arm
+    table below already prints "(missing)" for it, and a denominator invented
+    here would read exactly like one that came from the file.
+    """
+    counts = []
+    for arm in arms:
+        blocks = parsed[arm].get(AGG_BLOCK, {})
+        answered, overall = blocks.get("answered"), blocks.get("all-cases")
+        if answered and overall:
+            counts.append((LABELS.get(arm, arm), answered["n"], overall["n"]))
+    return counts
+
+
 def _report(parsed, arms, population):
     print("=" * 78)
     print("POPULATION: %s" % population)
     if population == "answered":
         print("  Abstentions EXCLUDED. May flatter the abstaining arm: these cases are")
-        print("  self-selected, and n is not matched (baseline 98 vs BERT 129).")
+        counts = _answered_vs_all(parsed, arms)
+        detail = (", ".join("%s %d of %d" % row for row in counts) if counts
+                  else "counts unavailable -- no arm here carries both the "
+                       "answered and all-cases aggregate blocks")
+        for line in textwrap.wrap(
+                "self-selected, and n is not matched (%s)." % detail,
+                width=78, initial_indent="  ", subsequent_indent="  "):
+            print(line)
     else:
         print("  Abstentions score 0 -> PENALISED, the same as answering wrongly.")
         print("  The baseline abstains; the BERT arms never do.")
@@ -285,13 +325,12 @@ def _report(parsed, arms, population):
     print("  quoting any ranking from this block.")
     print("=" * 78)
 
-    agg = "10-FOLD (mean of per-fold rates)"
     header = "%-18s %-10s %-20s %-10s" % ("arm", "coverage", "MRR@50", "n")
     print(header)
     print("-" * len(header))
     summary = {}
     for arm in arms:
-        block = parsed[arm].get(agg, {}).get(population)
+        block = parsed[arm].get(AGG_BLOCK, {}).get(population)
         if not block:
             print("%-18s (missing)" % LABELS.get(arm, arm))
             continue

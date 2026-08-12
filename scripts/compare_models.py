@@ -259,10 +259,23 @@ def validate_parse(model_key, index):
 # The 2026-08-06 runs hit exactly that: they came off RunPod and the box would
 # have labelled them Mac. An honest blank beats a confident error in a
 # provenance box.
+#
+# A value distinguishes POD RENTALS, and it may not name hardware it cannot
+# source. Each rental is a separate box, so an 05-Aug run beside an 11-Aug one
+# must not read as one_host (:596) -- but the only spec recorded anywhere is
+# 32 vCPU / 64 GB (docs/findings/09-baseline-first-run.md:19, TODO.txt:248), and
+# the earlier "16-vCPU" suffix here was invented. These strings are printed
+# verbatim into the PDF provenance box, which is the one place a confident wrong
+# number does the most damage, so the suffix scopes the rental by DATE -- a fact
+# the run directory already carries -- and asserts nothing about the machine.
+# 05/06-Aug share one value because they were one rental; they stay unsuffixed
+# because that text is what the three committed result trees already report.
 HOSTS_BY_DATE = {
     "15022026": "M-series Mac",
     "05082026": "RunPod Linux",
     "06082026": "RunPod Linux",
+    "11082026": "RunPod Linux (11-12 Aug pod)",
+    "12082026": "RunPod Linux (11-12 Aug pod)",
 }
 
 
