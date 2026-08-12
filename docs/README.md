@@ -80,7 +80,9 @@ and it says what the comparison would need in order to mean anything. Otherwise,
     **the grouped fold split depends on the numpy major version.** GroupKFold ties break through
     np.argsort, so numpy 1.x and 2.x deterministically produce different splits from identical
     inputs. The pod's numpy-2.0 split is canonical (every committed tree used it), pinned by
-    content digest in make_folds --verify and the test suite; the winnable total 76/129 is
+    content digest in make_folds --verify and the test suite — and, since 2026-08-12, by
+    `numpy>=2.0,<3` in `config/environment.yml`, under which Windows reproduces the canonical
+    digest too (P42 closed); the winnable total 76/129 is
     split-invariant, but finding 12's per-fold range was measured on the wrong split and is
     corrected in place.
 

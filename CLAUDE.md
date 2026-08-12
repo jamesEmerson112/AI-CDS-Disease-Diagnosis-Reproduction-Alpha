@@ -57,7 +57,7 @@ disk, which is a hardware fact independent of the metric.
 
 ### The findings index
 
-`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement · **13** the knobless rank-aware comparison, and the third knob it exposed · **14** the grouped fold split depends on the numpy major version; the pod's split is canonical, pinned by digest.
+`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement · **13** the knobless rank-aware comparison, and the third knob it exposed · **14** the grouped fold split depends on the numpy major version; the pod's split is canonical, pinned by digest — and, since 2026-08-12, by `numpy>=2.0,<3` in `config/environment.yml`.
 
 **One trap from finding 13 that is convincing enough to fool a careful reader, so it is repeated here deliberately.** Do not try to bound the self-selection half of the abstention problem with `MRR_all-cases / coverage`. That quotient is **algebraically identical** to `MRR_answered` — abstentions contribute 0 to the all-cases numerator and coverage is exactly the denominator ratio, so it returns ~1.0 by construction and looks like it bounds the confound at 0.5% while carrying no information at all. It was computed, believed for a minute, and withdrawn. The real test needs the BERT arms restricted to the baseline's 98 answered cases, which needs per-case relevance vectors (**P40**).
 
@@ -72,6 +72,16 @@ conda env create -f config/environment.yml   # env "disease-diagnosis", Python 3
 conda activate disease-diagnosis
 git config core.hooksPath .githooks          # data-use guard; hooks are not cloned
 ```
+
+**`numpy` is pinned to `>=2.0,<3`, and that pin is load-bearing rather than hygiene.** `GroupKFold`
+breaks its ~85 single-admission ties through `np.argsort`, whose unstable-sort behaviour changed
+between numpy 1.x and 2.x, so a numpy-1.x environment builds a *different* (equally leak-free,
+equally deterministic) `data/folds_grouped/` split that is not comparable with any committed result
+— finding 14 / P42. Under the pin, `python scripts/make_folds.py --verify` reproduces the canonical
+split on **Windows and Linux alike** — verified 2026-08-12 against the canonical digest, `VERIFY:
+PASS`, 0 leaked — so regenerating locally is the normal path, not a hazard. `--verify` still WARNS
+on a digest mismatch; that warning, not the pin, is what catches an environment that ignored it.
+**An environment that adds torch needs `torch>=2.3`**, the numpy-2-compatible line.
 
 **`import torch` will fail out of the box on macOS/ARM** with `OMP: Error #15: Initializing libomp.dylib, but found libomp.dylib already initialized`. Two OpenMP runtimes land in one process: conda-forge's `llvm-openmp` (reached via `libopenblas` → numpy/scipy) plus a second copy bundled in pip-installed torch. Fix by pointing torch's copy at conda's — `libtorch_cpu.dylib` resolves `@rpath/libomp.dylib`, and both are LLVM OpenMP compat 5.0.0:
 
@@ -139,8 +149,9 @@ Tests:
 pytest                    # 413 passed, 3 deselected — this is the green baseline
                           # (was 264 before the C1-C8 refactor added its tests)
 pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
-                          # byte-exact reference. ~42-53 min (measured seven
-                          # times: 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 — NOT
+                          # byte-exact reference. ~34-53 min (measured eight
+                          # times: 34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 —
+                          # 34:12 is 2026-08-12, Windows, numpy-2.0.2 venv — NOT
                           # the ~20 min this file used to
                           # claim — and NOT the ~20 min tests/test_golden.py's
                           # own docstring still claims at :68). Run it

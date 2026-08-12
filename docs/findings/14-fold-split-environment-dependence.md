@@ -1,6 +1,7 @@
 # Finding 14 — the grouped fold split depends on the numpy major version
 
-**Date:** 2026-08-11 · **Status:** mitigated same day (canonical digest pinned) · **Problem number:** P42
+**Date:** 2026-08-11 · **Status:** mitigated same day (canonical digest pinned); **CLOSED 2026-08-12**
+— `config/environment.yml` pinned to `numpy>=2.0,<3` · **Problem number:** P42
 
 ## What was found
 
@@ -57,11 +58,38 @@ DUA-covered and gitignored; their digest is not) in two places kept in sync:
 - `tests/test_populations.py` — the per-fold range test asserts the digest first, so a
   non-canonical local split fails with an explanation instead of a mystery number.
 
-A Windows machine gets the canonical split by copying it from the pod or regenerating under
-numpy 2.0.x. `config/environment.yml` floats `numpy>=1.19.0`, which is what allowed the two
-environments to diverge; pinning it is deliberately deferred until the local env's torch
-compatibility with numpy 2.x is tested — the digest guards make the divergence loud in the
-meantime.
+**Regenerating under the pinned environment is the normal way to get the canonical split on any
+machine, Windows included** — `python scripts/make_folds.py --verify` is the procedure, and copying
+the pod's files is a fallback, not the route. `config/environment.yml` used to float
+`numpy>=1.19.0`, which is what allowed the two environments to diverge; **it is pinned to
+`numpy>=2.0,<3` as of 2026-08-12 (P42 closed).**
+
+The deferral this section used to record — pin "until the local env's torch compatibility with
+numpy 2.x is tested" — **was tested, and it passed.** *(Corrected 2026-08-12: this paragraph first
+claimed the deferral's premise was "vacuous: the local venv carries no torch at all". That was
+false and checkable — `venv/Lib/site-packages/torch-2.8.0.dist-info` is dated 2025-12-31, months
+before the numpy upgrade, so torch was never absent. The conclusion is unaffected and strictly
+stronger: the gate was passed, not bypassed.)* What was measured, 2026-08-12:
+
+- **The headline.** `scripts/make_folds.py`, run under a numpy-2.0.2 venv **on Windows**,
+  reproduced the canonical digest `b36f7216…a6ec5084f` — `VERIFY: PASS`, 0 leaked. So the
+  divergence is explained by the **numpy major version alone**, with no platform, BLAS or
+  hash-seed residue left over. The 1.26.4 → 2.0.2 upgrade was done in place on the local venv.
+- Fast suite under numpy 2.0.2: **485 passed, 3 deselected** — both on a throwaway testbed and
+  again after the real venv was upgraded.
+- `pytest -m golden` under numpy 2.0.2: **byte-exact, 1 passed in 2052.84s (34:12)**. The
+  committed golden is unchanged under numpy 2. This is also the **eighth** golden runtime
+  measurement and the fastest of the eight; the documented range moves from 42–53 to **34–53 min**.
+- **The torch gate the deferral named was run locally and passed.** In the repo venv
+  (`venv/Scripts/python.exe` — the only working local env), **torch 2.8.0+cpu imports green under
+  numpy 2.0.2**, `torch.from_numpy` round-trips an array unchanged, and both hold in the same
+  interpreter that ran the 485-passed suite above. 2.8.0 is well past **torch >= 2.3**, the
+  numpy-2-compatible line, which stays the requirement for any environment that adds torch. The
+  RunPod `dd` env corroborates from production: it ran **every D5 BERT run on torch + numpy 2.0.2**.
+
+The digest guards stay exactly as they are, pin or no pin: `--verify` still **WARNS** on a digest
+mismatch and `tests/test_populations.py` still fails with an explanation. A pin tells you what to
+install; the digest is what catches an environment that ignored it.
 
 ## Casualties corrected
 

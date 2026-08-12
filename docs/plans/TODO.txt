@@ -34,6 +34,18 @@ Updated 2026-08-11 (audit): a full pass over all 1463 lines against the tree at
   with a dated note saying what was wrong, and decision records stay VERBATIM
   even where the outcome differed -- a decision is a record of what was decided,
   not a prediction to be scored.
+Updated 2026-08-12 (E8): P42 CLOSED. config/environment.yml pinned to
+  numpy>=2.0,<3. make_folds.py under a numpy-2.0.2 venv ON WINDOWS reproduced
+  the canonical digest (VERIFY: PASS, 0 leaked), so finding 14's divergence is
+  the numpy MAJOR version alone; fast suite 485 passed / 3 deselected; and
+  pytest -m golden came back BYTE-EXACT in 34:12 -- an EIGHTH runtime
+  measurement and the fastest of the eight, so the golden's documented range is
+  now 34-53 MINUTES everywhere. The deferral P42 carried ("test local torch
+  against numpy 2 first") WAS RUN AND PASSED: torch 2.8.0+cpu imports green
+  under numpy 2.0.2 in the repo venv.
+  CORRECTED 2026-08-12: this entry first said that deferral was VACUOUS because
+  "this machine's venv has no torch". FALSE -- torch has been installed since
+  2025-12-31. The gate was passed, not meaningless. See P42.
 
 DECISIONS 2026-08-10 -- settled by the owner, do not re-litigate
   1. PHASE 3 SPLITS. The two drift-stoppers land IN THIS REPO: the single
@@ -135,14 +147,19 @@ THE REFACTOR BATCH C1-C9, landed 2026-08-10/11, PUSHED to origin/main 2026-08-11
   metadata for such a run is no metadata -- so the noise persists until P29
   produces the first metadata-bearing trees.
 
-  GOLDEN RUNTIME, MEASURED SEVEN TIMES: 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10.
+  GOLDEN RUNTIME, MEASURED EIGHT TIMES: 34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10.
+  (UPDATED 2026-08-12 (E8): 34:12 is new -- this Windows box under the
+  numpy-2.0.2 venv, byte-exact, 2052.84s -- and it is the FASTEST of the eight,
+  which moved the range FLOOR from 42 to 34. Every "seven times" and "42-53"
+  in the docs was rewritten in the same pass. The count has now been wrong in
+  this file four separate times; quote the LIST exactly and the range loosely.)
   (CORRECTED 2026-08-11 (audit): this canonical line said FIVE and omitted 43:50,
   which P1's own evidence block below has recorded since 2026-08-05. The
   "five times" phrasing had been copied to TWO other places in this file -- P1's
   seam note and P31's Tier 3 checklist entry -- not one; the first pass fixed
   only the seam note and the checklist entry was caught on re-grep. All three
   now say six. The RANGE was never wrong, only the count.)
-  Call it 42-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
+  Call it 34-53 minutes. Anything claiming ~20 or ~26 minutes is stale.
   tests/test_golden.py:68 STILL SAYS "about 20 minutes" AND WAS LEFT ALONE ON
   PURPOSE: test_golden.py is the binding constraint on this whole refactor, and
   editing the file that holds the safety net to fix a docstring is not a trade
@@ -321,7 +338,9 @@ STATUS
            P39 P40 - found while implementing P5 (tie-breaks; per-case output)
            P41 - found by the C1-C9 audit (the -m env hole, fixed 8965546)
            P42 - found by D5's first-ever Linux run of the fast suite
-                 (fold-split environment dependence; finding 14)
+                 (fold-split environment dependence; finding 14). CLOSED
+                 2026-08-12 by the numpy>=2.0,<3 pin; single state is the [x]
+                 at its Tier 3 checklist entry.
            P41 - found 2026-08-11 by the C1-C9 audit (the `-m` entry point
                 silently ignores AICDS_PIPELINE on the BERT arm only)
 
@@ -597,7 +616,9 @@ TIER 3 - PROTECTS THE WORK. Cheap insurance; do P13/P14 before touching shared c
            recursive ** because it asserts that committed results exist at all
            rather than discovering a run.
   [~] P31  Correct the golden's stated runtime    MOSTLY DONE 2026-08-11 (C9)
-           Every doc now says 42-53 min; the golden was measured SEVEN times (42:28 arrived with the D3+D4 gate), not
+           Every doc now says 34-53 min; the golden was measured EIGHT times
+           (42:28 arrived with the D3+D4 gate; 34:12, the new FLOOR, arrived
+           2026-08-12 with E8's numpy-2 golden gate), not
            the five this line claimed until 2026-08-11 (audit) -- it was the
            third count-bearing site in this file and the one the first pass
            missed. Only tests/test_golden.py:68 still says "about 20 minutes",
@@ -724,7 +745,37 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
            DONE 2026-08-11 (8965546). Found by the audit as a P35-class hole,
            asymmetric between the arms; the -m path now resolves via from_env()
            with the same explanatory comment as the baseline twin.
-  [~] P42  The grouped fold split depends on the numpy MAJOR version
+  [x] P42  The grouped fold split depends on the numpy MAJOR version
+           DONE 2026-08-12 -- state moved from [~] to [x] when the pin landed.
+           EVIDENCE, all 2026-08-12: make_folds.py under a numpy-2.0.2 venv ON
+           WINDOWS reproduced the canonical digest b36f7216...a6ec5084f,
+           VERIFY: PASS, 0 leaked -- so the divergence is the numpy major
+           version ALONE, no platform/BLAS/hash-seed residue; fast suite 485
+           passed / 3 deselected under 2.0.2; pytest -m golden BYTE-EXACT in
+           2052.84s (34:12), an EIGHTH runtime measurement and the fastest yet
+           (range now 34-53 min); config/environment.yml pinned to
+           numpy>=2.0,<3. The local venv was upgraded 1.26.4 -> 2.0.2 in place.
+           THE DEFERRAL COMPLETED RATHER THAN DIED: it waited on "local
+           torch/numpy-2 compatibility", and that test was RUN AND PASSED --
+           torch 2.8.0+cpu imports green under numpy 2.0.2 in the repo venv
+           (venv/Scripts/python.exe), torch.from_numpy round-trip included, in
+           the same interpreter that ran the 485-passed suite. 2.8.0 is well
+           past torch>=2.3, the numpy-2-compatible line, which stays the
+           requirement for any env that adds torch. The pod's dd env
+           corroborates from production: every D5 BERT run was torch + numpy
+           2.0.2.
+           CORRECTED 2026-08-12: this paragraph first read "WHY THE DEFERRAL
+           DIED RATHER THAN COMPLETED ... this machine's venv has NO TORCH AT
+           ALL -- the premise was vacuous". That was FALSE, and checkable in
+           one command: venv/Lib/site-packages/torch-2.8.0.dist-info is dated
+           2025-12-31, months before the numpy 2 upgrade, so torch was never
+           absent and was not installed after the check either. P42's closure
+           is unaffected and STRONGER -- the gate was passed, not bypassed.
+           make_folds IS SAFE TO RUN LOCALLY NOW: under the pinned env
+           regeneration reproduces canonical, and --verify still WARNS on a
+           digest mismatch, which is the guard that catches an env ignoring the
+           pin. The digest guards are unchanged; a pin says what to install,
+           the digest catches what actually got installed.
            FOUND AND MITIGATED 2026-08-11 (finding 14). GroupKFold breaks its
            ~85 single-admission ties through np.argsort, whose unstable-sort
            behaviour changed between numpy 1.x and 2.x: Windows/numpy-1.26 and
@@ -735,10 +786,14 @@ TIER 3 ADDITIONS from P4 (these protect a result from being silently wrong).
            and test_populations.py (fails with an explanation). Finding 12's
            per-fold range corrected in place (3/12 was the Windows split;
            canonical is 4/13 to 13/15); winnable TOTAL 76/129 is
-           split-invariant, headline claims untouched. REMAINS [~]: pinning
-           numpy==2.0.x in environment.yml is deferred until local
-           torch/numpy-2 compatibility is tested -- the digest guards keep the
-           divergence loud meanwhile. Caught BY C8's fold_dir digest field
+           split-invariant, headline claims untouched. (The "REMAINS [~]:
+           pinning numpy==2.0.x is deferred until local torch/numpy-2
+           compatibility is tested" sentence that stood here is SUPERSEDED
+           2026-08-12 by the DONE block above -- kept as a note rather than
+           deleted, because it names the gate that the DONE block reports
+           PASSING. The clause that stood here, "the reason it died is that its
+           premise was false, not that the test passed", is itself CORRECTED
+           2026-08-12: the test passed.) Caught BY C8's fold_dir digest field
            five days after P14 shipped it: the field's first live use.
 
 WHY THIS ORDER
@@ -799,8 +854,9 @@ TIER 1 DETAIL
         P2/P3/P7/P8 landed - 43:50 on the default seed, 44:32 under
         PYTHONHASHSEED=12345. Fast suite 122 passed, 2 deselected.
 
-        NOTE FOR ANY DOC EDIT: the golden takes 42-53 MINUTES, measured SEVEN
-        times (42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10). Every doc says the
+        NOTE FOR ANY DOC EDIT: the golden takes 34-53 MINUTES, measured EIGHT
+        times (34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 -- 34:12
+        added 2026-08-12 by E8's numpy-2 gate, and it moved the FLOOR). Every doc says the
         RANGE correctly as of C9, and as of the commit after the audit
         (2026-08-11) the COUNT is six everywhere too: CLAUDE.md, README.md,
         docs/guides/setup.md, docs/plans/revival-roadmap.md and pyproject.toml
@@ -1170,7 +1226,7 @@ TIER 2 DETAIL
         ABOUT THE WORK. Centring MOVES THE NUMBERS, so by P1's rule it cannot
         ride an existing pipeline name: it needs its own PipelineConfig field
         with a legacy-preserving default, its consumer and banner line in the
-        same commit (P35), and a 42-53 minute golden gate. Budget that, not one
+        same commit (P35), and a 34-53 minute golden gate. Budget that, not one
         line.
         Effort: ONE LINE of arithmetic, plus a config seam and a golden run.
         Impact: unknown, worth measuring.
@@ -1662,17 +1718,19 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
         does. Same defence-in-depth reasoning that added rule 2 originally.
         Verified end to end: staging a grouped fold file now exits 1.
 
-[~] P31. THE GOLDEN TAKES 42-53 MINUTES, NOT 20-26
+[~] P31. THE GOLDEN TAKES 34-53 MINUTES, NOT 20-26
         MOSTLY DONE 2026-08-11 (C9). REWRITTEN TO RESIDUE-ONLY 2026-08-11
         (audit); state corrected from [ ] to [~] to match the Tier 3 checklist
         entry, which has said MOSTLY DONE since C9 landed.
 
-        MEASURED SEVEN TIMES, not the twice this block used to claim: 42:28,
-        43:28, 43:50, 44:32, ~50:00, 52:35, 53:10. Call it 42-53 minutes.
+        MEASURED EIGHT TIMES, not the twice this block used to claim: 34:12,
+        42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10. Call it 34-53 minutes.
         (42:28 arrived 2026-08-11 with the D3+D4 gate and moved the range's
         floor -- the third time a new measurement has invalidated a count or
         range in these docs, which is the argument for quoting the range
-        loosely and the list exactly.)
+        loosely and the list exactly. Then 34:12 arrived 2026-08-12 with E8's
+        numpy-2 gate -- this Windows box, byte-exact, 2052.84s -- and moved the
+        floor AGAIN, from 42 to 34. Fourth time. The argument holds.)
 
         WHAT IS LEFT ON THE RANGE IS EXACTLY ONE LINE: tests/test_golden.py:68
         still says "about 20 minutes". C9 corrected the RANGE in every other
@@ -2203,5 +2261,5 @@ NEW ITEMS - DISCOVERED WHILE IMPLEMENTING TIER 1 (added 2026-08-05)
      the comment that explains why, so the next person to read either module
      finds the same reasoning. NOT ON THE GOLDEN PATH -- test_golden.py injects
      the config through run_analysis directly and never reaches __main__ -- so
-     it needs the fast suite, not a 42-53 minute gate. Say that in the commit
+     it needs the fast suite, not a 34-53 minute gate. Say that in the commit
      message rather than leaving a reader to wonder why no golden ran.

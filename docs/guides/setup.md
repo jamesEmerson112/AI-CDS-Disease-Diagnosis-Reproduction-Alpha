@@ -104,8 +104,9 @@ The one that matters is the **golden regression** — it runs the full 10-fold p
 committed byte-exact reference:
 
 ```bash
-pytest -m golden      # 42-53 minutes, measured seven times: 42:28, 43:28, 43:50,
-                      # 44:32, ~50:00, 52:35, 53:10. NOT the ~20 min an earlier version of this file
+pytest -m golden      # 34-53 minutes, measured eight times: 34:12, 42:28, 43:28, 43:50,
+                      # 44:32, ~50:00, 52:35, 53:10 (34:12 = 2026-08-12, Windows, numpy-2.0.2
+                      # venv). NOT the ~20 min an earlier version of this file
                       # claimed — nor the ~20 min tests/test_golden.py's own docstring
                       # still claims at :68, which is left alone on purpose.
 ```
@@ -135,12 +136,23 @@ pipelines, generate the folds first (they are gitignored, so a fresh clone does 
 
 ```bash
 python scripts/make_folds.py --verify              # writes data/folds_grouped/
+                                                   # needs numpy 2.x — see the pin note below
 
 python scripts/run_bert_analysis.py --model 2      # 1=Bio_ClinicalBERT 2=BiomedBERT 3=BlueBERT
 python scripts/run_bert_analysis.py --model all --pipeline drg --out results_drg
 # ~21 min per model on an M-series Mac; ~11.5 min on a 32-vCPU Linux box;
 # ~14 min on a Threadripper 7960X. "all" runs the three sequentially.
 ```
+
+**The numpy pin is load-bearing for that first command.** `config/environment.yml` pins
+`numpy>=2.0,<3` because `GroupKFold` breaks its ~85 single-admission ties through `np.argsort`,
+whose unstable-sort behaviour changed between numpy 1.x and 2.x — a numpy-1.x environment builds a
+*different* (equally leak-free, equally deterministic) split that is not comparable with any
+committed result. See `docs/findings/14-fold-split-environment-dependence.md`. Under the pin,
+`--verify` reproduces the canonical split on Windows and Linux alike (verified 2026-08-12: digest
+match, `VERIFY: PASS`, 0 leaked), so regenerating locally is the normal path. `--verify` still
+**warns** on a digest mismatch, which is what catches an environment that ignored the pin. If you
+add `torch` to an environment, it must be **`torch>=2.3`** — the numpy-2-compatible line.
 
 Run from the repository root. With no `--out`, output paths are built from the current working
 directory, so running from elsewhere scatters results — and that flat layout is what the golden

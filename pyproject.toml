@@ -59,8 +59,9 @@ markers = [
     "golden: byte-compares output against a committed reference run",
 ]
 # Network and slow tests are both opt-in. The golden regression runs the full
-# 10-fold pipeline and takes 42-53 minutes (measured 42:28, 43:28, 43:50, 44:32, ~50:00
-# 52:35 and 53:10 -- NOT the ~26 minutes this comment used to claim), so a bare
+# 10-fold pipeline and takes 34-53 minutes (measured 34:12, 42:28, 43:28, 43:50, 44:32,
+# ~50:00, 52:35 and 53:10 -- 34:12 on 2026-08-12 under the numpy-2.0.2 venv, NOT the
+# ~26 minutes this comment used to claim), so a bare
 # `pytest` must not include it or nobody will run tests at all.
 #   pytest              fast unit + characterization  (~4s)
 #   pytest -m golden    the byte-exact pipeline regression
