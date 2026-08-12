@@ -37,6 +37,15 @@ from aicds.analysis.performance_index import (
     read,
     validate,
 )
+from aicds.config import from_name as pipeline_config
+
+# Imported rather than re-derived as `preprocess_version != "legacy"`. That
+# spelling silently picks the legacy side on a typo, which is the one failure
+# aicds.config exists to prevent, and it would give this file a second opinion
+# about which arm a run belongs to (cython_utils.use_corrected_preprocessing's
+# own docstring forbids exactly that). The cost is that this reporting script now
+# imports the pipeline module, and with it nltk.
+from aicds.utils.cython_utils import use_corrected_preprocessing
 
 # Note on the name: the page_* functions below take a parameter called `runs`
 # (the list of decorated run dicts) and so shadow this module inside their own
@@ -56,6 +65,23 @@ from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 STRATEGIES = ["MAX", "TOP-10", "TOP-20", "TOP-30", "TOP-40", "TOP-50"]
 THRESHOLDS = [0.6, 0.7, 0.8, 0.9, 1.0]
+
+#: ``(reachable, total)`` test cases whose own DRG label appears anywhere in their
+#: own fold's training pool -- the hard ceiling on any exact-match metric, quoted
+#: on page 4.
+#:
+#: Keyed by ``fold_dir``, NOT by pipeline name, because it is a property of the
+#: SPLIT alone: four of the six registry pipelines share ``folds_grouped`` and
+#: would otherwise need four identical entries, one of which would eventually be
+#: forgotten. Both numbers are pinned in ``tests/test_drg_grader.py``
+#: (``TestExactMatchCeiling``) and were recounted there, not carried over from a
+#: doc -- the leakage fix moved retrievability by exactly one case, which is the
+#: reason a single hard-coded 75 looked plausible on a grouped-fold report for as
+#: long as it did.
+EXACT_MATCH_CEILING = {
+    "folds": (75, 129),
+    "folds_grouped": (76, 129),
+}
 
 # Categorical palette, assigned by *entity* and never cycled or re-ranked.
 # Validated all-pairs on a light surface (worst CVD dE 9.2, worst normal-vision
@@ -302,6 +328,49 @@ PIPELINE_NOTES = {
 
 
 # --------------------------------------------------------------------------
+# Pipeline facts the prose depends on
+# --------------------------------------------------------------------------
+#
+# Three claims on the cover and on page 4 used to be stated unconditionally, and
+# all three were written when `legacy` was the only pipeline that had ever been
+# run: the patient-leakage footer, the "preprocessing still differs" heading, and
+# the 75/129 exact-match ceiling. Every one of them is false under a grouped-fold
+# pipeline, and a caveat the author appears to have checked is worse than none.
+#
+# They are answered from the run's own PipelineConfig rather than from a list of
+# pipeline names spelled out here, because a name list is a second registry: the
+# day `corrected2` was added it would have had to be remembered in three places,
+# and the report would have gone on asserting leakage for whichever one was
+# missed. config.from_name is the registry; these read its fields.
+
+def leaks_patients(pipeline):
+    """True when this pipeline splits on HADM_ID, so patients cross folds.
+
+    ``data/folds`` is the committed split -- 129 admissions from 100 subjects,
+    41 test cases retrieving another admission of their own patient.
+    ``data/folds_grouped`` is GroupKFold on SUBJECT_ID and leaks none.
+    """
+    return pipeline_config(pipeline).fold_dir == "folds"
+
+
+def arms_preprocess_alike(pipeline):
+    """True when both arms encode the SAME diagnosis text.
+
+    The baseline always calls ``preprocess_sentence`` on diagnosis strings; the
+    BERT path does so only under corrected preprocessing (``bert_models.py:346``
+    gates it on the same predicate). Under ``legacy`` text handling 119 of 145
+    descriptions (82.1%) therefore reach the two encoders as different strings,
+    and a baseline-vs-BERT gap is confounded by preprocessing on top of encoder.
+    """
+    return use_corrected_preprocessing(pipeline_config(pipeline))
+
+
+def exact_match_ceiling(pipeline):
+    """``(reachable, total)`` for this pipeline's split. See EXACT_MATCH_CEILING."""
+    return EXACT_MATCH_CEILING[pipeline_config(pipeline).fold_dir]
+
+
+# --------------------------------------------------------------------------
 # Parsing -- one call into the shared parser, plus this script's own guard
 # --------------------------------------------------------------------------
 
@@ -543,6 +612,18 @@ def resolve_pipeline(results_dir, requested):
             "[ERROR] pipeline '%s' has parser expectations but no PIPELINE_NOTES\n"
             "        entry, so the cover page cannot say what it changed." % requested
         )
+    fold_dir = pipeline_config(requested).fold_dir
+    if fold_dir not in EXACT_MATCH_CEILING:
+        # Same reasoning as the check above, for the same reason: page 4 quotes
+        # the exact-match ceiling of the split, and a new fold_dir with no counted
+        # ceiling must stop the report rather than reach page 4 as a KeyError --
+        # or, worse, silently borrow another split's denominator.
+        raise SystemExit(
+            "[ERROR] pipeline '%s' splits on data/%s, which has no counted\n"
+            "        exact-match ceiling. Add one to EXACT_MATCH_CEILING and pin it\n"
+            "        in tests/test_drg_grader.py (TestExactMatchCeiling) -- it is a\n"
+            "        count over the split, not a number to estimate." % (requested, fold_dir)
+        )
     return requested
 
 
@@ -683,10 +764,20 @@ def page_cover(pdf, runs, pipeline):
     # rather than warning unconditionally.
     one_host = len({r["host"] for r in runs}) == 1
 
+    # The second half of the one-host heading names the confound that SURVIVES
+    # the hardware answer, so it has to move with the pipeline: under corrected /
+    # corrected2 / drg both arms encode preprocessed text and "preprocessing
+    # still differs" is simply untrue. Under legacy / folds-only it still is.
+    if one_host:
+        heading = "PROVENANCE -- one machine; %s" % (
+            "both arms preprocess alike" if arms_preprocess_alike(pipeline)
+            else "preprocessing still differs"
+        )
+    else:
+        heading = "PROVENANCE WARNING -- cross-arm deltas are confounded"
+
     warn.text(
-        0.022, 0.87,
-        "PROVENANCE -- one machine; preprocessing still differs" if one_host
-        else "PROVENANCE WARNING -- cross-arm deltas are confounded",
+        0.022, 0.87, heading,
         fontsize=12, fontweight="bold", color="#a83c14", va="top",
     )
 
@@ -763,12 +854,27 @@ def page_cover(pdf, runs, pipeline):
         # grows a line does not collide with the next heading.
         y -= 0.030 + 0.0215 * (body.count("\n") + 1) + 0.018
 
+    # The leakage footer is a statement about THIS run's fold split, and it was
+    # written before any grouped-fold pipeline existed. Printing it under
+    # corrected / corrected2 / drg / folds-only asserts a defect those runs do
+    # not have -- and does it in the small print, where nobody re-checks it.
+    if leaks_patients(pipeline):
+        leakage_note = (
+            "Both arms additionally share a patient-leakage defect: folds split on HADM_ID, but 129 admissions come "
+            "from 100 patients, so 41 of 129\ntest cases (31.8%) retrieve another admission of the same SUBJECT_ID. "
+            "Measured inflation at threshold 1.0 is +0.11 to +0.26 -- roughly ten\ntimes the encoder differences "
+            "shown here. See docs/findings/05-patient-leakage.md."
+        )
+    else:
+        leakage_note = (
+            "Patient leakage is NOT present here: this pipeline splits on data/folds_grouped (GroupKFold on "
+            "SUBJECT_ID), so 0 of 129 test cases\nretrieve another admission of their own patient -- down from 41 of "
+            "129 (31.8%) under the HADM_ID split, whose measured inflation at\nthreshold 1.0 was +0.11 to +0.26, "
+            "roughly ten times the encoder differences shown here. See docs/findings/05-patient-leakage.md."
+        )
+
     fig.text(
-        0.06, 0.038,
-        "Both arms additionally share a patient-leakage defect: folds split on HADM_ID, but 129 admissions come from "
-        "100 patients, so 41 of 129\ntest cases (31.8%) retrieve another admission of the same SUBJECT_ID. Measured "
-        "inflation at threshold 1.0 is +0.11 to +0.26 -- roughly ten\ntimes the encoder differences shown here. "
-        "See docs/findings/05-patient-leakage.md.",
+        0.06, 0.038, leakage_note,
         fontsize=7.6, color=INK_MUTED, va="bottom", linespacing=1.5,
     )
 
@@ -928,7 +1034,7 @@ def _plot_topk_panel(ax, runs, threshold):
     )
 
 
-def page_topk_curves(pdf, runs):
+def page_topk_curves(pdf, runs, pipeline):
     fig = _new_page(
         "F-score vs TOP-K, at the two extreme thresholds",
         "Left: threshold 0.6, where the BERT arm is saturated. Right: threshold 1.0, "
@@ -948,13 +1054,22 @@ def page_topk_curves(pdf, runs):
     for text in legend.get_texts():
         text.set_color(INK)
 
+    # The ceiling belongs to the SPLIT, so it is looked up rather than spelled
+    # out: 75/129 on the committed data/folds, 76/129 on folds_grouped. The
+    # difference is one case, which is exactly why a hard-coded 75 survived on
+    # grouped-fold reports without looking wrong.
+    reachable, total = exact_match_ceiling(pipeline)
+    fraction = float(reachable) / total
+
     fig.text(
         0.075, 0.175,
         "These curves can only rise: a case counts as a hit if the correct diagnosis appears anywhere in the K "
         "predictions, and the other K-1 cost nothing.\nThe rise from MAX to TOP-10 is therefore a measure of how much "
         "slack the metric grants, not of retrieval quality. A genuine set-level P/R/F1\nover the diagnosis sets is "
-        "tracked in docs/plans/metric-redesign.md. Note also that only 75 of 129 test cases (58.1%) have their correct\n"
-        "DRG present anywhere in their fold's training pool, so a perfect retriever caps at 0.581 under exact matching.",
+        "tracked in docs/plans/metric-redesign.md. Note also that only %d of %d test cases (%.1f%%) have their "
+        "correct DRG\npresent anywhere in their own fold's training pool under data/%s, so a perfect retriever caps "
+        "at %.3f under exact matching."
+        % (reachable, total, 100.0 * fraction, pipeline_config(pipeline).fold_dir, fraction),
         fontsize=8.2, color=INK_SECONDARY, va="top", linespacing=1.55,
     )
 
@@ -1093,7 +1208,7 @@ def build_report(runs, out_path, pipeline):
         page_cover(pdf, runs, pipeline)
         page_summary_table(pdf, runs)
         page_threshold_curves(pdf, runs)
-        page_topk_curves(pdf, runs)
+        page_topk_curves(pdf, runs, pipeline)
         page_prediction_rate(pdf, runs)
         page_full_grid(pdf, runs)
 

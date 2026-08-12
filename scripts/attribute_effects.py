@@ -243,6 +243,24 @@ def resolve_roots(roots=None):
     return {spec.pipeline: root for spec, root in zip(ROOT_SPECS, roots)}
 
 
+#: Why a root cannot enter the table. Named because they are written in
+#: :func:`collect` and read in :data:`_ROOT_STATUS`, and a typo in either copy
+#: would silently downgrade a status word to the catch-all.
+_MISSING = "no such directory"
+_UNREADABLE = "unreadable run layout"
+_EMPTY = "directory exists but holds no runs"
+
+#: The one-word status printed beside each reason. The column used to say MISSING
+#: for all three, which is only true of the first: the other two roots ARE there,
+#: one at the wrong depth and one with nothing under it, and neither is fixed by
+#: the "produce it with" command block that MISSING points the reader at.
+_ROOT_STATUS = {
+    _MISSING: "MISSING",
+    _UNREADABLE: "UNREADABLE",
+    _EMPTY: "EMPTY",
+}
+
+
 def _unusable_roots_error(roots, states, details):
     """The error a first-time user sees, because two roots do not exist yet.
 
@@ -273,9 +291,9 @@ def _unusable_roots_error(roots, states, details):
     for spec in ROOT_SPECS:
         state = states.get(spec.pipeline)
         lines.append(
-            "  %-9s %-16s %-26s %s"
-            % ("MISSING" if state else "ok", spec.pipeline, roots[spec.pipeline],
-               state or spec.changes)
+            "  %-11s %-16s %-26s %s"
+            % (_ROOT_STATUS.get(state, "UNUSABLE") if state else "ok",
+               spec.pipeline, roots[spec.pipeline], state or spec.changes)
         )
 
     malformed = [spec for spec in ROOT_SPECS if spec.pipeline in details]
@@ -327,19 +345,16 @@ def _unusable_roots_error(roots, states, details):
     return "\n".join(lines)
 
 
-def _discover(root, pipeline):
+def _discover(root):
     """``aicds.runs.discover``, returning ``(runs, failure_text)`` rather than raising.
 
-    ``RunLayoutError`` already says which directory and why; what it cannot know
-    is which of four roots the caller passed, and that is the first thing a
-    reader of this script's output needs -- so the caller pairs it back up with a
-    column name.
-
-    It is RETURNED rather than raised so :func:`collect` reports every unusable
-    root in one pass, matching :func:`_unusable_roots_error`'s design. Four roots
-    are normally harvested by one person in one session and go wrong the same way;
-    exiting on the first malformed tree costs a second session to discover the
-    second.
+    The failure text is RETURNED rather than raised so :func:`collect` reports
+    every unusable root in one pass, matching :func:`_unusable_roots_error`'s
+    design. Four roots are normally harvested by one person in one session and go
+    wrong the same way; exiting on the first malformed tree costs a second session
+    to discover the second. ``RunLayoutError`` names the directory but not which
+    of the four columns asked for it, so the caller -- which knows -- pairs the
+    text back up with a pipeline name.
     """
     try:
         return runs.discover(root), None
@@ -461,15 +476,15 @@ def collect(roots=None):
     for spec in ROOT_SPECS:
         root = resolved[spec.pipeline]
         if not os.path.isdir(root):
-            states[spec.pipeline] = "no such directory"
+            states[spec.pipeline] = _MISSING
             continue
-        found, failure = _discover(root, spec.pipeline)
+        found, failure = _discover(root)
         if failure is not None:
-            states[spec.pipeline] = "unreadable run layout"
+            states[spec.pipeline] = _UNREADABLE
             details[spec.pipeline] = failure
             continue
         if not found:
-            states[spec.pipeline] = "directory exists but holds no runs"
+            states[spec.pipeline] = _EMPTY
             continue
         states[spec.pipeline] = None
         discovered[spec.pipeline] = {run.key: run for run in found}
