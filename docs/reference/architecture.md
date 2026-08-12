@@ -260,9 +260,12 @@ self-selection is worth is measured in [16](../findings/16-self-selection.md), f
    now runs and reproduces its six committed SVGs byte-identically.
    See [10](../findings/10-output-path-fragmentation.md), which carries the dated close.
 3. **Every per-case output file is empty** — both arms, always (258 zero-byte files per
-   baseline run). Now **P40**, the highest-value open item, because finding 13's untestable
-   confound needs per-case relevance. Fix by writing a new sibling file, not by resurrecting
-   the dead handles.
+   baseline run). This was **P40**, and P40 **closed 2026-08-12** by writing a *new sibling*,
+   `RankCases.txt`, rather than resurrecting the dead handles: finding 13's untestable confound
+   needed per-case relevance, and that is where it now lives (see
+   [16](../findings/16-self-selection.md)). The zero-byte files themselves are unchanged and
+   deliberately so — repairing them would add writes inside the golden's region for output
+   nothing reads.
 4. **The dashboard 404s** — the committed JSON sits in the stray `dashboard/dashboard/` tree
    while the app fetches from `dashboard/public/data/`; re-run `build_dashboard_data.py`.
    Still open; the fix moved to P38 with the rest of the Phase 3 polish.

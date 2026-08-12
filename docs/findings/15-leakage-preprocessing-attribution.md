@@ -1,6 +1,6 @@
 # 15 — Splitting the legacy→corrected drop: leakage, preprocessing, and the interaction
 
-**Date:** 2026-08-12 · **Host:** RunPod Linux (x86), 16 vCPU, 251 GB RAM, torn down after harvest ·
+**Date:** 2026-08-12 · **Host:** RunPod Linux, 16 vCPU, 251 GB RAM, torn down after harvest ·
 **Commits:** runs `da93b96` (dirty flag set — see Provenance), analysis `bc0f002` + `c5508ef` ·
 **Problem number:** P29 (closes it)
 
@@ -167,23 +167,32 @@ one.
 
 - **Host and environment of record.** RunPod Linux, 16 vCPU (`nproc` captured live), 251 GB host RAM,
   torn down 2026-08-12 after harvest. Python 3.9.23, numpy 2.0.2, torch 2.8.0+cpu, sklearn 1.6.1.
+  The architecture is not asserted from a label: **every run's `run_metadata.json` records
+  `platform: Linux-6.8.0-45-generic-x86_64`**, which is the citable form. *(Corrected 2026-08-12: the
+  header of this page carried a bare "(x86)" token with no source. It was right, and it was still an
+  unsourced token in a file whose entire subject is attributing numbers to configurations.)*
 - **Code state.** `da93b96`, `dirty: true` — the dirt is **two untracked leftovers** of the retired
   2026-08-06 staged script (`_done_drg/`, `attribution_runs.sh`) and **zero tracked modifications**.
   The delta from `da93b96` to the commit that produced this report is docs, tests, an environment pin
   and the analysis tooling; the pipeline is identical.
-- **Session shape.** Ten sequential verify-gated driver steps, 22:57:10 → 02:28:29 UTC (5h31m). The
+- **Session shape.** Ten sequential verify-gated driver steps, 22:57:10 → 02:28:29 UTC (3h31m19s).
+  *(Corrected 2026-08-12: this read "5h31m", which the two timestamps printed beside it refute —
+  the elapsed time is 3h31m19s, and the ten step timings sum to 211.3 min, i.e. the same 3h31m.)* The
   four P29 steps occupy 23:09:36 → 00:50:56 (1h41m20s): baseline `folds-only` 12m22s, baseline
   `preprocess-only` 11m32s, BERT `--model all` `folds-only` 40m08s, BERT `--model all`
   `preprocess-only` 37m18s. The session's first step re-ran the **`legacy` baseline** into
   `results_verify/` and byte-matched the 2026-08-05 reference — the C4/C5 verification — which
   corroborates the baseline cell of this table's reference row on the same box that produced the two
   new trees. The three BERT cells of that row were not re-verified.
-- **These are the first metadata-bearing trees in the project.** Every run in both carries
+- **These come from the first session to produce metadata-bearing trees.** Every run in both carries
   `run_metadata.json` (P14/C8), so the `folds-only` and `preprocess-only` columns are attributed by
   the run's own record. The `legacy` and `corrected` columns are not — `attribute_effects.py` emits
   one `[WARN] … taken on the directory's word (pre-P14 runs)` line for each, because those trees
   predate the field. Two of four columns still rest on a directory name; that is now visible in the
-  output rather than assumed.
+  output rather than assumed. *(Softened 2026-08-12 from "the first metadata-bearing trees in the
+  project": the session's own **first** step — the `legacy` baseline re-verification into
+  `results_verify/` — also carries `run_metadata.json` and predates these two trees by minutes. The
+  claim worth making is about the **session**, not about which of its trees was first.)*
 - **The fold split is pinned by content, not by name.** Every `folds-only` run records the canonical
   `folds_grouped` digest `b36f7216…a6ec5084f` in `fold_dir_sha256` — the split of record from
   [14](14-fold-split-environment-dependence.md). The `preprocess-only` runs record the digest of the

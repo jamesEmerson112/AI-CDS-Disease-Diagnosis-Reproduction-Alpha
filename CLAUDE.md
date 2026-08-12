@@ -19,13 +19,13 @@ rather than treating it as complete.
 
 - **Saturation. OPEN, but confined.** All three BERT models score 1.000 at threshold 0.6 because biomedical embeddings are compact (mean pairwise cosine 0.72–0.93 even between *unrelated* diagnoses) and the MAX-over-Cartesian-product aggregator amplifies that, so ~100% of patient pairs clear 0.6. Threshold-dependent; raising it helps. **It does not arise under `--pipeline drg` at all**, which has no threshold. So it bounds the cosine-graded tables below 1.0 and nothing else. See `docs/findings/03-metric-saturation.md`.
 - **Degeneracy. EXPLAINED 2026-08-06, not open.** Across **all 12,600 rows of committed BERT results, precision == recall == F-score**, with zero exceptions. Every test case increments exactly one of TP or FP, so `tp+fp == nrow`, precision reduces to `tp/nrow` (which *is* recall), and their harmonic mean is that same value. **Every "F1" in the committed BERT results is accuracy.** Threshold-*independent*. **Do not extend this to the baseline** — `archive/stale-docs/Reproduce_w_transformers.md:134-143` reports P=0.621/R=0.412/F1=0.489 at TOP-10, i.e. P≠R, meaning that run abstained on cases with no candidate above `PRUNING_SIMILARITY`. The baseline run supplied the missing artifact: P ≠ R in every row, because `PR` (prediction rate) is 0.7679 throughout — **30 of 129 cases (23.3%) abstain** when nothing clears `PRUNING_SIMILARITY`. The tell is one column: `TP+FP` sums to exactly 12.9 (the mean fold test size) for all three BERT arms, forcing `tp+fp == nrow`, but to 9.9 for the baseline — still the fastest diagnostic available. **What finding 13 settled is the label: `P == R` is `PR == 1.0`, i.e. the answered and all-cases populations being the *same set* because those arms never abstain. It was never the metric collapsing — the columns were unlabelled, not wrong.** `RankMetrics.txt` reproduces legacy `P`/`R`/`PR` bit-exactly from an independent code path, which is what proves it. See `docs/findings/04-metric-degeneracy.md`, `09-baseline-first-run.md` and `13-rank-aware-metrics.md`.
-- **Patient leakage. FIXED 2026-08-05 (`c2115ba`), 41 → 0.** The legacy folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15), so **41 of 129 test cases (31.8%) had another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0 was **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination was ~10× the effect under study. Tell: on leaked cases all three encoders scored *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverged. **It affected both arms**, so the published 0.489/0.512/0.521 carry it too. Fixed by `GroupKFold` on `SUBJECT_ID` (`scripts/make_folds.py` → `data/folds_grouped/`), recounted independently rather than trusting `--verify`. **`legacy` still uses the leaky folds on purpose**, so the golden never moves. See `docs/findings/05-patient-leakage.md`.
-- **Preprocessing defects. FIXED 2026-08-05 (`c2115ba`), nine of 89 fragments remain (P27).** `preprocess_sentence` padded `/` then dropped `o` as an NLTK stopword, so **`w/o` became `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both became `tracheostomy w extensive procedure`. Negation destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) were orphan fragments** (`" organism NOS"` ×26) embedded as if they were symptoms, creating spurious 1.0 matches. Under `corrected`, `w/o` survives as `without` and 80 of 89 fragments are rejoined. See `docs/findings/06-preprocessing-defects.md`.
+- **Patient leakage. FIXED 2026-08-05 (`c2115ba`), 41 → 0.** The legacy folds split on `HADM_ID`, but **129 admissions come from only 100 patients** (one patient has 15), so **41 of 129 test cases (31.8%) had another admission from the same `SUBJECT_ID` in their own retrieval pool.** Measured inflation at threshold 1.0 was **+0.11 to +0.26** — against encoder differences of 0.015–0.046 and per-fold σ of 0.071–0.124, i.e. the contamination was ~10× the effect under study. Tell: on leaked cases all three encoders scored *identically* (0.293 MAX, 0.415 TOP-10); on clean cases they diverged. **It affected both arms**, so the published 0.489/0.512/0.521 carry it too. Fixed by `GroupKFold` on `SUBJECT_ID` (`scripts/make_folds.py` → `data/folds_grouped/`), recounted independently rather than trusting `--verify`. **`legacy` still uses the leaky folds on purpose**, so the golden never moves. **Attributed per arm 2026-08-12 (finding 15), which is what turns "it affected both arms" from an inference into a measurement:** closing the leak alone costs **+0.027 (Bio_ClinicalBERT) to +0.070 (BioSentVec)** of TOP-10 F at threshold 1.0, and it is the **larger term in all four rows** — 3.5× to 6.3× the preprocessing term, and unboundedly so for BiomedBERT, whose preprocessing term is exactly zero. At the cell Comito et al. publish (threshold 0.6) leakage is **54.3% of the 0.0902 baseline drop**, against 43.8% preprocessing and 1.9% interaction. See `docs/findings/05-patient-leakage.md` and `15-leakage-preprocessing-attribution.md`.
+- **Preprocessing defects. FIXED 2026-08-05 (`c2115ba`); the last nine of 89 fragments closed 2026-08-11 (`7e49212`, P27) under a *third* variant `corrected2`, so `corrected` — the pipeline every headline number comes from — still carries those nine.** `preprocess_sentence` padded `/` then dropped `o` as an NLTK stopword, so **`w/o` became `w`** — `"Tracheostomy w/o Extensive Procedure"` and `"Tracheostomy w Extensive Procedure"` both became `tracheostomy w extensive procedure`. Negation destroyed. Separately, symptoms are `,`-split while ICD-9 short titles contain commas, so **80 of 1,805 tokens (4.4%) were orphan fragments** (`" organism NOS"` ×26) embedded as if they were symptoms, creating spurious 1.0 matches. Under `corrected`, `w/o` survives as `without` and 80 of 89 fragments are rejoined. **Its effect has a sign, and the sign varies by arm — measured 2026-08-12 (finding 15), TOP-10 at threshold 1.0.** The text fix *raises* BioSentVec (−0.0124) and BlueBERT (−0.0077), *costs* Bio_ClinicalBERT (+0.0077), and moves BiomedBERT by **exactly +0.000000** — a bit-identical cell, recorded as measurement with no mechanism asserted. So "a defect fix must cost score" is not what happened here: it costs one arm, pays two, and is invisible to a fourth on the same 129 admissions. **P27 closed 2026-08-11 (`7e49212`) as a third variant `corrected2`** — `corrected` stays frozen — and its first four-arm run moved BioSentVec 0.2163→0.1856 and Bio_ClinicalBERT 0.2491→0.2424 while leaving BiomedBERT and BlueBERT **bit-identical in that cell** (they move in other rows; the bit-identity is cell-local). See `docs/findings/06-preprocessing-defects.md`, whose addendum carries the corrected2 run.
 - **Self-grading. FIXED 2026-08-06 (`75b6530`) — and the bias turned out to be possible but never actual.** Each arm scored its own predictions by cosine *in the space that produced the retrieval*, so a compact space could mark its own work leniently. `--pipeline drg` compares DRG label strings with no cosine anywhere. **It reproduces corrected cosine at threshold 1.0 bit-exactly** — 144 numbers, 4 arms × 6 aggregators × 6 columns, not one differing digit. So P4 did not move the numbers; it removed the reason to doubt them, which is the more useful outcome and the one worth reporting. See `docs/findings/12-drg-grader.md`.
 - **Rank-blindness. FIXED 2026-08-06 (`5393cab`), additively.** A hit at rank 1 and a hit at rank 50 counted identically, so TOP-K rose with `K` by construction. MRR has no `K`; Precision@K falls with `K` for every arm, inverting the TOP-K curve. `PerformanceIndex.txt` is untouched and the golden stayed byte-exact — rank metrics go to a sibling `RankMetrics.txt`. See `docs/findings/13-rank-aware-metrics.md`.
 - **Abstention asymmetry. OPEN, and not closable.** The baseline declines to answer 24.4% of cases; all three BERT arms never do. So **how you score an abstained case reorders all four arms and inverts every sign** — baseline last when abstention scores 0, first when it is excluded. This is not a metric defect to fix: abstention is a property of the arm, not of the metric, so no convention is neutral. `RankMetrics.txt` reports all three populations and `analyze_rank_metrics.py` refuses to privilege one. See `docs/findings/13-rank-aware-metrics.md`. **Measured 2026-08-12 (finding 16), which does not close it:** scoring all four arms on the baseline's own 98 answered cases raises *every* arm by +0.032 to +0.038 pooled MRR — so the self-selection confound is real but **arm-neutral** — and on that matched set the ordering inverts (Bio_ClinicalBERT 0.171072 > BiomedBERT 0.167828 > BlueBERT 0.155362 > BioSentVec 0.146535), which explains the baseline's answered-only first place as mismatched denominators rather than removing the knob; see `docs/findings/16-self-selection.md`.
 
-A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. **That curve is an artifact, not a result — verified monotonic in 18 of 18 model × threshold combinations, zero violations.** Precision@K (P5) is the diagnostic that exposes it: it *falls* with K for every arm, and unlike Hit@K nothing forces its direction. A genuine set-level P/R/F1 over the diagnosis sets (**P6, still open**) remains the more complete fix.
+A corollary worth knowing: TOP-K scores rise monotonically with K because one hit suffices and there is no penalty for the other K−1 predictions. **That curve is an artifact, not a result — verified monotonic in 18 of 18 model × threshold combinations, zero violations.** Precision@K (P5) is the diagnostic that exposes it: it *falls* with K for every arm, and unlike Hit@K nothing forces its direction. A genuine set-level P/R/F1 over the diagnosis sets would be the more complete fix — but **P6, the item that carried it, was retired 2026-08-11**, because its proposed method is cosine over the diagnosis embeddings and would reintroduce the self-grading confound P4 removed. The *idea* survives and nothing measures it today; if it is ever built, build it on the encoder-independent DRG labels.
 
 **Before designing any exact-match metric:** only **76 of 129 test cases (58.9%)** have their correct DRG present anywhere in their own fold's training pool on `folds_grouped` — 105 of the 145 unique diagnoses occur exactly once in the dataset. A perfect retriever therefore caps at **58.9%** under exact matching (75/129 = 58.1% on the legacy `folds`; the leakage fix moved retrievability by exactly one case, so the two defects really were independent). Both figures are pinned in `tests/test_drg_grader.py`. Per fold the ceiling ranges from **4/13 (30.8%) to 13/15 (86.7%)** on the canonical split — finding 14 corrected the earlier 3/12 figure, which was measured on the environment-dependent Windows split no committed result used — which makes it a fresh source of per-fold variance in its own right. Prefer graded relevance — **but note the partial-credit ladder was designed and rejected on measurement** (`docs/findings/12-drg-grader.md`), so do not treat it as an easy win. Ordered fix list: `docs/plans/correctness-fixes.md`; metric options: `docs/plans/metric-redesign.md`.
 
@@ -38,7 +38,12 @@ A corollary worth knowing: TOP-K scores rise monotonically with K because one hi
 **Quote the `corrected` or `drg` numbers, never the `legacy` ones.** The legacy figures
 (0.285 / 0.280 / 0.254 / 0.239 at TOP-10, gap 0.005) carry patient leakage *and* divergent
 preprocessing and are superseded. This is the most likely place to state something wrong to the
-user, because the two sets look interchangeable and differ by ~0.04.
+user, because the two sets look interchangeable and differ by ~0.04. **That rule is now backed by
+measurement rather than by argument (finding 15):** the legacy→corrected gap has been split per
+arm, and **leakage is the dominant term in all four arms** — so a legacy number is not merely
+"older", it is inflated mostly by patients scoring against their own prior admissions. Never quote
+the `preprocess-only` column either: that tree keeps the leaky committed split by construction, so
+it is an attribution *input*, and any number or ranking read off it is a leaked number.
 
 Corrected, threshold 1.0, TOP-10 — the only cosine setting where no model sits on the ceiling:
 **Bio_ClinicalBERT 0.2491 > BioSentVec 0.2163 > BiomedBERT 0.1981 > BlueBERT 0.1821**, best-vs-baseline
@@ -46,8 +51,26 @@ gap **0.0328**, against per-fold σ of 0.054–0.139 and per-fold F ranging 0.00
 
 **The knobless result is the one to lead with.** With the threshold knob gone (`drg` collapses the
 five rows to one) and the `K` knob gone (MRR has no `K`), **no pair of encoders separates on any of
-the three abstention populations** — max paired |t| = 1.718, 1.651, 1.174 against the 2.262 needed
-at 9 df. That was predicted in writing before the run and it held.
+the three abstention populations** — max paired |t| = 1.718 (winnable), 1.651 (all-cases), 1.651
+(answered) against the 2.262 needed at 9 df. That was predicted in writing before the run and it
+held. A fresh tree five days and a numpy pin later (`results_p40`) reproduced those three figures
+**to the digit**. *(Corrected 2026-08-12: the answered figure read **1.174** here and in finding 13
+from the first. Recomputed on `results_p5` and `results_p40` alike, that population's six t-values
+are 0.808, 0.966, 1.174, 0.279, **1.651**, 0.754 — 1.174 is only the largest among the three
+BioSentVec pairs, and the stated convention is the max over all six. The two 1.651s are not a
+transcription slip: the three BERT-only pairs are **bit-identical** between the all-cases and
+answered blocks, because those arms never abstain, so excluding abstentions removes none of their
+cases. No verdict moves — 1.651 < 2.262 and no pair separates.)*
+
+**The last population that disagreed now agrees, and that is worth stating precisely (finding 16).**
+Scoring all four arms on the *same* 98 cases — the ones the baseline chose to answer — makes the
+restricted, `all-cases` and `winnable` orderings the **same ordering**: Bio_ClinicalBERT >
+BiomedBERT > BlueBERT > BioSentVec. The `answered` population was the only one of the three that put
+the baseline first, **and the only one comparing different case sets** (baseline n=98 against BERT
+n=129); matching the denominators inverts it, with the baseline's own number byte-identical across
+both spellings. **This is descriptive, not tested** — the restricted column is a pooled MRR over a
+fixed case set with no paired *t*-test — so read it as an explanation of the `answered` anomaly, not
+as a ranking. Nothing separates anywhere a test was run.
 
 **No encoder ranking is supported by this experiment** — that is the defensible claim, and a more
 interesting one than a spurious win. It now rests on four removed confounds rather than on one
@@ -57,7 +80,7 @@ disk, which is a hardware fact independent of the metric.
 
 ### The findings index
 
-`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement · **13** the knobless rank-aware comparison, and the third knob it exposed · **14** the grouped fold split depends on the numpy major version; the pod's split is canonical, pinned by digest — and, since 2026-08-12, by `numpy>=2.0,<3` in `config/environment.yml` · **15** the legacy→corrected drop split into leakage, preprocessing and their interaction (leakage dominates every arm; preprocessing is small and its sign varies; the published 0.0902 is 54.3% / 43.8% / 1.9%) — **its `preprocess-only` column is an attribution input, never a result, because that tree still leaks** · **16** self-selection measured: the baseline's 98 answered cases really are easier, by +0.032 to +0.038 MRR for *every* arm, so the confound is real but arm-neutral, and on the matched 98-case set the ordering inverts.
+`docs/findings/` — 01 baseline status · 02 encoder comparison · 03 saturation · 04 degeneracy · 05 patient leakage · 06 preprocessing defects · **07** why the comparison is not valid yet (the synthesis) · **08** where the runtime goes · **09** the baseline's first run · **10** output-path fragmentation · **11** the first uncontaminated four-arm results · **12** the encoder-independent DRG grader, and the partial-credit scheme rejected on measurement · **13** the knobless rank-aware comparison, and the third knob it exposed · **14** the grouped fold split depends on the numpy major version; the pod's split is canonical, pinned by digest — and, since 2026-08-12, by `numpy>=2.0,<3` in `config/environment.yml` *and* on the pip path (`pyproject.toml`, both requirements files) · **15** the legacy→corrected drop split into leakage, preprocessing and their interaction (leakage dominates every arm; preprocessing is small and its sign varies; the published 0.0902 is 54.3% / 43.8% / 1.9%) — **its `preprocess-only` column is an attribution input, never a result, because that tree still leaks** · **16** self-selection measured: the baseline's 98 answered cases really are easier, by +0.032 to +0.038 MRR for *every* arm, so the confound is real but arm-neutral, and on the matched 98-case set the ordering inverts.
 
 **One trap from finding 13 that is convincing enough to fool a careful reader, so it is repeated here deliberately.** Do not try to bound the self-selection half of the abstention problem with `MRR_all-cases / coverage`. That quotient is **algebraically identical** to `MRR_answered` — abstentions contribute 0 to the all-cases numerator and coverage is exactly the denominator ratio, so it returns ~1.0 by construction and looks like it bounds the confound at 0.5% while carrying no information at all. It was computed, believed for a minute, and withdrawn. The real test needs the BERT arms restricted to the baseline's 98 answered cases, which needs per-case relevance vectors (**P40**). **That real test has now been run** — P40 shipped `RankCases.txt` and finding 16 reports the matched comparison (every arm gains +0.032–0.038, the ordering inverts, zero `[WARN]` join failures), which is what the quotient above could never have told anyone; see `docs/findings/16-self-selection.md`.
 
@@ -73,7 +96,9 @@ conda activate disease-diagnosis
 git config core.hooksPath .githooks          # data-use guard; hooks are not cloned
 ```
 
-**`numpy` is pinned to `>=2.0,<3`, and that pin is load-bearing rather than hygiene.** `GroupKFold`
+**`numpy` is pinned to `>=2.0,<3` in `config/environment.yml` *and* on the pip path — `pyproject.toml`,
+`config/requirements.txt`, `config/requirements_bert.txt` — and that pin is load-bearing rather than
+hygiene.** `GroupKFold`
 breaks its ~85 single-admission ties through `np.argsort`, whose unstable-sort behaviour changed
 between numpy 1.x and 2.x, so a numpy-1.x environment builds a *different* (equally leak-free,
 equally deterministic) `data/folds_grouped/` split that is not comparable with any committed result
@@ -139,15 +164,20 @@ directory, a pipeline mismatch, or a run in which zero checks executed are all h
 `--pipeline` explicitly for a directory whose name is not in `_PIPELINE_BY_DIRNAME`.
 **Since `5a52d26` it prefers `run_metadata.json` and demotes the dirname table to a fallback**
 (`compare_models.resolve_pipeline`, `:395-433`), so every invocation on the three *existing* trees prints one
-`[WARN] no run_metadata.json … (pre-C8 runs)` line. That noise is by design and is interim: nothing
-retrofits metadata onto a run nobody can re-derive, so it persists until P29 produces the first
-metadata-bearing trees.
+`[WARN] no run_metadata.json … (pre-C8 runs)` line. That noise is by design: nothing retrofits
+metadata onto a run nobody can re-derive, so **the warning on those three trees is now permanent
+rather than interim** (updated 2026-08-12). The metadata path itself is exercised — every run in the
+five trees the 2026-08-12 pod session produced carries `run_metadata.json`, so all five resolve
+their pipeline from provenance (`[INFO]`) instead of the directory name; `results_corrected2` and
+`results_p40` could not resolve any other way, their names being in no dirname table.
 
 Tests:
 
 ```bash
-pytest                    # 413 passed, 3 deselected — this is the green baseline
-                          # (was 264 before the C1-C8 refactor added its tests)
+pytest                    # 499 passed, 3 deselected — this is the green baseline
+                          # (measured 2026-08-12; 413 after C1-C8, 264 before it.
+                          # The D and E commits added the rest: P40's RankCases
+                          # tests, P27's corrected2 pins, attribute_effects.)
 pytest -m golden          # THE SAFETY NET. Full 10-fold pipeline vs a committed
                           # byte-exact reference. ~34-53 min (measured eight
                           # times: 34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 —
@@ -195,6 +225,14 @@ work that deliberately changes results is tracked separately in `docs/plans/corr
 
 ## Environment traps that produce silently wrong answers
 
+- **On the Windows dev box the working environment is the repo-root `venv/`, not conda** (recorded
+  2026-08-12). Use `venv\Scripts\python.exe` — it carries numpy 2.0.2, torch 2.8.0+cpu, sklearn and
+  the editable install, and it is the interpreter every local suite and golden run in this project
+  was measured on. A conda env *named* `disease-diagnosis` also exists on that machine and is a
+  **broken 13-package stub**: pointing anything at it produces `ModuleNotFoundError` rather than a
+  wrong number, which is the good failure mode — but it has already caused one false conclusion
+  ("this venv has no torch"), reached by testing the stub and generalising. Check which interpreter
+  answered before believing a dependency result.
 - **`conda run -n disease-diagnosis python` resolves to the wrong interpreter** here — PATH
   shadowing sends it to Homebrew's Python 3.11, which has neither sklearn nor sent2vec, so
   dependency checks come back as false negatives. Invoke
@@ -280,8 +318,8 @@ Verified, documented, and **re-resolved by reading the tree on 2026-08-11** afte
 refactor moved most of these. Several line numbers had drifted by 100+ lines, so re-check before
 trusting any reference here.
 
-- **Every per-case output file is empty — this is now P40, the highest-value open item.** The baseline emits 258 zero-byte files; `cython_utils.py:203-204` opens both handles and `:308-309` closes them with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:539-540`). Neither arm has ever produced per-case output. **It was a cosmetic wart until finding 13 turned it into the binding constraint**: measuring whether the baseline's 98 self-selected answered cases are simply the easy ones needs per-case relevance vectors, and nothing else in the repo carries them. **Scope rule: write a new sibling file, do not repair the dead handles** — that keeps the golden covering exactly what it covered before, the same reasoning that made P5 additive.
-- ~~**Nothing records which pipeline produced a run (P14).**~~ **Fixed in `5a52d26`**: both arms write `run_metadata.json` last, and `compare_models.resolve_pipeline` prefers it, demoting dirname inference to a `[WARN]` fallback. The historical context is worth keeping, because it is why the P29 attribution script harvests into a config-named root *after each batch* rather than at the end: both batches emit identically-named `Prediction_Output_<Model>_<timestamp>` dirs into one cwd, so sorting them afterwards would have meant inferring the config from timestamp order alone — in the one experiment whose entire purpose is attribution. **The staged pod script keeps that harvest step**; rewriting it would invalidate its 2026-08-06 pre-flight.
+- **Every per-case output file is still empty — but P40 is CLOSED (2026-08-12), because it wrote a new sibling instead of repairing them.** The two dead handles below are exactly as dead as they ever were, and that is deliberate: `RankCases.txt` now carries the per-case relevance vectors, written after the `PerformanceIndex.txt` handle closes, so the byte-exact golden covers what it always covered. What remains here is a cosmetic wart with no consumer — repairing it would put new writes inside the golden's region for output nothing reads. The baseline emits 258 zero-byte files; `cython_utils.py:203-204` opens both handles and `:308-309` closes them with **nothing written in between**. The BERT arm never opens them at all yet still creates the `Fold*/` dirs (`bert_models.py:539-540`). **Neither arm has ever written anything through *those* handles**, and neither ever will. The history is worth keeping because it is how the scope rule was arrived at: this was a cosmetic wart for months, finding 13 turned it into the binding constraint on the self-selection test, and the fix was a new sibling rather than a repair — the same additive shape that let P4 and P5 land without re-minting the golden.
+- ~~**Nothing records which pipeline produced a run (P14).**~~ **Fixed in `5a52d26`**: both arms write `run_metadata.json` last, and `compare_models.resolve_pipeline` prefers it, demoting dirname inference to a `[WARN]` fallback. The historical context is worth keeping, because it is why the P29 attribution script harvests into a config-named root *after each batch* rather than at the end: both batches emit identically-named `Prediction_Output_<Model>_<timestamp>` dirs into one cwd, so sorting them afterwards would have meant inferring the config from timestamp order alone — in the one experiment whose entire purpose is attribution. **The staged pod script was retired rather than kept** (2026-08-12): it was pre-flighted at a SHA predating C5/C7/C8, so it would have written the old flat cwd layout that `runs.discover` now refuses and carried no provenance at all. What ran instead was the simplified `--pipeline X --out results_X` form on a pod pulled to current main, with **no harvest step**, because `--out` removes the collision that forced one.
 - ~~**`scripts/run_baseline.py` crashes.**~~ **Fixed in `c2fee6e`**, verified by a full 10-fold run on 2026-08-05. ~~**The last two baseline defects.**~~ **Fixed in `9c9e251`, VERIFIED 2026-08-11: a pod `--pipeline legacy --out` run byte-matched the 2026-08-05 reference exactly (353,418 bytes to the trailer cut), proving C4's handle collapse and C5's `--out` plumbing content-preserving in one shot.** The module now has `run_analysis(encoder=None, config=LEGACY, out=None)` at `:187` and a `__main__` guard at `:543`, and the two `PerformanceIndex` handles are one `with`-block at `:354`. **The old description of that handle pair was wrong in an instructive way, so record the truth rather than just the fix:** the `'w'` handle was not abandoned — it wrote the *entire* body and was simply never closed explicitly; rebinding the name to the `'a'` handle dropped its last reference, so CPython flushed and closed it right there, *before* the trailer's first write, which `O_APPEND` then placed at the true end of file. The emitted byte sequence was `[everything written through 'w'][trailer]`, which is exactly what one `with`-block produces. It worked by refcount accident, not by design, and that is why collapsing it is byte-safe.
 - ~~**Output discovery is broken five ways.**~~ **Closed by `9d08c94` (writers) and `7927a88` (readers).** Both arms emit the underscore spelling via `runs.run_dirs`; **five consumers now call `runs.discover`** — `analyze_performance.py:71`, `analyze_rank_metrics.py:149`, `build_dashboard_data.py:156`, `build_readme_plots.py:302` and `compare_models.py:282`/`:355` — whose single rule is *a directory is a run iff it contains `PerformanceIndex.txt`*. **That is three of finding 10's five tabulated sites plus the two later rules, not all five of the table:** the table's other two entries are the deliberate exceptions named below, so do not read "five sites" and "five consumers" as the same five. (`verify_setup.py:64` imports `discover` as a checkout smoke test without calling it.) It **refuses rather than skips** a directory that holds one in neither layout, because skipping is how a run vanishes from a comparison table unnoticed. Two deliberate exceptions survive and are not drift: `tests/test_golden.py` keeps its own tmp-dir glob and its `\d{8}_\d{2}-\d{2}-\d{2}` regex — that regex is what *forced* the underscore direction, and the golden must not depend on the code it audits — and `tests/test_reorganization.py:75` keeps a recursive `**` because it is asserting that committed results exist at all, not discovering a run. See `docs/findings/10-output-path-fragmentation.md`.
 - **The dashboard 404s.** The tracked JSON sits at `dashboard/dashboard/public/data/` (a stray nested dir), while the builder writes `dashboard/public/data/` and `useData.ts` fetches `./data/dashboard-data.json`. Still open; the fix moved to P38 per the 2026-08-10 phase split.
@@ -300,15 +338,31 @@ The repo is **public** and contains committed MIMIC-III records under a PhysioNe
 kept current. `docs/plans/revival-roadmap.md` is the sequenced *refactor* plan;
 `correctness-fixes.md` and `metric-redesign.md` are the science.
 
-**The correctness work is no longer "deferred to a dedicated session" — most of it has landed.**
-P1–P5, P7 and P9 are done, which means both metric knobs are gone and four of the seven problems
-above are fixed. Still open: **P6** (set-level soft P/R/F1), **P27** (the last nine comma
-fragments), **P29** (the folds-only / preprocess-only attribution runs — staged and ready on the
-pod, unlaunched), **P39** (the two arms break score ties differently), **P40** (per-case output).
-**P38 — a clean public repo — is the hard blocker on publication**, and it now also carries the
-Phase 3 polish (CLI, encoder registry, dashboard, the `F1` rename). On the infrastructure track
-**P14, P15, P16, P17 and P20 all landed in C1–C8, and P18 was retired**; P13 (a baseline-arm golden)
-remains, and P31 (the golden's stated runtime) is closed in every doc but not in
+**The correctness work is done — updated 2026-08-12, and this is the paragraph most likely to be
+read stale, so check its date before quoting it.** P1–P5, P7 and P9 landed earlier; the 2026-08-12
+batch closed the rest:
+
+- **P29-runs — done.** The eight attribution runs (4 arms × 2 configs) plus the C4/C5 verification
+  ran in **one pod session**: ten sequential verify-gated driver steps, 22:57→02:28 UTC, zero
+  failures. Result: `docs/findings/15-leakage-preprocessing-attribution.md`.
+- **P40 — done.** `RankCases.txt` shipped in `efa3794`; the instrumented tree is `results_p40`; the
+  self-selection answer is `docs/findings/16-self-selection.md` (confound real, arm-neutral, and
+  the fixed-set ordering inverts).
+- **P27 — done** (`7e49212`, as the third variant `corrected2`), and now *measured*: its first
+  four-arm run moved two arms and left two bit-identical in the reported cell. Finding 06 addendum.
+- **P39 — closed measured-moot**, no code changed: the tie-permutation envelope is exactly
+  **0.000000** on all three populations for both arms, so no tie-break convention can move a
+  reported number.
+- **P10, P11 and P12 — removed** by owner decision 2026-08-12; all three are retired with their
+  reasoning in `docs/plans/TODO.txt`. **P6 was retired 2026-08-11.**
+
+**Still open, in order: P37** (`analyze_score_distributions.py` re-implements the grader and reads
+no `PipelineConfig`, so every statistic it produces is legacy-measured), **P13** (mint a
+baseline-arm golden — that arm still has zero regression protection and `cython_utils.py` is
+shared), **then P38** — a clean public repo, the hard blocker on publication, **deliberately
+backlogged to the final arc** and carrying the Phase 3 polish (CLI, encoder registry, dashboard,
+the `F1` rename). On the infrastructure track **P14, P15, P16, P17 and P20 all landed in C1–C8, and
+P18 was retired**; P31 (the golden's stated runtime) is closed in every doc but not in
 `tests/test_golden.py:68`, which still says "about 20 minutes" and is deliberately left alone —
 touching the file the golden lives in is not worth a docstring.
 

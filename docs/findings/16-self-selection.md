@@ -131,10 +131,13 @@ to separate in the tested blocks. So there is no reason to expect a separation h
 an expectation, not a measurement.
 
 **And no pair separates anywhere that *was* tested.** The paired t-tests on per-fold MRR@50 in
-`results_p40` come back with max |t| = **1.718 / 1.651 / 1.174** on winnable / all-cases /
+`results_p40` come back with max |t| = **1.718 / 1.651 / 1.651** on winnable / all-cases /
 answered, against the 2.262 needed at 9 df. Those are **identical to the committed `results_p5`
 figures reported in finding 13** — a fresh tree, five days and a numpy pin later, reproducing them
-to the digit. The knobless headline stands: **no encoder ranking is supported by this
+to the digit. *(Corrected 2026-08-12: the answered figure read 1.174 here, copied from finding 13,
+which had taken the max over the three BioSentVec pairs rather than all six; the true maximum on
+both trees is 1.651. See the dated note in `13-rank-aware-metrics.md`. Nothing else in this
+paragraph changes — the two trees still agree to the digit, and no pair separates.)* The knobless headline stands: **no encoder ranking is supported by this
 experiment**, and it now survives a matched-case-set comparison as well as three abstention
 conventions.
 
@@ -172,10 +175,10 @@ than of one execution.
 
 P39's own verdict — **measured-moot**, envelope span 0.000000 on all three populations, for MRR
 and Hit@10, macro and pooled — rests on the tie census taken from that same instrumented run, which
-is its artifact. Writing that verdict into `docs/plans/TODO.txt`'s P39 block is still pending; the
-block there carries the older, pre-measurement impact *bound*, not this measurement, so do not read
-it as the record. It is not duplicated here either; what this finding takes from P39 is only the
-cross-validation above.
+is its artifact. **That verdict is now written into `docs/plans/TODO.txt`'s P39 block** (updated
+2026-08-12; the paragraph here previously said it was still pending and that the block carried only
+the older, pre-measurement impact *bound*). The census itself is not duplicated here; what this
+finding takes from P39 is only the cross-validation above.
 
 ## Limits — read before quoting any number here
 

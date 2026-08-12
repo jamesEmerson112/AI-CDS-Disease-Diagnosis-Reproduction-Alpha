@@ -338,7 +338,7 @@ Together that is the first number this project has produced with **no reported k
 | **BioSentVec (baseline)** | 0.2029 | 0.1484 | 0.3577 | 0.1484 | **0.0857** | **0.8477** |
 
 **No pair separates. Largest paired *t* across all six pairs is 1.718**, against the 2.262 needed for
-p < 0.05 — and the same holds on both other populations (max 1.651 and 1.174). This was written down
+p < 0.05 — and the same holds on both other populations (max 1.651 and 1.651). This was written down
 as a prediction before the run, on the reasoning that scoring rank does not improve retrieval; it only
 stops rewarding guessing.
 

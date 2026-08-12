@@ -96,7 +96,8 @@ Run the fast suite — unit and characterization tests, no model download, no ne
 
 ```bash
 pytest
-# 413 passed, 3 deselected
+# 499 passed, 3 deselected      (measured 2026-08-12; it read 413 after the
+#                                C1-C8 refactor and 264 before it)
 ```
 
 The deselected tests are opt-in. One downloads a model from HuggingFace; the others are slow.
@@ -245,8 +246,8 @@ Verified as of 2026-08-11. None of these are caused by your machine.
 | What | Symptom | Cause |
 |---|---|---|
 | The dashboard | Blank page / 404 | The committed JSON sits at `dashboard/dashboard/public/data/`, a stray nested directory, while the app fetches from `dashboard/public/data/`. Re-run the builder (section 6). |
-| `compare_models.py` on the three existing result trees | One `[WARN] no run_metadata.json …` line per invocation | Those runs predate `5a52d26`, and nothing retrofits provenance onto a run nobody can re-derive. Cosmetic, and it clears itself as new runs land. |
-| Per-case output files | All 258 are zero bytes | Neither arm has ever written them. Tracked as **P40**; the fix is a new sibling file, not a repair of the dead handles. |
+| `compare_models.py` on the three pre-C8 result trees | One `[WARN] no run_metadata.json …` line per invocation | Those runs predate `5a52d26`, and nothing retrofits provenance onto a run nobody can re-derive. Cosmetic and **permanent for those three trees** (updated 2026-08-12); every 2026-08-12 tree carries metadata and prints `[INFO]` instead. |
+| Per-case output files | All 258 are zero bytes | Neither arm has ever written them, and the dead handles stay dead by design. **P40 closed 2026-08-12**: the per-case data ships as a new sibling, `RankCases.txt` (finding 16). |
 | The BioSentVec model path | Loads from the working directory | `data/models/README.md` says `data/models/`; the loader disagrees. Put the `.bin` at the repository root. |
 
 Four entries left this table on 2026-08-11. `scripts/build_readme_plots.py` raised

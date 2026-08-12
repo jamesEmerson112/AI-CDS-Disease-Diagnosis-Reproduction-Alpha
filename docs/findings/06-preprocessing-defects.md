@@ -16,7 +16,8 @@
 
 > **Status: FIXED 2026-08-05 (`c2115ba`), selectable via `--pipeline corrected`.** Under
 > `corrected`: `w/o` survives as `without`, the leading-space rejoin rule recovers 80 of the 89
-> orphan fragments (the last nine are **P27**, still open), and both arms preprocess diagnosis
+> orphan fragments (the last nine are **P27**, closed 2026-08-11 under `corrected2`, not under
+> `corrected` — see the addendum), and both arms preprocess diagnosis
 > text identically — 145/145 descriptions match, up from 26/145. `legacy` keeps all three
 > defects on purpose, so the golden regression stays byte-exact. Path note: written before the
 > `src/aicds` package move; line numbers have drifted.
@@ -272,8 +273,12 @@ row is in the one aggregator the baseline's 25 leave alone. Quote the bit-identi
 
 `python scripts/analyze_rank_metrics.py results_corrected2` (re-run read-only 2026-08-12, matching
 the captured artifact): **no pair of encoders separates in any of the three abstention
-populations.** Max |t| on per-fold MRR@50 is **1.628** (winnable), **1.646** (all-cases) and
-**1.646** (answered), against the 2.262 needed at 9 df. Winnable-population MRR@50:
+populations.** Following [13](13-rank-aware-metrics.md)'s convention — the maximum **across all six
+pairs**, with the pair it came from named — |t| on per-fold MRR@50 tops out at **1.628** on
+winnable (BioSentVec vs Bio_ClinicalBERT), **1.646** on all-cases and **1.646** on answered (both
+Bio_ClinicalBERT vs BlueBERT, the same pair and the same value because the three BERT arms have
+coverage 1.0 and those two populations are the same set for them). All against the 2.262 needed at
+9 df. Winnable-population MRR@50:
 Bio_ClinicalBERT 0.243351 > BiomedBERT 0.235203 > BlueBERT 0.228529 > BioSentVec 0.197102, at
 coverage 0.8477 for the baseline and 1.0000 for the three transformers. The headline claim of
 [13](13-rank-aware-metrics.md) — *no encoder ranking is supported by this experiment* — survives
@@ -310,11 +315,21 @@ the P27 text repair unchanged.
 3. **The comparison above is `corrected` → `corrected2` only**, one grader and one split
    (canonical `folds_grouped`) held fixed. It is not a legacy delta and not an encoder comparison.
 4. **"Zero residual fragments" is a statement about this dataset, not a guarantee about the rule.**
-   Rule 2 is a bounded heuristic. Measured by mutating the shipped code: the five real-data
-   numbers catch a *narrowing* (cap 24 → 23 gives 1,724 / 563 / 8 residual / 1 firing) but are
-   **blind to a widening** — caps 25, 27, 30, 31 or none at all, and dropping the upper-case
-   condition entirely, leave all five unmoved, because the committed file contains no
-   lower-case-leading part outside those nine. The predicate is pinned only by synthetic
-   fixtures. Widen the rule without touching those and the real-data tests stay green.
+   Rule 2 is a bounded heuristic. Measured by mutating the shipped code, and the mutation set is
+   the one recorded in `tests/test_symptom_splitting.py`'s
+   `test_the_cap_constant_is_pinned_at_24`: the five real-data numbers catch a *narrowing*
+   (cap 24 → 23 gives 1,724 tokens / 563 unique / 8 residual / 1 firing) but are **blind to a
+   widening** — **caps 25, 27, 30, 31, 40 and no cap at all** each leave all five unmoved, because
+   no part in the committed file exceeds 24 characters, so a wider cap has nothing extra to absorb.
+   The predicate is therefore pinned **separately from the counts**, by three fixtures: the cap
+   constant asserted directly, a 25-character boundary case chosen to sit in the blind spot
+   (`caps 25–30` were caught by nothing before it), and the two `KNOWN_COST` tests. Widen the rule
+   without touching those and the real-data tests stay green.
+   *(Corrected 2026-08-12: this list read "caps 25, 27, 30, 31 or none at all, and dropping the
+   upper-case condition entirely". It omitted 40, which the pinned test does measure, and it
+   claimed a mutation of the **upper-case condition** that the pinned test does not perform — the
+   test file's only statement about that condition is that it fails to prevent the `Fever,cough`
+   over-join, which is a different claim. Do not read the upper-case condition as measured-blind;
+   it is untested against the real data.)*
 5. **A lower score after a text repair is not a regression**, and it is not a confirmation of §2's
    inflation story either. Nothing in this run measures which — see the refusal above.

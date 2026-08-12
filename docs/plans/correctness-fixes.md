@@ -4,11 +4,16 @@
 > deliberately *move the numbers*, as opposed to the refactor work that must not. As of
 > 2026-08-08 the four big ones have landed (fold regrouping, the DRG grader, rank-aware
 > metrics, the preprocessing repairs), each behind a selectable config so the original pipeline
-> still reproduces bit-for-bit. What remains: per-case output (P40), the last nine comma
-> fragments (P27), and the attribution runs (P29). Embedding centring (item 5) was never
-> attempted and is now optional rather than pending. **The set-level metric (P6) was RETIRED
-> on 2026-08-11** — findings 04 and 13 dissolved its motivation instead of satisfying it.
-> *(Updated 2026-08-11 by the TODO audit.)*
+> still reproduces bit-for-bit. **As of 2026-08-12 the science on this list is finished:** per-case
+> output (P40), the last nine comma fragments (P27) and the attribution runs (P29) have all landed,
+> and P39 (tie-breaks) closed on measurement without a code change. Embedding centring (item 5) was
+> never attempted and is now **retired**, with P11 and P12, by owner decision. **The set-level
+> metric (P6) was RETIRED on 2026-08-11** — findings 04 and 13 dissolved its motivation instead of
+> satisfying it. What is left on the wider plan is P37, P13, then P38.
+> *(Updated 2026-08-11 by the TODO audit; rewritten 2026-08-12 after the pod session. The
+> superseded sentence read: "What remains: per-case output (P40), the last nine comma fragments
+> (P27), and the attribution runs (P29). Embedding centring (item 5) was never attempted and is now
+> optional rather than pending.")*
 
 This is the ordered TODO for making the encoder comparison valid. It is separate from
 [revival-roadmap.md](revival-roadmap.md), which is about code organisation. Nothing here is a
@@ -110,8 +115,11 @@ held: no pair of encoders separates under MRR on any abstention population (max 
 
 **What this item spawned:** the abstention asymmetry (open, not closable) and **P40** — testing
 whether the baseline's answered cases are self-selected easy ones needs per-case relevance
-vectors, and every per-case output file in the repo is empty. P40 is now the highest-value open
-item.
+vectors, and every per-case output file in the repo was empty. **P40 closed 2026-08-12** by adding
+a new sibling, `RankCases.txt`, and the answer is [finding 16](../findings/16-self-selection.md):
+the answered cases are easier for *every* arm by nearly the same margin, so the confound is real
+and arm-neutral, and matching the case sets inverts the ordering. The asymmetry itself is still
+open and still not closable — abstention is a property of the arm, not of the metric.
 
 ---
 
@@ -160,8 +168,11 @@ from a token carrying no clinical content.
 leading space (the separator is `,` while intra-label commas are `, `), so: *if a token starts
 with a space, rejoin it to the previous token* (573 → 564 unique symptom strings, producing
 real titles like `Ac kidny fail, tubr necr` and `Dysphagia, oropharyngeal`). It recovers 80 of
-89 fragments; the last **nine** do not follow the pattern — that remainder is **P27, still
-open**.
+89 fragments; the last **nine** do not follow the pattern — that remainder was **P27, closed
+2026-08-11 (`7e49212`)** by a second, bounded rule under a *third* variant `corrected2`
+(lower-case tail + capitalised predecessor + the 24-character CMS short-title cap). `corrected`
+stays frozen and still carries the nine, so every `corrected`/`drg` number in this repo is a
+nine-fragment number.
 
 ### 4c. The two arms preprocess diagnosis text differently — FIXED under `corrected`
 
@@ -179,8 +190,15 @@ numbers may be compared across arms.
 
 ## 5. Centre the embeddings before computing cosine
 
-**Status: NOT STARTED — the one item on this list never attempted.** **Effort:** one line.
-**Impact:** unknown, worth measuring.
+**Status: RETIRED 2026-08-12 (P10), by owner decision — never attempted, and now deliberately not
+going to be.** The one-line reason is in the retired table below: it rehabilitates only the
+cosine-graded tables, and nothing headline quotes those. The rest of this section is kept as the
+argument, because the anisotropy it describes is a real property of the models and someone will
+rediscover it. (It previously read *"NOT STARTED — the one item on this list never attempted.
+Effort: one line. Impact: unknown, worth measuring."* — and "one line" was always a statement about
+the subtraction rather than about the work: moving the numbers means a config-seam field with a
+legacy-preserving default, its consumer and banner in the same commit, and a 34–53 minute golden
+gate.)
 
 BERT sentence embeddings are anisotropic — they occupy a narrow cone rather than spreading over
 the sphere, so arbitrary pairs land at high cosine. This is a documented property of the models
@@ -215,7 +233,11 @@ Measured across the 10 legacy folds: **only 75 of 129 test cases (58.1%) have th
 present anywhere in their fold's training pool.** Re-measured on the grouped folds: **76/129 =
 58.9%** — the leakage fix moved retrievability by exactly one case, so the two defects really
 were independent. Both figures are pinned in `tests/test_drg_grader.py`. Per fold the ceiling
-ranges from **3/12 (25%) to 13/15 (87%)** on the grouped split.
+ranges from **4/13 (30.8%) to 13/15 (86.7%)** on the canonical grouped split.
+*(Corrected 2026-08-12: this read "3/12 (25%) to 13/15 (87%)", which was measured on the
+environment-dependent Windows split no committed result ever used — see
+[finding 14](../findings/14-fold-split-environment-dependence.md). The **total** 76/129 is
+split-invariant and was never wrong; only the per-fold range was.)*
 
 The other ~41% of cases are unwinnable under exact matching — not because retrieval is bad, but
 because the answer is not in the library. A perfect retriever therefore scores at most 58.9%.
@@ -228,16 +250,23 @@ ladder was not.)
 
 ## Still open, in priority order
 
-| Item | What | Why it matters |
-|---|---|---|
-| **P40** | Per-case output (new sibling file; do not repair the dead handles) | Blocks the self-selection test — the one untestable confound in finding 13 |
-| **P29** | `folds-only` / `preprocess-only` attribution runs (8 runs: 4 arms × 2 configs, on a pod pulled to current main) | Splits the corrected-vs-legacy delta into its two causes |
-| **P27** | The last nine comma fragments — lands as a *third* `preprocess_version`, `corrected2`; `corrected` stays frozen | Completeness of 4b |
-| **Item 5** | Embedding centring | Diminished payoff post-`drg`, but still the only probe of anisotropy |
-| **P39** | The two arms break score ties differently | Bounded at 0.0022 MRR; filed, not fixed |
+**Updated 2026-08-12: this table is empty of science.** Every item it listed has closed, and the
+remaining work on this track is `P37` (fix `analyze_score_distributions.py`, which re-implements the
+grader and reads no `PipelineConfig`, then re-run it) and `P13` (mint a baseline-arm golden).
+`P38` — the clean public repo — is backlogged to the final arc by owner decision.
 
-### Retired, with the reasoning — 2026-08-11
+| Item | What | Outcome |
+|---|---|---|
+| ~~**P40**~~ | Per-case output (new sibling file; the dead handles were left dead) | **DONE 2026-08-12.** `RankCases.txt` (`efa3794`) plus the `results_p40` run; the self-selection test it unblocked is [finding 16](../findings/16-self-selection.md) |
+| ~~**P29**~~ | `folds-only` / `preprocess-only` attribution runs (8 runs: 4 arms × 2 configs) | **DONE 2026-08-12**, in one pod session; the split is [finding 15](../findings/15-leakage-preprocessing-attribution.md) |
+| ~~**P27**~~ | The last nine comma fragments — landed as a *third* `preprocess_version`, `corrected2`; `corrected` stays frozen | **DONE 2026-08-11** (`7e49212`); its first four-arm run is the [finding 06](../findings/06-preprocessing-defects.md) addendum |
+| ~~**P39**~~ | The two arms break score ties differently | **CLOSED 2026-08-12, measured-moot** — the tie-permutation envelope is exactly 0.000000 on both arms, so no convention can move a reported number. No code changed |
+
+### Retired, with the reasoning — 2026-08-11, extended 2026-08-12
 
 | Item | What | Why it is retired rather than deferred |
 |---|---|---|
 | **P6** | Set-level soft P/R/F1 over diagnosis sets | Its motivation was **dissolved, not postponed**. It existed to kill the degeneracy; findings [04](../findings/04-metric-degeneracy.md) and [13](../findings/13-rank-aware-metrics.md) established there was none to kill — `P == R` is `PR == 1.0`, the answered and all-cases populations being the same set because those arms never abstain. The columns were unlabelled, not wrong. Separately, every term in the proposed formula is a cosine over the diagnosis embeddings, which **reintroduces the self-grading confound P4 removed**. What survives is the intuition that a prediction *set* should be scored against a truth *set* — nothing measures that today; if ever built, build it on the DRG labels, not on cosine. |
+| **P10** (item 5 above) | Centre the embeddings before computing cosine | **RETIRED 2026-08-12 by owner decision.** It rehabilitates only the **cosine-graded** tables, and nothing headline quotes those — the result the project leads with is `drg-exact`, where there is no cosine to un-skew. The anisotropy it probes is real and documented; the prize is not. |
+| **P11** | Per-model threshold calibration | **RETIRED 2026-08-12 by owner decision.** Moot on the headline path — `drg-exact` collapses the five threshold rows to one, so there is no threshold left to calibrate — and it is the highest golden-risk surface available, since the thresholds live in seven set literals whose *iteration order* decides output row order plus a hand-kept list at `bert_models.py:511`. |
+| **P12** | MEAN aggregator alongside MAX | **RETIRED 2026-08-12 by owner decision.** Aggregator plumbing with a known last-ULP hazard — a mean over hash-ordered labels, exactly what [finding 12](../findings/12-drg-grader.md) hit — and no consumer asking for it. If an accumulating aggregator is ever added, sort before reducing. |

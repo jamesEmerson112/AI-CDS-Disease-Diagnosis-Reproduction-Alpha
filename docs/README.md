@@ -152,10 +152,13 @@ exactly 1.0000.
 **Order of attack** is in [plans/correctness-fixes.md](plans/correctness-fixes.md), with the ranked
 digest in [plans/TODO.txt](plans/TODO.txt). Leakage went first, as planned — it was the largest
 correction and the cheapest, since the folds are data rather than code. Self-grading followed, then
-rank-awareness (P5, done — finding 13). What remains on the science side: **P6** (set-level soft
-P/R/F1), **P27** (the last nine comma fragments), **P29** (the folds-only / preprocess-only
-attribution runs, staged but unlaunched), and **P40** (per-case output — now the highest-value
-item, because it blocks the one untestable confound in finding 13).
+rank-awareness (P5, done — finding 13). **Updated 2026-08-12: the science side is finished.**
+P27 landed as the third variant `corrected2`, P29's eight attribution runs produced
+[finding 15](findings/15-leakage-preprocessing-attribution.md), P40 shipped `RankCases.txt` and
+produced [finding 16](findings/16-self-selection.md), and P39 (tie-breaks) closed on measurement
+with no code change. P6 was retired 2026-08-11 and P10/P11/P12 on 2026-08-12. What remains on the
+wider plan is **P37** (the score-distribution script still measures with a retired ruler),
+**P13** (a baseline-arm golden), then **P38** (the clean public repo, backlogged to the final arc).
 
 ## Reference
 

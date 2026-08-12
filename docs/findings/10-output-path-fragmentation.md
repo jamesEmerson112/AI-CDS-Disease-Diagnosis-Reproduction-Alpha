@@ -128,9 +128,15 @@ cosmetic. **Neither arm has ever emitted per-case output.**
 [13](13-rank-aware-metrics.md) needs per-case relevance vectors to test whether the baseline's
 98 self-answered cases are simply the easy ones — the one confound in the abstention analysis
 that cannot be bounded from aggregates. Nothing else in the repo carries per-case relevance, so
-the empty files are now **P40, the highest-value open item**. Scope rule when fixing it: write
+the empty files were **P40, the highest-value open item**. Scope rule when fixing it: write
 a *new sibling file*, do not resurrect the dead handles — that keeps the golden covering
 exactly what it covered before.
+
+**Closed 2026-08-12, by that rule exactly.** `RankCases.txt` ships from `RankAccumulator` (`efa3794`)
+and the four-arm `results_p40` run supplied the per-case relevance vectors; the answer is
+[16](16-self-selection.md). **The dead handles are still dead and stay that way** — the zero-byte
+files described above are unchanged, which is the point: nothing new was written inside the region
+the byte-exact golden covers.
 
 (`timing_report.pdf` is a genuine asymmetry: `generate_timing_pdf` exists only in
 `baseline_sent2vec.py`, with no BERT equivalent.)
@@ -171,8 +177,10 @@ is in scope"*). The golden must still pass byte-for-byte afterward.
 
 ## Closed — 2026-08-11
 
-**The naming half and the discovery half are both fixed. The empty-file half (P40) is not**, and
-it is the one that turned out to matter; it keeps its own section above.
+**The naming half and the discovery half are both fixed. The empty-file half (P40) was not** —
+it was the one that turned out to matter, and it keeps its own section above. *(Updated
+2026-08-12: P40 has since closed too, by sibling file rather than by repairing the handles —
+see the dated close block above and finding 16.)*
 
 **Writers unified — `9d08c94`.** `src/aicds/runs.py` owns the run-directory shape for both arms.
 `run_dirs()` returns the flat, cwd-relative `Prediction_Output_{Name}_{stamp}/` for `out=None`

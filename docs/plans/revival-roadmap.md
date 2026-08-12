@@ -4,7 +4,8 @@
 > complete in this repo, its polish moved to P38.** Phase 0 (`bb84b82`): environment repaired,
 > data-use guard installed, `docs/` rebuilt into `findings/` + `guides/` + `reference/`. Phase 4
 > (docs) was pulled forward and is also done. Phase 1 (safety net) is done — the fast suite now
-> stands at **413 passed / 3 deselected** (264 before the refactor batch), plus `pytest -m
+> stands at **499 passed / 3 deselected** (measured 2026-08-12; 413 after the refactor batch, 264
+> before it), plus `pytest -m
 > golden`, a byte-exact 10-fold regression against a committed reference (**34–53 min**, measured
 > eight times: 34:12, 42:28, 43:28, 43:50, 44:32, ~50:00, 52:35, 53:10 — 34:12 on 2026-08-12, Windows,
 > numpy-2.0.2 venv; NOT the ~20 min this file once claimed).

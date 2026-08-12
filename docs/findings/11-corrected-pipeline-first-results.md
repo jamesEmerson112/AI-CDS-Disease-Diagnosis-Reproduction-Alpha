@@ -131,10 +131,14 @@ design, not data splitting.
 3. ~~**The 58.1% exact-match ceiling has not been re-measured on the grouped folds.**~~
    **Done**: 76/129 = 58.9% on `folds_grouped`, a change of exactly one case, pinned in
    `tests/test_drg_grader.py`.
-4. **The correction bundles two changes — still true.** `corrected` moves folds *and*
-   preprocessing at once, so the deltas above cannot be split into a leakage part and a
-   preprocessing part. The `folds-only` and `preprocess-only` configs exist for that
-   (TODO P29, staged on the pod, unlaunched as of 2026-08-08).
+4. ~~**The correction bundles two changes.**~~ **Closed 2026-08-12**
+   ([15](15-leakage-preprocessing-attribution.md)): the `folds-only` and `preprocess-only` runs
+   happened, and the deltas above *are* now split. `corrected` still moves folds *and*
+   preprocessing at once — that has not changed — but the attribution no longer has to be inferred
+   from it. **Leakage dominates every arm** (+0.027 to +0.070 at threshold 1.0), preprocessing is
+   small with an arm-dependent sign, and the 0.0902 drop at the published cell is 54.3% leakage /
+   43.8% preprocessing / 1.9% interaction. Read the `preprocess-only` column there as an
+   attribution input only — that tree still leaks patients.
 5. **Folds are uneven — still true** (114/15 through 117/12) because subject 41976 holds 15
    admissions and whole patients must stay together. Per-fold *n* varies; treat per-fold σ
    accordingly.
