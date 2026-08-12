@@ -20,11 +20,14 @@ The baseline abstains; all three BERT arms never do. So:
                         answering wrongly
   answered              EXCLUDE abstention -- but those cases are self-selected,
                         the arm chose which to answer, and n is NOT matched. It
-                        was 98 against 129 on results_corrected, measured
-                        2026-08-06; that gap is a property of the TREE, not a
-                        constant, because folds and preprocessing both move
-                        pruning and pruning decides who abstains. So the report
-                        prints the counts it measured, never these.
+                        was 98 against 129 on results_p5, measured 2026-08-06.
+                        results_p5 and not results_corrected: RankMetrics.txt is
+                        a P5 artifact, and the corrected tree predates it, so
+                        that tree carries no rank metrics to measure. The gap is
+                        a property of the TREE, not a constant, because folds and
+                        preprocessing both move pruning and pruning decides who
+                        abstains. So the report prints the counts it measured,
+                        never these.
 
 **Neither population is neutral, and there is no third one that is.** Abstention
 is a property of the arm, not of the metric, so every convention takes a side.
@@ -376,13 +379,20 @@ def _report(parsed, arms, population):
 def _self_selection(cases, baseline_arm="baseline"):
     """THE SELF-SELECTION TEST (P40): each arm's MRR on the baseline's own cases.
 
-    Finding 13 left exactly one question open. The baseline declines to answer
-    31 of 129 cases and the three BERT arms decline none, so `answered` flatters
-    the baseline *if* the cases it chose are the easy ones -- and no aggregate
-    can tell you whether they are, because the two arms are being scored on
-    different case sets. The fix is not a correction factor, it is a matched
-    comparison: score every arm on the 98 cases the baseline answered, and read
-    the restricted column against the all-cases one.
+    Finding 13 left exactly one question open. The baseline declines to answer a
+    substantial minority of cases and the three BERT arms decline none, so
+    `answered` flatters the baseline *if* the cases it chose are the easy ones --
+    and no aggregate can tell you whether they are, because the two arms are being
+    scored on different case sets. The fix is not a correction factor, it is a
+    matched comparison: score every arm on exactly the cases the baseline
+    answered, and read the restricted column against the all-cases one.
+
+    The counts are deliberately not written here. How many cases the baseline
+    declines is a property of the TREE -- folds and preprocessing both move
+    pruning, and pruning decides who abstains -- so a figure in this docstring
+    would be right for one results root and quietly wrong for the next. The
+    restriction line the function prints is measured from the RankCases.txt in
+    front of it; read it there.
 
     Read the delta, not the restricted number alone. A BERT arm scoring HIGHER
     restricted than overall says the baseline's answered set is genuinely easier

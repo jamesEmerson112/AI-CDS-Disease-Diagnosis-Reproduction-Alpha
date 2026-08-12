@@ -24,19 +24,25 @@ This script is that tool, and it keeps the refusal: it reads four roots that eac
 stay internally single-pipeline, and checks each one against the pipeline it is
 supposed to hold.
 
-WHY ONE CELL, WITH NO FLAG TO MOVE IT. Every number here is the 10-FOLD TOP-10
-F-score at threshold 0.6 -- the cell the published baseline figure and the 0.0902
-drop are both quoted from. It is fixed rather than selectable because the two
-parser anchors below are pinned to exactly that cell: a ``--threshold`` flag
-would silently disable the only check that the columns were read correctly, on
-the invocation most likely to need it.
+WHY TWO CELLS, AND WHY NEITHER OF THEM IS SELECTABLE. Every number here is a
+10-FOLD TOP-10 F-score, reported at exactly two thresholds:
 
-WHAT THE THRESHOLD COSTS, AND WHY THE OUTPUT SAYS SO. At 0.6 the three BERT arms
-sit on the saturation ceiling (``docs/findings/03-metric-saturation.md``), so
-their deltas are differences between 1.000 and 1.000 and carry no information.
-That is a property of the threshold, not of the fixes, and :func:`report` prints
-it as a note derived from the data rather than leaving four rows of zeros to be
-read as "the fixes did not affect the BERT arms".
+  0.6  THE PUBLISHED CELL. The 0.0902 baseline drop this script exists to split
+       is quoted from it -- and the three BERT arms sit on the saturation ceiling
+       here (``docs/findings/03-metric-saturation.md``), so their deltas are
+       differences between 1.000 and 1.000 and carry no information at all.
+  1.0  THE ONLY COSINE SETTING WHERE NO ARM SATURATES, and therefore the only one
+       at which the attribution is populated for all four arms.
+
+Reporting 0.6 alone attributes one arm's drop and leaves three rows of zeros to
+be misread as "the fixes did not affect the BERT arms". Reporting 1.0 alone
+abandons the figure the paper and every earlier finding quote. Both are printed,
+each with its own grid, its own attribution table, and its own saturation note
+DERIVED FROM THAT THRESHOLD'S DATA rather than asserted.
+
+There is deliberately no ``--threshold`` flag. The two cells are exactly the four
+cells :data:`ANCHORS` pins, so a flag would silently disable the only check that
+the columns were read correctly, on the invocation most likely to need it.
 
 SIGN CONVENTION, stated once: every part is ``legacy - fixed``, so a POSITIVE
 number means the fix REMOVED score, i.e. the legacy figure was inflated by that
@@ -51,7 +57,7 @@ import argparse
 import json
 import os
 import sys
-from typing import Dict, List, NamedTuple, Optional
+from typing import Dict, List, NamedTuple
 
 from aicds import runs
 from aicds.analysis.performance_index import PerformanceIndexError, read, validate
@@ -62,13 +68,24 @@ from aicds.config import PIPELINE_NAMES
 # What is being compared
 # --------------------------------------------------------------------------
 
-#: The one cell every number in this script comes from. ``THRESHOLD`` is a
-#: dictionary KEY, never a row position: ``PerformanceIndex.txt`` emits its five
-#: threshold rows in *set-iteration* order (0.9, 1, 0.6, 0.8, 0.7), documented as
-#: trap 4 in ``aicds.analysis.performance_index``, so row 0 is 0.9 and indexing by
-#: position reads the wrong threshold without failing.
+#: The strategy every cell below comes from.
 STRATEGY = "TOP-10"
-THRESHOLD = 0.6
+
+#: The two threshold cells reported, in print order. Each is a dictionary KEY,
+#: never a row position: ``PerformanceIndex.txt`` emits its five threshold rows
+#: in *set-iteration* order (0.9, 1, 0.6, 0.8, 0.7), documented as trap 4 in
+#: ``aicds.analysis.performance_index``, so row 0 is 0.9 and indexing by position
+#: reads the wrong threshold without failing. Not to be confused with
+#: ``performance_index.THRESHOLDS``, which is all five the file carries; these
+#: are the two this script reports, and the module docstring says why these two.
+THRESHOLDS = (0.6, 1.0)
+
+#: Why each threshold is in the report at all, printed as its block header so the
+#: reader of a pasted table knows which cell they are holding.
+THRESHOLD_NOTES = {
+    0.6: "the published cell -- and where the BERT arms saturate",
+    1.0: "the only cosine setting at which no arm sits on the ceiling",
+}
 
 # Pipeline registry names (aicds.config._BY_NAME), used as this script's own
 # column names so a column and the --pipeline that produced it are the same word.
@@ -106,7 +123,7 @@ if _UNKNOWN:
         "Selectable names: %s." % (", ".join(_UNKNOWN), ", ".join(PIPELINE_NAMES))
     )
 
-#: Known-correct values, read back off the two committed trees, used as a guard on
+#: Known-correct values, keyed ``(pipeline, arm, threshold)``, used as a guard on
 #: the PARSE -- the same job ``compare_models.SANITY_CHECKS_BY_PIPELINE`` does
 #: there. Full precision and compared with ``==`` rather than a tolerance, because
 #: both sides are ``float()`` of the same decimal token: the writer emits
@@ -114,16 +131,33 @@ if _UNKNOWN:
 #: difference is a real one. A rounded expectation would pass while the parser
 #: read a neighbouring column.
 #:
-#: DO NOT EDIT THESE TO MAKE A FAILURE GO AWAY. Both trees are frozen; a mismatch
-#: means the parse, the roots, or the trees moved, and which of those it is
-#: belongs in the commit message.
+#: All four are the BASELINE arm, one per (pipeline, threshold) pair this script
+#: reports, and that is not an oversight: at 0.6 the three BERT arms print exactly
+#: 1.000000, which anchors nothing -- a parser reading P, R or FS out of a
+#: saturated row gets the same number from all three columns.
+#:
+#: WHERE THEY COME FROM, precisely, because it matters for what a failure means:
+#: they were read back off the LOCAL ``results/`` and ``results_corrected/``
+#: trees, which are **gitignored working data, not committed artifacts** -- every
+#: ``results*/`` path is covered by ``.gitignore:160`` because a run leaves
+#: per-case files named by HADM_ID. The committed regression oracle is
+#: ``docs/Prediction_Output_*``. So a local tree CAN be overwritten or re-harvested
+#: in a way the committed one cannot, and that is one of the things a mismatch
+#: here means.
+#:
+#: DO NOT EDIT THESE TO MAKE A FAILURE GO AWAY. A mismatch means the parse, the
+#: roots, or a local tree moved, and which of those it is belongs in the commit
+#: message.
 ANCHORS = {
-    (LEGACY, "baseline"): 0.4824430641821946,
-    (CORRECTED, "baseline"): 0.3922168068392324,
+    (LEGACY, "baseline", 0.6): 0.4824430641821946,
+    (LEGACY, "baseline", 1.0): 0.2801210239036326,
+    (CORRECTED, "baseline", 0.6): 0.3922168068392324,
+    (CORRECTED, "baseline", 1.0): 0.2162775515864761,
 }
 
-#: Printed above and below every table. ``PREPROCESS_ONLY`` keeps ``data/folds``,
-#: so it carries the patient leakage in full by construction.
+#: Printed above and below every table, and inside the refusal that hands a reader
+#: the command to CREATE this data. ``PREPROCESS_ONLY`` keeps ``data/folds``, so
+#: it carries the patient leakage in full by construction.
 BANNER = (
     "PREPROCESS-ONLY NUMBERS ARE ATTRIBUTION INPUTS, NEVER RESULTS.\n"
     "  That pipeline keeps data/folds, so it STILL LEAKS PATIENTS -- 41 of 129\n"
@@ -142,9 +176,14 @@ BANNER = (
 class Collected(NamedTuple):
     """Everything the report needs, with the arithmetic separated from the I/O.
 
-    ``values`` is a plain ``{pipeline: {arm_key: f_score}}`` so :func:`attribute`
-    and :func:`check_anchors` are pure functions over data a caller can build by
-    hand; ``runs`` keeps the discovered :class:`aicds.runs.Run` objects for the
+    ``values`` is nested THRESHOLD FIRST -- ``{threshold: {pipeline: {arm: FS}}}``
+    -- and that order is the point: ``values[threshold]`` is exactly the plain
+    ``{pipeline: {arm: f_score}}`` that :func:`attribute` and :func:`saturated_arms`
+    take, so both stay pure functions of one threshold's slice and a caller can
+    still build one by hand. Only :func:`check_anchors` sees the whole structure,
+    because an anchor is pinned to a (pipeline, arm, threshold) cell.
+
+    ``runs`` keeps the discovered :class:`aicds.runs.Run` objects for the
     provenance block.
 
     Note the field is called ``runs`` and so is the module this file imports.
@@ -154,7 +193,7 @@ class Collected(NamedTuple):
 
     roots: Dict[str, str]
     runs: Dict[str, Dict[str, object]]
-    values: Dict[str, Dict[str, float]]
+    values: Dict[float, Dict[str, Dict[str, float]]]
     arms: List[str]
 
 
@@ -171,16 +210,59 @@ def resolve_roots(roots=None):
                 len(roots),
             )
         )
+
+    # Two columns pointed at one tree is not a degenerate case worth tolerating:
+    # it FABRICATES a column of exact zeros -- a difference between a tree and
+    # itself -- which prints as "this fix had no measured effect". That is the
+    # single most misreadable cell in the table, and it is indistinguishable from
+    # the real finding this script exists to produce. Compared by resolved path,
+    # so 'results', './results' and 'results/' collide the way the filesystem says
+    # they do; the message quotes what was typed.
+    groups = {}
+    for spec, root in zip(ROOT_SPECS, roots):
+        groups.setdefault(os.path.normcase(os.path.abspath(root)), []).append(
+            (spec.pipeline, root)
+        )
+    duplicates = [group for group in groups.values() if len(group) > 1]
+    if duplicates:
+        raise SystemExit(
+            "[ERROR] --roots names one tree in more than one column, so at least\n"
+            "        one 'effect' below would be a tree minus itself: exactly\n"
+            "        0.000000, printed as 'this fix did nothing'.\n"
+            + "\n".join(
+                "  columns %s resolve to the same tree (%s)"
+                % (", ".join(pipeline for pipeline, _ in group),
+                   " == ".join(root for _, root in group))
+                for group in duplicates
+            )
+            + "\n        The four columns are four different pipelines. Pass four\n"
+              "        different trees, in the order %s."
+            % " ".join(spec.pipeline for spec in ROOT_SPECS)
+        )
+
     return {spec.pipeline: root for spec, root in zip(ROOT_SPECS, roots)}
 
 
-def _missing_roots_error(roots, states):
+def _unusable_roots_error(roots, states, details):
     """The error a first-time user sees, because two roots do not exist yet.
 
     Written as instructions rather than a diagnosis: the ordinary reason for it
     is that P29's eight runs (4 arms x 2 configs) have not been harvested, which
-    is a thing to *do*, not a thing to debug. Every root is reported in one pass
-    -- fixing them one exit at a time is two pod sessions instead of one.
+    is a thing to *do*, not a thing to debug. EVERY unusable root is reported in
+    one pass -- fixing them one exit at a time is two pod sessions instead of one
+    -- and that includes the malformed-layout ones in ``details``, which used to
+    exit on the first.
+
+    ``states`` is ``{pipeline: short reason or None}``; ``details`` carries the
+    full :class:`aicds.runs.RunLayoutError` text for the roots that HAVE runs but
+    in an unreadable shape. A root in ``details`` is deliberately left out of the
+    "produce it with" command block below: re-running the pipeline does not fix a
+    tree that is already there at the wrong depth.
+
+    The :data:`BANNER` is repeated at the end because this is the one path that
+    hands the reader a command to CREATE preprocess-only data. Telling someone how
+    to produce a number without telling them it may never be quoted is how the
+    leaked column escapes.
     """
     lines = [
         "[ERROR] %d of the %d attribution roots are unusable, so no effect can be"
@@ -195,47 +277,74 @@ def _missing_roots_error(roots, states):
             % ("MISSING" if state else "ok", spec.pipeline, roots[spec.pipeline],
                state or spec.changes)
         )
-    lines += [
-        "",
-        "  The two one-change-at-a-time trees are P29-runs: EIGHT runs, 4 arms x 2",
-        "  configs, and they are the whole point of this script. Produce a missing",
-        "  root with (from the repository root):",
-        "",
-    ]
-    for spec in ROOT_SPECS:
-        if not states.get(spec.pipeline):
-            continue
+
+    malformed = [spec for spec in ROOT_SPECS if spec.pipeline in details]
+    if malformed:
         lines += [
-            "    python scripts/run_baseline.py      --pipeline %s --out %s"
-            % (spec.pipeline, roots[spec.pipeline]),
-            "    python scripts/run_bert_analysis.py --model all --pipeline %s --out %s"
-            % (spec.pipeline, roots[spec.pipeline]),
+            "",
+            "  These roots exist but hold a PerformanceIndex.txt in neither run",
+            "  layout. All of them are reported here rather than one per exit:",
+        ]
+        for spec in malformed:
+            lines.append("")
+            lines.append("    %s (%s):" % (spec.pipeline, roots[spec.pipeline]))
+            lines += ["      " + line for line in details[spec.pipeline].splitlines()]
+
+    producible = [
+        spec for spec in ROOT_SPECS
+        if states.get(spec.pipeline) and spec.pipeline not in details
+    ]
+    if producible:
+        lines += [
+            "",
+            "  The two one-change-at-a-time trees are P29-runs: EIGHT runs, 4 arms x 2",
+            "  configs, and they are the whole point of this script. Produce a missing",
+            "  root with (from the repository root):",
             "",
         ]
+        for spec in producible:
+            lines += [
+                "    python scripts/run_baseline.py      --pipeline %s --out %s"
+                % (spec.pipeline, roots[spec.pipeline]),
+                "    python scripts/run_bert_analysis.py --model all --pipeline %s --out %s"
+                % (spec.pipeline, roots[spec.pipeline]),
+                "",
+            ]
+        lines += [
+            "  The baseline arm is Linux-only -- sent2vec will not build under MSVC --",
+            "  so all four arms of a root have to come off the same Linux box.",
+            "",
+        ]
+
     lines += [
-        "  The baseline arm is Linux-only -- sent2vec will not build under MSVC --",
-        "  so all four arms of a root have to come off the same Linux box.",
-        "",
         "  If your trees are named differently, pass all four in this order:",
         "    --roots %s" % " ".join(roots[spec.pipeline] for spec in ROOT_SPECS),
+        "",
+        "-" * 78,
+        BANNER,
+        "-" * 78,
     ]
     return "\n".join(lines)
 
 
 def _discover(root, pipeline):
-    """``aicds.runs.discover``, with the failing column named.
+    """``aicds.runs.discover``, returning ``(runs, failure_text)`` rather than raising.
 
     ``RunLayoutError`` already says which directory and why; what it cannot know
     is which of four roots the caller passed, and that is the first thing a
-    reader of this script's output needs.
+    reader of this script's output needs -- so the caller pairs it back up with a
+    column name.
+
+    It is RETURNED rather than raised so :func:`collect` reports every unusable
+    root in one pass, matching :func:`_unusable_roots_error`'s design. Four roots
+    are normally harvested by one person in one session and go wrong the same way;
+    exiting on the first malformed tree costs a second session to discover the
+    second.
     """
     try:
-        return runs.discover(root)
+        return runs.discover(root), None
     except runs.RunLayoutError as error:
-        raise SystemExit(
-            "[ERROR] the %s root (%s) does not hold a readable run layout:\n"
-            "        %s" % (pipeline, root, error)
-        )
+        return None, str(error)
 
 
 def _recorded_pipeline(run):
@@ -244,7 +353,7 @@ def _recorded_pipeline(run):
     ``None`` covers "pre-P14 run" and "unreadable metadata" alike, and both are
     treated as absent rather than as an error: it is a provenance file, not a
     result, and it must not be able to stop a table the numbers themselves fully
-    support. Every committed ``results*/`` tree predates the writer.
+    support. Every pre-P14 tree predates the writer.
     """
     path = run.file(runs.RUN_METADATA)
     if path is None:
@@ -264,9 +373,9 @@ def _check_provenance(collected):
     filed under the wrong name does not look wrong -- it produces a full table
     with two columns swapped, and the residual absorbs the difference silently.
 
-    Absence is only a warning. It is the normal state of every committed tree,
-    and refusing on it would make this script unusable on exactly the two roots
-    whose numbers are pinned.
+    Absence is only a warning. It is the normal state of every pre-P14 tree, and
+    refusing on it would make this script unusable on exactly the two roots whose
+    numbers are pinned.
     """
     mismatches = []
     for spec in ROOT_SPECS:
@@ -300,25 +409,41 @@ def _check_provenance(collected):
         )
 
 
-def _f_score(run, pipeline, root):
-    """The 10-FOLD TOP-10 F-score at threshold 0.6 for one run.
+def _f_scores(run, pipeline, root):
+    """``{threshold: f_score}`` over :data:`THRESHOLDS` for one run's 10-FOLD block.
 
-    ``validate`` runs first, and is what makes the lookup below safe: it asserts
+    Read and validated ONCE for both cells. The file is ~6000 lines and the two
+    thresholds are two keys in one already-parsed dict, so a second read would buy
+    nothing except the chance for the two cells to come from different bytes.
+
+    ``validate`` runs first, and is what makes the lookups below safe: it asserts
     the full 6 strategies x 5 thresholds x 10 folds grid, so ``[STRATEGY]`` and
-    ``[THRESHOLD]`` cannot be missing by the time they are indexed. It also keeps
+    each threshold cannot be missing by the time they are indexed. It also keeps
     a truncated or in-progress run out of the table entirely -- a half-written
     tree harvested off a pod parses fine and would contribute a real-looking
     number from however many folds finished.
+
+    ``OSError`` and ``UnicodeDecodeError`` are caught alongside
+    :class:`PerformanceIndexError` because ``read`` opens the file itself: a
+    permission failure, a vanished file, or a mis-encoded one is the same event to
+    this script as an incomplete one -- a column that cannot enter the table -- and
+    a bare traceback would name the file without naming which of four roots, or
+    which arm, asked for it.
     """
     try:
         index = validate(read(run.performance_index))
-    except PerformanceIndexError as error:
+    except (PerformanceIndexError, OSError, UnicodeDecodeError) as error:
         raise SystemExit(
-            "[ERROR] %s / %s: PerformanceIndex.txt is not a complete 10-fold run,\n"
-            "        so it cannot enter an attribution table.\n"
-            "        %s" % (root, pipeline, error)
+            "[ERROR] %s / %s: PerformanceIndex.txt is unreadable, or is not a\n"
+            "        complete 10-fold run, so it cannot enter an attribution table.\n"
+            "        arm  %s\n"
+            "        run  %s\n"
+            "        %s" % (root, pipeline, run.key, run.path, error)
         )
-    return index.aggregate[STRATEGY][THRESHOLD].f_score
+    return {
+        threshold: index.aggregate[STRATEGY][threshold].f_score
+        for threshold in THRESHOLDS
+    }
 
 
 def collect(roots=None):
@@ -331,13 +456,18 @@ def collect(roots=None):
     resolved = resolve_roots(roots)
 
     states = {}
+    details = {}
     discovered = {}
     for spec in ROOT_SPECS:
         root = resolved[spec.pipeline]
         if not os.path.isdir(root):
             states[spec.pipeline] = "no such directory"
             continue
-        found = _discover(root, spec.pipeline)
+        found, failure = _discover(root, spec.pipeline)
+        if failure is not None:
+            states[spec.pipeline] = "unreadable run layout"
+            details[spec.pipeline] = failure
+            continue
         if not found:
             states[spec.pipeline] = "directory exists but holds no runs"
             continue
@@ -345,7 +475,7 @@ def collect(roots=None):
         discovered[spec.pipeline] = {run.key: run for run in found}
 
     if any(states.values()):
-        raise SystemExit(_missing_roots_error(resolved, states))
+        raise SystemExit(_unusable_roots_error(resolved, states, details))
 
     # Registered arms are required outright; an unregistered key found in any
     # root is required in all of them. A stranger arm is not dropped from the
@@ -375,15 +505,28 @@ def collect(roots=None):
             + "\n        Arms expected: %s." % ", ".join(arms)
         )
 
+    # One parse per run, then pivoted threshold-first. Reading the file once per
+    # threshold would let two cells of the same row come from different bytes.
+    by_run = {
+        spec.pipeline: {
+            arm: _f_scores(run, spec.pipeline, resolved[spec.pipeline])
+            for arm, run in discovered[spec.pipeline].items()
+        }
+        for spec in ROOT_SPECS
+    }
+
     collected = Collected(
         roots=resolved,
         runs=discovered,
         values={
-            spec.pipeline: {
-                arm: _f_score(run, spec.pipeline, resolved[spec.pipeline])
-                for arm, run in discovered[spec.pipeline].items()
+            threshold: {
+                spec.pipeline: {
+                    arm: cells[threshold]
+                    for arm, cells in by_run[spec.pipeline].items()
+                }
+                for spec in ROOT_SPECS
             }
-            for spec in ROOT_SPECS
+            for threshold in THRESHOLDS
         },
         arms=arms,
     )
@@ -396,7 +539,11 @@ def collect(roots=None):
 # --------------------------------------------------------------------------
 
 def check_anchors(values):
-    """Verify the parse against the two pinned cells. Returns the count checked.
+    """Verify the parse against the pinned cells. Returns the count checked.
+
+    ``values`` is the whole threshold-first structure, because an anchor names a
+    (pipeline, arm, threshold) cell and half the point of adding threshold 1.0 was
+    that it comes with two more anchors of its own.
 
     Refuses on zero checks for the reason ``compare_models`` does: "0 anchors
     passed" and "the parse is verified" print identically, and this table is
@@ -404,8 +551,8 @@ def check_anchors(values):
     """
     checked = 0
     failures = []
-    for (pipeline, arm), expected in sorted(ANCHORS.items()):
-        got = values.get(pipeline, {}).get(arm)
+    for (pipeline, arm, threshold), expected in sorted(ANCHORS.items()):
+        got = values.get(threshold, {}).get(pipeline, {}).get(arm)
         if got is None:
             continue
         checked += 1
@@ -413,7 +560,7 @@ def check_anchors(values):
             failures.append(
                 "  %s / %s  %s @ %.1f  F-score\n"
                 "      expected %r\n"
-                "      parsed   %r" % (pipeline, arm, STRATEGY, THRESHOLD, expected, got)
+                "      parsed   %r" % (pipeline, arm, STRATEGY, threshold, expected, got)
             )
 
     if failures:
@@ -422,24 +569,32 @@ def check_anchors(values):
             "        no table was printed.\n"
             + "\n".join(failures)
             + "\n"
-            "        Both anchors are exact values read off frozen committed trees.\n"
-            "        A mismatch means one of: the parser is reading a different\n"
-            "        column, --roots points at a tree from another pipeline, or a\n"
-            "        committed tree was overwritten. It does NOT mean the\n"
-            "        expectation is stale -- do not edit ANCHORS to make this pass."
+            "        The anchors are exact values read back off the LOCAL results/\n"
+            "        and results_corrected/ trees -- gitignored working data, not\n"
+            "        committed artifacts (the committed oracle is\n"
+            "        docs/Prediction_Output_*). A mismatch means one of: the parser\n"
+            "        is reading a different column, --roots points at a tree from\n"
+            "        another pipeline, or a local tree was overwritten or\n"
+            "        re-harvested. It does NOT mean the expectation is stale:\n"
+            "        do not edit ANCHORS to make this pass."
         )
     if not checked:
         raise SystemExit(
-            "[ERROR] zero parser anchors ran: neither %s is present, so the parse\n"
+            "[ERROR] zero parser anchors ran: none of %s is present, so the parse\n"
             "        is unverified. An unverified table looks exactly like a\n"
             "        verified one, which is why this refuses instead."
-            % " nor ".join("%s/%s" % key for key in sorted(ANCHORS))
+            % ", ".join("%s/%s @ %.1f" % key for key in sorted(ANCHORS))
         )
     return checked
 
 
 def attribute(values, arm):
     """Split one arm's legacy-to-corrected drop into its two named parts.
+
+    ``values`` is ONE threshold's slice -- ``{pipeline: {arm: f_score}}``, i.e.
+    ``collected.values[threshold]``. This function has no idea which threshold it
+    is on, and that is deliberate: the arithmetic is identical at every cell, and
+    a threshold argument here would be a second place to get the cell wrong.
 
     Every part is ``legacy - fixed``: positive means the fix removed score.
 
@@ -462,11 +617,14 @@ def attribute(values, arm):
 
 
 def saturated_arms(values, arms, ceiling=1.0):
-    """Arms sitting on the metric ceiling in two or more roots.
+    """Arms sitting on the metric ceiling in two or more roots, at one threshold.
+
+    ``values`` is one threshold's slice, as :func:`attribute` takes.
 
     Derived, not listed by name: which arms saturate is a property of the
     threshold and the encoder, and hard-coding "the three BERT arms" would keep
-    printing the note after a run where one of them dropped off the ceiling.
+    printing the note after a run where one of them dropped off the ceiling -- and,
+    worse, would print it at threshold 1.0, where nothing saturates at all.
     """
     return [
         arm
@@ -498,15 +656,7 @@ def _rule(cells, width=_COL):
     return "-" * (_ARM + 1 + len(cells) * (width + 1) - 1)
 
 
-def report(collected):
-    """Print the banner, the provenance block, the grid and the attribution."""
-    values, arms = collected.values, collected.arms
-
-    print("=" * 86)
-    print(BANNER)
-    print("=" * 86)
-    print()
-
+def _roots_block(collected):
     print("ROOTS")
     for spec in ROOT_SPECS:
         dates = sorted({run.date for run in collected.runs[spec.pipeline].values()})
@@ -517,7 +667,24 @@ def report(collected):
         )
     print()
 
-    print("F-SCORE GRID   (10-FOLD %s aggregate at threshold %.1f)" % (STRATEGY, THRESHOLD))
+
+def _threshold_block(collected, threshold):
+    """One threshold's grid, attribution table and saturation note.
+
+    Every threshold gets the FULL apparatus, including its own saturation note,
+    rather than one grid with a shared footnote: the two cells disagree about
+    which rows carry information, and a reader who pastes half this report has to
+    be holding the half that says so.
+    """
+    values, arms = collected.values[threshold], collected.arms
+
+    print("#" * 86)
+    print("# THRESHOLD %.1f -- %s"
+          % (threshold, THRESHOLD_NOTES.get(threshold, "")))
+    print("#" * 86)
+    print()
+
+    print("F-SCORE GRID   (10-FOLD %s aggregate at threshold %.1f)" % (STRATEGY, threshold))
     names = [spec.pipeline for spec in ROOT_SPECS]
     print(_row("arm", names))
     print(_rule(names))
@@ -560,13 +727,37 @@ def report(collected):
     if saturated:
         print("SATURATION -- read these rows as empty, not as zero effect:")
         print("  %s" % ", ".join(_label(arm) for arm in saturated))
-        print("  scored the ceiling 1.000000 in two or more roots, so their deltas are")
-        print("  differences between two ceilings and measure the threshold, not the")
-        print("  fixes. Threshold %.1f is where the biomedical embeddings saturate;" % THRESHOLD)
-        print("  see docs/findings/03-metric-saturation.md. Threshold 1.0 is the only")
-        print("  cosine setting where no arm sits on the ceiling -- and it is not this")
-        print("  cell, which is pinned to the published figure and to the two anchors.")
-        print()
+        print("  scored the ceiling 1.000000 in two or more roots AT THIS THRESHOLD, so")
+        print("  their deltas are differences between two ceilings and measure the")
+        print("  threshold, not the fixes. Threshold %.1f is where the biomedical" % threshold)
+        print("  embeddings saturate; see docs/findings/03-metric-saturation.md.")
+        clean = [
+            other for other in THRESHOLDS
+            if other != threshold
+            and not saturated_arms(collected.values[other], arms)
+        ]
+        if clean:
+            print("  Threshold %s in this same report has no arm on the ceiling; the"
+                  % ", ".join("%.1f" % other for other in clean))
+            print("  four-arm attribution there is the one to read.")
+    else:
+        print("NO SATURATION at this threshold: every arm is below %.6f in every root," % 1.0)
+        print("  so all %d rows above carry information and the attribution is" % len(arms))
+        print("  populated for every arm. This is the block to quote.")
+    print()
+
+
+def report(collected):
+    """Print the banner, the provenance block, and one block per threshold."""
+    print("=" * 86)
+    print(BANNER)
+    print("=" * 86)
+    print()
+
+    _roots_block(collected)
+
+    for threshold in THRESHOLDS:
+        _threshold_block(collected, threshold)
 
     print("=" * 86)
     print(BANNER)

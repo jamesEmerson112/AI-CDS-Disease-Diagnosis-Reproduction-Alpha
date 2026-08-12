@@ -143,12 +143,59 @@ SANITY_CHECKS_BY_PIPELINE = {
         ("biomedbert", "TOP-10", 1.0, {"P": 0.2545, "R": 0.2545, "FS": 0.2545}),
         ("bluebert", "TOP-10", 1.0, {"P": 0.2391, "R": 0.2391, "FS": 0.2391}),
     ],
+    # RunPod Linux, 2026-08-11/12: folds_grouped + LEGACY preprocessing. One of
+    # the two P29 attribution instruments: it moves the fold split and nothing
+    # else, so the legacy -> folds-only delta *within one arm* is the patient
+    # leakage effect on its own. Not a result -- see PIPELINE_NOTES.
+    "folds-only": [
+        ("baseline", "TOP-10", 0.6, {"P": 0.5165, "R": 0.3781, "FS": 0.4335, "PR": 0.7568}),
+        ("baseline", "TOP-10", 1.0, {"P": 0.2470, "R": 0.1859, "FS": 0.2106}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2581, "R": 0.2581, "FS": 0.2581}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.2127, "R": 0.2127, "FS": 0.2127}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.1910, "R": 0.1910, "FS": 0.1910}),
+    ],
+    # RunPod Linux, 2026-08-11/12: data/folds + CORRECTED preprocessing. The
+    # other P29 instrument, and the one whose numbers must never be quoted on
+    # their own -- it keeps the leaky split by design (config.py:143-145).
+    #
+    # BiomedBERT's 0.2545 here is bit-identical to its LEGACY value at all 17
+    # significant figures. That was read off both PerformanceIndex.txt files
+    # rather than eyeballed, so it is not a copy-paste error -- but no mechanism
+    # is claimed for it here, because none was measured. It is a fact about this
+    # tree, not licence to reuse one pipeline's entry for another. The other
+    # three arms all move, which is what makes the repeat worth flagging.
+    "preprocess-only": [
+        ("baseline", "TOP-10", 0.6, {"P": 0.5227, "R": 0.3872, "FS": 0.4429, "PR": 0.7519}),
+        ("baseline", "TOP-10", 1.0, {"P": 0.3461, "R": 0.2551, "FS": 0.2926}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2776, "R": 0.2776, "FS": 0.2776}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.2545, "R": 0.2545, "FS": 0.2545}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.2468, "R": 0.2468, "FS": 0.2468}),
+    ],
     # RunPod Linux, 2026-08-06: folds_grouped + corrected preprocessing, still
     # cosine self-graded. Source of the README's headline table.
     "corrected": [
         ("baseline", "TOP-10", 0.6, {"P": 0.4692, "R": 0.3410, "FS": 0.3922, "PR": 0.7558}),
         ("baseline", "TOP-10", 1.0, {"P": 0.2512, "R": 0.1923, "FS": 0.2163}),
         ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2491, "R": 0.2491, "FS": 0.2491}),
+        ("biomedbert", "TOP-10", 1.0, {"P": 0.1981, "R": 0.1981, "FS": 0.1981}),
+        ("bluebert", "TOP-10", 1.0, {"P": 0.1821, "R": 0.1821, "FS": 0.1821}),
+    ],
+    # RunPod Linux, 2026-08-12: folds_grouped + corrected2 preprocessing (the
+    # bounded second comma-rejoin, P27) + cosine self-grading. corrected2 is a
+    # THIRD text-handling variant, not an edit to corrected -- corrected is
+    # frozen so every results_corrected/ and results_drg/ number stays
+    # reproducible (config.py:127-137).
+    #
+    # BiomedBERT (0.1981) and BlueBERT (0.1821) are bit-identical to their
+    # CORRECTED values at all 17 significant figures, while the baseline
+    # (0.2163 -> 0.1856) and Bio_ClinicalBERT (0.2491 -> 0.2424) both move. That
+    # split was read off both trees, not inferred. Do not "fix" the two repeated
+    # numbers, and do not assume the two that moved are the mistake -- P27
+    # touches nine label fragments, so an arm-dependent effect is expected.
+    "corrected2": [
+        ("baseline", "TOP-10", 0.6, {"P": 0.4358, "R": 0.3123, "FS": 0.3615, "PR": 0.7558}),
+        ("baseline", "TOP-10", 1.0, {"P": 0.2179, "R": 0.1636, "FS": 0.1856}),
+        ("bio_clinical_bert", "TOP-10", 1.0, {"P": 0.2424, "R": 0.2424, "FS": 0.2424}),
         ("biomedbert", "TOP-10", 1.0, {"P": 0.1981, "R": 0.1981, "FS": 0.1981}),
         ("bluebert", "TOP-10", 1.0, {"P": 0.1821, "R": 0.1821, "FS": 0.1821}),
     ],
@@ -201,6 +248,26 @@ PIPELINE_NOTES = {
             "The folds also split on HADM_ID, so 41 of 129 test cases share a patient with their own retrieval pool."
         ),
     },
+    "folds-only": {
+        "label": "folds-only",
+        "detail": "data/folds_grouped + ORIGINAL preprocessing + cosine self-grading",
+        "confound": (
+            "Exactly ONE thing changed from legacy: the fold split (GroupKFold on SUBJECT_ID), so 41 leaked cases -> 0.\n"
+            "Preprocessing is still LEGACY, so the arms encode diagnosis text differently -- 119 of 145 (82.1%) of\n"
+            "descriptions reach the baseline and the BERT encoders as different strings, and a baseline-vs-BERT gap here\n"
+            "is STILL confounded by preprocessing. Only the legacy -> folds-only delta, within one arm, isolates leakage."
+        ),
+    },
+    "preprocess-only": {
+        "label": "preprocess-only",
+        "detail": "data/folds (LEAKY) + fixed preprocessing + cosine self-grading",
+        "confound": (
+            "THESE NUMBERS ARE NOT A RESULT and must never be quoted as one. This config keeps the LEAKY data/folds split\n"
+            "ON PURPOSE (src/aicds/config.py:143-145): 41 of 129 test cases (31.8%) still retrieve another admission of\n"
+            "the same SUBJECT_ID, and measured leakage inflation is +0.11 to +0.26 -- roughly ten times the encoder gaps\n"
+            "below. It exists to separate the preprocessing effect from leakage: read its DELTA, never its own value."
+        ),
+    },
     "corrected": {
         "label": "corrected",
         "detail": "data/folds_grouped + fixed preprocessing + cosine self-grading",
@@ -209,6 +276,16 @@ PIPELINE_NOTES = {
             "SUBJECT_ID) and divergent cross-arm preprocessing (26/145 matching -> 145/145). Two remain untouched:\n"
             "every arm still grades its own predictions by cosine in its own embedding space (self-grading), and the\n"
             "metric is rank-blind, so a hit at rank 1 and a hit at rank 50 count the same. Still not an encoder ranking."
+        ),
+    },
+    "corrected2": {
+        "label": "corrected2",
+        "detail": "data/folds_grouped + preprocessing incl. comma-rejoin + cosine self-grading",
+        "confound": (
+            "The same two confounds are gone as under 'corrected' -- patient leakage (41 -> 0) and divergent cross-arm\n"
+            "preprocessing -- plus the bounded second comma-rejoin (P27), which recovers the nine label fragments that\n"
+            "'corrected' leaves shredded. This is a THIRD text variant, not a replacement: 'corrected' is FROZEN so its\n"
+            "runs and results_drg/ stay reproducible. Self-grading and rank-blindness stand. Still not an encoder ranking."
         ),
     },
     "drg": {
